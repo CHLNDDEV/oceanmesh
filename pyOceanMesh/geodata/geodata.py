@@ -1,4 +1,6 @@
 from netCDF4 import Dataset
+import shapefile as shp
+import matplotlib.pyplot as plt
 
 
 class Geodata:
@@ -8,9 +10,9 @@ class Geodata:
     topobathy in the form of a DEM.
     """
 
-    def __init__(self, shp=None, dem=None, bbox=None):
+    def __init__(self, shapefile=None, dem=None, bbox=None):
         self.bbox = bbox
-        self.shp = shp
+        self.sf = shapefile
         self.dem = dem
 
     @property
@@ -30,8 +32,22 @@ class Geodata:
 class Shoreline(Geodata):
     """Repr. of shoreline"""
 
-    def __init__(self, shp, bbox):
-        super().__init__(shp=shp, bbox=bbox)
+    def __init__(self, shapefile, bbox):
+        super().__init__(shapefile=shapefile, bbox=bbox)
+        try:
+            with shp.Reader(shapefile) as sf:
+                self.shapefile = sf.shapeRecords()
+        except IOError:
+            print("Unable to open file.")
+
+    def plot(self, hold_on=False):
+        """plot the content of the shp field"""
+        plt.figure()
+        for shape in self.shapefile:
+            x = [i[0] for i in shape.shape.points[:]]
+            y = [i[1] for i in shape.shape.points[:]]
+            plt.plot(x, y)
+        plt.show()
 
 
 class DEM(Geodata):
@@ -59,4 +75,4 @@ class DEM(Geodata):
                 self.lons = nc_fid.variables[lat_name][:]
                 self.topobathy = nc_fid.variables[z_name][:]
         except IOError:
-            print("Unable to open file. Not found or read permissions incorrect")
+            print("Unable to open file.")
