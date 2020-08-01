@@ -1,3 +1,3 @@
-from .geodata import Geodata
+from .geodata import Geodata, Shoreline, DEM
 
-__all__ = ["Geodata"]
+__all__ = ["Geodata", "Shoreline", "DEM"]

@@ -1,8 +1,11 @@
+from netCDF4 import Dataset
+
+
 class Geodata:
     """
-    Geographical data class
-    Handles geographical data describing coastlines or other features in
-    the form of a shapefile and topobathy in the form of a DEM
+    Geographical data class that handles geographical data describing
+    coastlines or other features in the form of a shapefile and
+    topobathy in the form of a DEM.
     """
 
     def __init__(self, shp=None, dem=None, bbox=None):
@@ -36,4 +39,21 @@ class DEM(Geodata):
 
     def __init__(self, dem, bbox):
         super().__init__(dem=dem, bbox=bbox)
-        self.topobathy = None
+        # well-known variable names
+        wkv_x = ["x", "Longitude", "longitude", "lon"]
+        wkv_y = ["y", "Latitude", "latitude", "lat"]
+        wkv_z = ["Band1", "z"]
+        with Dataset(dem, "r") as nc_fid:
+            for x, y in zip(wkv_x, wkv_y):
+                for var in nc_fid.variables:
+                    if var == x:
+                        lon_name = var
+                    if var == y:
+                        lat_name = var
+            for z in wkv_z:
+                for var in nc_fid.variables:
+                    if var == z:
+                        z_name = var
+            self.lats = nc_fid.variables[lon_name][:]
+            self.lons = nc_fid.variables[lat_name][:]
+            self.topobathy = nc_fid.variables[z_name][:]
