@@ -43,17 +43,20 @@ class DEM(Geodata):
         wkv_x = ["x", "Longitude", "longitude", "lon"]
         wkv_y = ["y", "Latitude", "latitude", "lat"]
         wkv_z = ["Band1", "z"]
-        with Dataset(dem, "r") as nc_fid:
-            for x, y in zip(wkv_x, wkv_y):
-                for var in nc_fid.variables:
-                    if var == x:
-                        lon_name = var
-                    if var == y:
-                        lat_name = var
-            for z in wkv_z:
-                for var in nc_fid.variables:
-                    if var == z:
-                        z_name = var
-            self.lats = nc_fid.variables[lon_name][:]
-            self.lons = nc_fid.variables[lat_name][:]
-            self.topobathy = nc_fid.variables[z_name][:]
+        try:
+            with Dataset(dem, "r") as nc_fid:
+                for x, y in zip(wkv_x, wkv_y):
+                    for var in nc_fid.variables:
+                        if var == x:
+                            lon_name = var
+                        if var == y:
+                            lat_name = var
+                for z in wkv_z:
+                    for var in nc_fid.variables:
+                        if var == z:
+                            z_name = var
+                self.lats = nc_fid.variables[lon_name][:]
+                self.lons = nc_fid.variables[lat_name][:]
+                self.topobathy = nc_fid.variables[z_name][:]
+        except IOError:
+            print("Unable to open file. Not found or read permissions incorrect")
