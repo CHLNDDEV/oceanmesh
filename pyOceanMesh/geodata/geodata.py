@@ -1,6 +1,9 @@
+import os, errno
+
+import numpy
+import numpy.ma as ma
 from netCDF4 import Dataset
-import shapefile as shp
-import matplotlib.pyplot as plt
+import shapefile
 
 
 class Geodata:
@@ -10,9 +13,9 @@ class Geodata:
     topobathy in the form of a DEM.
     """
 
-    def __init__(self, shapefile=None, dem=None, bbox=None):
+    def __init__(self, shp=None, dem=None, bbox=None):
         self.bbox = bbox
-        self.sf = shapefile
+        self.shp = shp
         self.dem = dem
 
     @property
@@ -28,26 +31,57 @@ class Geodata:
                 raise ValueError("bbox has wrong number of values.")
             self.__bbox = value
 
+    @property
+    def shp(self):
+        return self.__shp
+
+    @shp.setter
+    def shp(self, fname):
+        if not os.path.isfile(fname):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
+        self.__shp = fname
+
 
 class Shoreline(Geodata):
-    """Repr. of shoreline"""
+    """Repr. of shoreline
+       The shoreline is represented as a numpy array of winding points with
+       mask values representing breaks.
+    """
 
-    def __init__(self, shapefile, bbox):
-        super().__init__(shapefile=shapefile, bbox=bbox)
-        try:
-            with shp.Reader(shapefile) as sf:
-                self.shapefile = sf.shapeRecords()
-        except IOError:
-            print("Unable to open file.")
+    def __init__(self, shp, bbox):
+        super().__init__(shp=shp, bbox=bbox)
+        polys = []  # polygons and polylines.
+
+        def __isOverlapping(bbox1, bbox2):
+            x1min, x1max, y1min, y1max = bbox1
+            x2min, x2max, y2min, y2max = bbox2
+            return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
+
+        s = shapefile.Reader(self.shp)
+        for shape in s.shapes():
+            # only read in shapes that intersect with bbox
+            if __isOverlapping(bbox, shape.bbox):
+                polys.append(shape.points + [(ma.masked, ma.masked)])
+            self.polys = polys
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
+        import matplotlib.pyplot as plt
+
         plt.figure()
-        for shape in self.shapefile:
-            x = [i[0] for i in shape.shape.points[:]]
-            y = [i[1] for i in shape.shape.points[:]]
-            plt.plot(x, y)
+        for poly in self.polys:
+            print("blah")
+            # plt.plot(poly[:-1], poly[])
         plt.show()
+
+    def __classify(self):
+        """Classify segments as either inner, outer, or mainland.
+           The segments of shoreline polygon are classified into three types: mainland, inner, or outer.
+            (a) The mainland category contains segments that are not totally enclosed inside the bbox.
+            (b) The inner (i.e., islands) category contains polygons totally enclosed inside the bbox.
+            (c) The outer category is the union of the mainland, inner, and bbox.
+        """
+        return 111
 
 
 class DEM(Geodata):
