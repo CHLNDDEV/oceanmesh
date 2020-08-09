@@ -107,8 +107,14 @@ class Shoreline(Geodata):
                 polys.append(poly)
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
+<<<<<<< HEAD
 
         self.inner, self.mainland, self.outer = classify_shoreline(self.bbox, polys)
+=======
+        self.polys = polys
+        self = __classify(self)
+        # now classify shoreline components
+>>>>>>> 880b11d6a327b3e8cba25661240e331109be04f8
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
