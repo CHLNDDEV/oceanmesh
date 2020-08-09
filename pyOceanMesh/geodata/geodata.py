@@ -8,6 +8,74 @@ from netCDF4 import Dataset
 import shapefile
 
 
+def polyArea(x, y):
+    return 0.5 * numpy.abs(
+        numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
+    )
+
+
+def isOverlapping(bbox1, bbox2):
+    x1min, x1max, y1min, y1max = bbox1
+    x2min, x2max, y2min, y2max = bbox2
+    return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
+
+
+def classifyShoreline(bbox, polys, h0):
+    """Classify vertices from polys as either inner, outer, or mainland.
+       The vertices of the shoreline polygon(s) are classified into three types: mainland, inner, or outer.
+        (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
+        (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
+        (c) The outer category is the union of the mainland and bbox polygon.
+       NB: Removes islands with area smaller than 4*h0**2
+    """
+    print("Partitioning shoreline...")
+    # path of bounding box
+
+    def __create_boubox(bbox):
+        xmin, xmax, ymin, ymax = bbox
+        return [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+        ]
+
+    boubox = __create_boubox(bbox)
+    outer = numpy.array(boubox + [999, 999])
+
+    inner = numpy.empty(shape=(0, 2))
+    mainland = numpy.empty(shape=(0, 2))
+
+    path = mpltPath.Path(boubox)
+    for poly in polys:
+        inside = path.contains_points(poly[:-1, :])
+        if all(inside):
+            # an island/inner polygon
+            # compute area of polygon and don't save if too small
+            area = polyArea(poly[:-1, 0], poly[:-1, 1])
+            if area < 4 * h0 ** 2:
+                print("Island skipped...area too small")
+                continue
+            inner = numpy.append(inner, poly, axis=0)
+            inner = ma.masked_where(inner == 999.0, inner)
+        elif any(inside):
+            # a mainland polyline/polygon (may be non-closed)
+            mainland = numpy.append(mainland, poly, axis=0)
+            mainland = ma.masked_where(mainland == 999.0, mainland)
+
+    outer = numpy.concatenate((boubox, mainland), axis=0)
+    outer = ma.masked_where(outer == 999.0, outer)
+
+    return inner, mainland, outer
+
+
+def densify():
+    """Densify latitude-longitude sampling in lines or polygons
+    """
+    return 111
+
+
 class Geodata:
     """
     Parent geographical data class that handles geographical data describing
@@ -15,8 +83,9 @@ class Geodata:
     topobathy in the form of a DEM.
     """
 
-    def __init__(self, bbox):
+    def __init__(self, bbox, h0):
         self.bbox = bbox
+        self.h0 = h0
 
     @property
     def bbox(self):
@@ -29,51 +98,32 @@ class Geodata:
         else:
             if len(value) < 4:
                 raise ValueError("bbox has wrong number of values.")
+            if value[1] < value[0]:
+                raise ValueError("bbox has wrong values.")
+            if value[3] < value[2]:
+                raise ValueError("bbox has wrong values.")
             self.__bbox = value
 
+    @property
+    def h0(self):
+        return self.__h0
 
-def classify_shoreline(bbox, polys):
-    """Classify vertices from polys as either inner, outer, or mainland.
-       The vertices of the shoreline polygon(s) are classified into three types: mainland, inner, or outer.
-        (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
-        (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
-        (c) The outer category is the union of the mainland, inner, and bbox polygons.
-    """
-    # path of bounding box
-    def __create_boubox(bbox):
-        xmin, xmax, ymin, ymax = bbox
-        return [
-            [xmin, ymin],
-            [xmax, ymin],
-            [xmax, ymax],
-            [xmin, ymax],
-            [xmin, ymin],
-        ]
-
-    inner = numpy.empty(shape=(0, 2))
-    mainland = numpy.empty(shape=(0, 2))
-    outer = numpy.empty(shape=(0, 2))
-
-    path = mpltPath.Path(__create_boubox(bbox))
-    for poly in polys:
-        inside = path.contains_points(poly[:-1, :])
-        if all(inside):
-            # an island/inner polygon
-            inner = numpy.append(inner, poly, axis=0)
-        elif any(inside):
-            # a mainland polyline/polygon (may be non-closed)
-            mainland = numpy.append(mainland, poly, axis=0)
-    return inner, mainland, outer
+    @h0.setter
+    def h0(self, value):
+        if value <= 0:
+            raise ValueError("h0 must be > 0")
+        value /= 111e3  # convert to wgs84 degrees
+        self.__h0 = value
 
 
 class Shoreline(Geodata):
     """Repr. of shoreline
-       The shoreline is represented as a list of numpy array of winding points with
-       mask values representing breaks.
+       The shoreline is represented as a list of numpy array
+       of winding points with mask values representing breaks.
     """
 
-    def __init__(self, shp, bbox):
-        super().__init__(bbox)
+    def __init__(self, shp, bbox, h0):
+        super().__init__(bbox, h0)
 
         self.shp = shp
         self.inner = []
@@ -92,42 +142,39 @@ class Shoreline(Geodata):
 
         polys = []  # tmp storage for polygons and polylines
 
-        def __isOverlapping(bbox1, bbox2):
-            x1min, x1max, y1min, y1max = bbox1
-            x2min, x2max, y2min, y2max = bbox2
-            return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
-
-        print("Reading in shapefile: " + self.shp)
+        print("Reading in shapefile... " + self.shp)
         s = shapefile.Reader(self.shp)
         for shape in s.shapes():
             # only read in shapes that intersect with bbox
-            if __isOverlapping(bbox, shape.bbox):
+            if isOverlapping(bbox, shape.bbox):
                 poly = numpy.asarray(shape.points + [(999.0, 999.0)])
                 poly = ma.masked_where(poly == 999.0, poly)
                 polys.append(poly)
+
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
-<<<<<<< HEAD
 
-        self.inner, self.mainland, self.outer = classify_shoreline(self.bbox, polys)
-=======
-        self.polys = polys
-        self = __classify(self)
-        # now classify shoreline components
->>>>>>> 880b11d6a327b3e8cba25661240e331109be04f8
+        self.inner, self.mainland, self.outer = classifyShoreline(
+            self.bbox, polys, self.h0
+        )
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
         import matplotlib.pyplot as plt
 
-        tmp = numpy.concatenate(self.polys, axis=0)
-        tmp = ma.masked_where(tmp == 999.0, tmp)
+        flg1, flg2 = False, False
 
         fig, ax = plt.subplots()
-        ax.plot(tmp[:, 0], tmp[:, 1], "k-")
+        if len(self.mainland) != 0:
+            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "g-")
+            flg1 = True
+        if len(self.inner) != 0:
+            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
+            flg2 = True
+
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
-            (xmin, ymin), xmax - xmin, ymax - ymin, facecolor="red", alpha=0.1
+            (xmin, ymin), xmax - xmin, ymax - ymin, fill=None, hatch="///", alpha=0.2,
         )
 
         border = 0.10 * (xmax - xmin)
@@ -136,14 +183,21 @@ class Shoreline(Geodata):
 
         ax.add_patch(rect)
 
+        if flg1 and flg2:
+            ax.legend((line1, line2), ("mainland", "inner"))
+        elif flg1 and not flg2:
+            ax.legend((line1), ("mainland"))
+        elif flg2 and not flg1:
+            ax.legend((line1), ("inner"))
+
         plt.show()
 
 
 class DEM(Geodata):
     """Repr. of digitial elevation model"""
 
-    def __init__(self, dem, bbox):
-        super().__init__(bbox)
+    def __init__(self, dem, bbox, h0):
+        super().__init__(bbox, h0)
 
         self.dem = dem
 
