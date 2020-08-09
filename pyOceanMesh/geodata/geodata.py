@@ -13,10 +13,11 @@ class Geodata:
     topobathy in the form of a DEM.
     """
 
-    def __init__(self, shp=None, dem=None, bbox=None):
+    def __init__(self, shp, bbox, dem=None):
         self.bbox = bbox
         self.shp = shp
-        self.dem = dem
+        if dem is not None:
+            self.dem = dem
 
     @property
     def bbox(self):
@@ -41,15 +42,30 @@ class Geodata:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
         self.__shp = fname
 
+    @property
+    def dem(self):
+        return self.__dem
+
+    @dem.setter
+    def dem(self, fname):
+        if not os.path.isfile(fname):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
+        self.__shp = fname
+
 
 class Shoreline(Geodata):
     """Repr. of shoreline
-       The shoreline is represented as a numpy array of winding points with
+       The shoreline is represented as a list of numpy array of winding points with
        mask values representing breaks.
     """
 
     def __init__(self, shp, bbox):
         super().__init__(shp=shp, bbox=bbox)
+        self.polys = []
+        self.inner = []
+        self.outer = []
+        self.mainland = []
+
         polys = []  # polygons and polylines.
 
         def __isOverlapping(bbox1, bbox2):
@@ -57,29 +73,48 @@ class Shoreline(Geodata):
             x2min, x2max, y2min, y2max = bbox2
             return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
+        print("Reading in shapefile: " + self.shp)
         s = shapefile.Reader(self.shp)
         for shape in s.shapes():
             # only read in shapes that intersect with bbox
             if __isOverlapping(bbox, shape.bbox):
-                polys.append(shape.points + [(ma.masked, ma.masked)])
-            self.polys = polys
+                poly = numpy.asarray(shape.points + [(999.0, 999.0)])
+                poly = ma.masked_where(poly == 999.0, poly)
+                polys.append(poly)
+        if len(polys) == 0:
+            raise ValueError("Shoreline does not intersect bbox")
+        self.polys = polys
+         __classify(self):
+        # now classify shoreline components
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
         import matplotlib.pyplot as plt
 
-        plt.figure()
-        for poly in self.polys:
-            print("blah")
-            # plt.plot(poly[:-1], poly[])
+        tmp = numpy.concatenate(self.polys, axis=0)
+        tmp = ma.masked_where(tmp == 999.0, tmp)
+
+        fig, ax = plt.subplots()
+        ax.plot(tmp[:, 0], tmp[:, 1], "k-")
+        xmin, xmax, ymin, ymax = self.bbox
+        rect = plt.Rectangle(
+            (xmin, ymin), xmax - xmin, ymax - ymin, facecolor="red", alpha=0.1
+        )
+
+        border = 0.10 * (xmax - xmin)
+        plt.xlim(xmin - border, xmax + border)
+        plt.ylim(ymin - border, ymax + border)
+
+        ax.add_patch(rect)
+
         plt.show()
 
     def __classify(self):
-        """Classify segments as either inner, outer, or mainland.
+        """Classify vertices from polys as either inner, outer, or mainland.
            The segments of shoreline polygon are classified into three types: mainland, inner, or outer.
-            (a) The mainland category contains segments that are not totally enclosed inside the bbox.
-            (b) The inner (i.e., islands) category contains polygons totally enclosed inside the bbox.
-            (c) The outer category is the union of the mainland, inner, and bbox.
+            (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
+            (b) The inner (i.e., islands) category contains polyons totally enclosed inside the bbox.
+            (c) The outer category is the union of the mainland, inner, and bbox polygons.
         """
         return 111
 
