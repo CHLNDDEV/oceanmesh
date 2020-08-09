@@ -2,22 +2,21 @@ import os, errno
 
 import numpy
 import numpy.ma as ma
+import matplotlib.path as mpltPath
+
 from netCDF4 import Dataset
 import shapefile
 
 
 class Geodata:
     """
-    Geographical data class that handles geographical data describing
+    Parent geographical data class that handles geographical data describing
     coastlines or other features in the form of a shapefile and
     topobathy in the form of a DEM.
     """
 
-    def __init__(self, shp, bbox, dem=None):
+    def __init__(self, bbox):
         self.bbox = bbox
-        self.shp = shp
-        if dem is not None:
-            self.dem = dem
 
     @property
     def bbox(self):
@@ -32,25 +31,39 @@ class Geodata:
                 raise ValueError("bbox has wrong number of values.")
             self.__bbox = value
 
-    @property
-    def shp(self):
-        return self.__shp
 
-    @shp.setter
-    def shp(self, fname):
-        if not os.path.isfile(fname):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-        self.__shp = fname
+def classify_shoreline(bbox, polys):
+    """Classify vertices from polys as either inner, outer, or mainland.
+       The vertices of the shoreline polygon(s) are classified into three types: mainland, inner, or outer.
+        (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
+        (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
+        (c) The outer category is the union of the mainland, inner, and bbox polygons.
+    """
+    # path of bounding box
+    def __create_boubox(bbox):
+        xmin, xmax, ymin, ymax = bbox
+        return [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+        ]
 
-    @property
-    def dem(self):
-        return self.__dem
+    inner = numpy.empty(shape=(0, 2))
+    mainland = numpy.empty(shape=(0, 2))
+    outer = numpy.empty(shape=(0, 2))
 
-    @dem.setter
-    def dem(self, fname):
-        if not os.path.isfile(fname):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-        self.__shp = fname
+    path = mpltPath.Path(__create_boubox(bbox))
+    for poly in polys:
+        inside = path.contains_points(poly[:-1, :])
+        if all(inside):
+            # an island/inner polygon
+            inner = numpy.append(inner, poly, axis=0)
+        elif any(inside):
+            # a mainland polyline/polygon (may be non-closed)
+            mainland = numpy.append(mainland, poly, axis=0)
+    return inner, mainland, outer
 
 
 class Shoreline(Geodata):
@@ -60,13 +73,24 @@ class Shoreline(Geodata):
     """
 
     def __init__(self, shp, bbox):
-        super().__init__(shp=shp, bbox=bbox)
-        self.polys = []
+        super().__init__(bbox)
+
+        self.shp = shp
         self.inner = []
         self.outer = []
         self.mainland = []
 
-        polys = []  # polygons and polylines.
+        @property
+        def shp(self):
+            return self.__shp
+
+        @shp.setter
+        def shp(self, fname):
+            if not os.path.isfile(fname):
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
+            self.__shp = fname
+
+        polys = []  # tmp storage for polygons and polylines
 
         def __isOverlapping(bbox1, bbox2):
             x1min, x1max, y1min, y1max = bbox1
@@ -83,9 +107,8 @@ class Shoreline(Geodata):
                 polys.append(poly)
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
-        self.polys = polys
-         __classify(self):
-        # now classify shoreline components
+
+        self.inner, self.mainland, self.outer = classify_shoreline(self.bbox, polys)
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
@@ -109,21 +132,25 @@ class Shoreline(Geodata):
 
         plt.show()
 
-    def __classify(self):
-        """Classify vertices from polys as either inner, outer, or mainland.
-           The segments of shoreline polygon are classified into three types: mainland, inner, or outer.
-            (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
-            (b) The inner (i.e., islands) category contains polyons totally enclosed inside the bbox.
-            (c) The outer category is the union of the mainland, inner, and bbox polygons.
-        """
-        return 111
-
 
 class DEM(Geodata):
     """Repr. of digitial elevation model"""
 
     def __init__(self, dem, bbox):
-        super().__init__(dem=dem, bbox=bbox)
+        super().__init__(bbox)
+
+        self.dem = dem
+
+        @property
+        def dem(self):
+            return self.__dem
+
+        @dem.setter
+        def dem(self, fname):
+            if not os.path.isfile(fname):
+                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
+            self.__dem = fname
+
         # well-known variable names
         wkv_x = ["x", "Longitude", "longitude", "lon"]
         wkv_y = ["y", "Latitude", "latitude", "lat"]
