@@ -8,6 +8,46 @@ from netCDF4 import Dataset
 import shapefile
 
 
+def densify(poly, maxdiff):
+    """ Fills in any gaps in latitude (lat) or longitude (lon) data vectors
+        that are greater than a defined tolerance maxdiff (degrees) apart in either dimension.
+
+        latout and lonout are the new latitude and longitude data vectors, in which any gaps
+        larger than maxdiff in the original vectors have been filled with additional points.
+    """
+    lon, lat = poly[:, 0], poly[:, 1]
+    nx = len(lon)
+    dlat = numpy.abs(lat[1:] - lat[:-1])
+    dlon = numpy.abs(lon[1:] - lon[:-1])
+    nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
+    sumnin = numpy.sum(nin)
+    if sumnin == 0:
+        print("No insertion is needed")
+        return lon, lat
+    nout = sumnin + nx
+    latout = ma.array(numpy.arange(nout), mask=1)
+    lonout = ma.array(numpy.arange(nout), mask=1)
+    n = 0
+    for i in range(nx - 1):
+        ni = nin[i]
+        if ni == 0 or ma.is_masked(ni):
+            latout[n] = lat[i]
+            lonout[n] = lon[i]
+            nstep = 1
+        else:
+            ni = int(ni)
+            ilat = numpy.linspace(lat[i], lat[i + 1], ni + 2)
+            ilon = numpy.linspace(lon[i], lon[i + 1], ni + 2)
+            latout[n : n + ni] = ilat[1 : ni + 1]
+            lonout[n : n + ni] = ilon[1 : ni + 1]
+            nstep = ni + 1
+        n += nstep
+
+    latout[-1] = lat[-1]
+    lonout[-1] = lon[-1]
+    return numpy.hstack((lonout, latout))
+
+
 def polyArea(x, y):
     return 0.5 * numpy.abs(
         numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
@@ -29,7 +69,6 @@ def classifyShoreline(bbox, polys, h0):
        NB: Removes islands with area smaller than 4*h0**2
     """
     print("Partitioning shoreline...")
-    # path of bounding box
 
     def __create_boubox(bbox):
         xmin, xmax, ymin, ymax = bbox
@@ -51,11 +90,10 @@ def classifyShoreline(bbox, polys, h0):
     for poly in polys:
         inside = path.contains_points(poly[:-1, :])
         if all(inside):
-            # an island/inner polygon
             # compute area of polygon and don't save if too small
             area = polyArea(poly[:-1, 0], poly[:-1, 1])
             if area < 4 * h0 ** 2:
-                print("Island skipped...area too small")
+                print("Island skipped...area too small for given h0")
                 continue
             inner = numpy.append(inner, poly, axis=0)
             inner = ma.masked_where(inner == 999.0, inner)
@@ -64,16 +102,10 @@ def classifyShoreline(bbox, polys, h0):
             mainland = numpy.append(mainland, poly, axis=0)
             mainland = ma.masked_where(mainland == 999.0, mainland)
 
-    outer = numpy.concatenate((boubox, mainland), axis=0)
+    # wait to concatenate mainland with outer
     outer = ma.masked_where(outer == 999.0, outer)
 
     return inner, mainland, outer
-
-
-def densify():
-    """Densify latitude-longitude sampling in lines or polygons
-    """
-    return 111
 
 
 class Geodata:
@@ -154,9 +186,13 @@ class Shoreline(Geodata):
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
 
-        self.inner, self.mainland, self.outer = classifyShoreline(
-            self.bbox, polys, self.h0
-        )
+        inner, mainland, outer = classifyShoreline(self.bbox, polys, self.h0)
+
+        # densification of point spacing
+        self.inner = densify(inner, self.h0)
+        self.mainland = densify(mainland, self.h0)
+        # self.outer = densify(outer, self.h0)
+        # need to cat the outer and mainland here
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
