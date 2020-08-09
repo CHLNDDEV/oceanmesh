@@ -84,7 +84,7 @@ class Shoreline(Geodata):
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
         self.polys = polys
-         __classify(self):
+        self = __classify(self)
         # now classify shoreline components
 
     def plot(self, hold_on=False):
@@ -116,7 +116,6 @@ class Shoreline(Geodata):
             (b) The inner (i.e., islands) category contains polyons totally enclosed inside the bbox.
             (c) The outer category is the union of the mainland, inner, and bbox polygons.
         """
-        return 111
 
 
 class DEM(Geodata):
