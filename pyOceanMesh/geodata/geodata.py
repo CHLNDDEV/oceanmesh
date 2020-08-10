@@ -8,6 +8,17 @@ from netCDF4 import Dataset
 import shapefile
 
 
+def create_boubox(bbox):
+    xmin, xmax, ymin, ymax = bbox
+    return [
+        [xmin, ymin],
+        [xmax, ymin],
+        [xmax, ymax],
+        [xmin, ymax],
+        [xmin, ymin],
+    ]
+
+
 def densify(poly, maxdiff):
     """ Fills in any gaps in latitude (lat) or longitude (lon) data vectors
         that are greater than a defined tolerance maxdiff (degrees) apart in either dimension.
@@ -61,27 +72,14 @@ def isOverlapping(bbox1, bbox2):
 
 
 def classifyShoreline(bbox, polys, h0):
-    """Classify vertices from polys as either inner, outer, or mainland.
-       The vertices of the shoreline polygon(s) are classified into three types: mainland, inner, or outer.
+    """Classify vertices from polys as either inner or mainland.
         (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
         (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
-        (c) The outer category is the union of the mainland and bbox polygon.
        NB: Removes islands with area smaller than 4*h0**2
     """
     print("Partitioning shoreline...")
 
-    def __create_boubox(bbox):
-        xmin, xmax, ymin, ymax = bbox
-        return [
-            [xmin, ymin],
-            [xmax, ymin],
-            [xmax, ymax],
-            [xmin, ymax],
-            [xmin, ymin],
-        ]
-
-    boubox = __create_boubox(bbox)
-    outer = numpy.array(boubox + [999, 999])
+    boubox = create_boubox(bbox)
 
     inner = numpy.empty(shape=(0, 2))
     mainland = numpy.empty(shape=(0, 2))
@@ -102,10 +100,7 @@ def classifyShoreline(bbox, polys, h0):
             mainland = numpy.append(mainland, poly, axis=0)
             mainland = ma.masked_where(mainland == 999.0, mainland)
 
-    # wait to concatenate mainland with outer
-    outer = ma.masked_where(outer == 999.0, outer)
-
-    return inner, mainland, outer
+    return inner, mainland
 
 
 class Geodata:
@@ -186,13 +181,13 @@ class Shoreline(Geodata):
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
 
-        inner, mainland, outer = classifyShoreline(self.bbox, polys, self.h0)
+        inner, mainland = classifyShoreline(self.bbox, polys, self.h0)
 
         # densification of point spacing
         self.inner = densify(inner, self.h0)
         self.mainland = densify(mainland, self.h0)
-        # self.outer = densify(outer, self.h0)
-        # need to cat the outer and mainland here
+
+        # apply smoother (if active)
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
