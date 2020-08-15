@@ -1,4 +1,5 @@
-import os, errno
+import os
+import errno
 
 import numpy
 import numpy.ma as ma
@@ -17,6 +18,16 @@ def create_boubox(bbox):
         [xmin, ymax],
         [xmin, ymin],
     ]
+
+
+def create_ranges(start, stop, N, endpoint=True):
+    """Vectorized faster alternative to numpy.linspace"""
+    if endpoint == 1:
+        divisor = N - 1
+    else:
+        divisor = N
+    steps = (1.0 / divisor) * (stop - start)
+    return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
 def densify(poly, maxdiff):
@@ -47,16 +58,29 @@ def densify(poly, maxdiff):
             nstep = 1
         else:
             ni = int(ni)
-            ilat = numpy.linspace(lat[i], lat[i + 1], ni + 2)
-            ilon = numpy.linspace(lon[i], lon[i + 1], ni + 2)
-            latout[n : n + ni] = ilat[1 : ni + 1]
-            lonout[n : n + ni] = ilon[1 : ni + 1]
+            icoords = create_ranges(
+                numpy.array([lat[i], lat[i + 1]]),
+                numpy.array([lon[i], lon[i + 1]]),
+                ni + 2,
+            )
+            latout[n : n + ni] = icoords[0, 1 : ni + 1]
+            lonout[n : n + ni] = icoords[1, 1 : ni + 1]
             nstep = ni + 1
         n += nstep
 
     latout[-1] = lat[-1]
     lonout[-1] = lon[-1]
     return numpy.hstack((lonout, latout))
+
+
+def moving_average(mylist, N):
+    """ Moving average of a list """
+    for i, x in enumerate(mylist, 1):
+        cumsum.append(cumsum[i - 1] + x)
+        if i >= N:
+            moving_ave = (cumsum[i] - cumsum[i - N]) / N
+            moving_aves.append(moving_ave)
+    return moving_aves
 
 
 def polyArea(x, y):
@@ -76,6 +100,7 @@ def classifyShoreline(bbox, polys, h0):
         (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
         (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
        NB: Removes islands with area smaller than 4*h0**2
+       NB: The cateogory `outer` is formed on-the-fly later on
     """
     print("Partitioning shoreline...")
 
@@ -149,13 +174,14 @@ class Shoreline(Geodata):
        of winding points with mask values representing breaks.
     """
 
-    def __init__(self, shp, bbox, h0):
+    def __init__(self, shp, bbox, h0, window=0):
         super().__init__(bbox, h0)
 
         self.shp = shp
         self.inner = []
         self.outer = []
         self.mainland = []
+        self.window = window
 
         @property
         def shp(self):
@@ -166,6 +192,16 @@ class Shoreline(Geodata):
             if not os.path.isfile(fname):
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
             self.__shp = fname
+
+        @property
+        def window(self):
+            return self.__window
+
+        @window.setter
+        def window(self, value):
+            if value % 2 > 0:
+                raise ValueError("Moving average smoothing window must be odd")
+            self.__window = value
 
         polys = []  # tmp storage for polygons and polylines
 
@@ -181,13 +217,22 @@ class Shoreline(Geodata):
         if len(polys) == 0:
             raise ValueError("Shoreline does not intersect bbox")
 
-        inner, mainland = classifyShoreline(self.bbox, polys, self.h0)
+        _inner, _mainland = classifyShoreline(self.bbox, polys, self.h0)
 
         # densification of point spacing
-        self.inner = densify(inner, self.h0)
-        self.mainland = densify(mainland, self.h0)
+        _inner = densify(_inner, self.h0)
+        _mainland = densify(_mainland, self.h0)
 
-        # apply smoother (if active)
+        # apply shoreline smoother (if active)
+        if self.window > 0:
+            print("Applying 5-point moving average window")
+            _inner = moving_avg(_inner, self.window)
+            _mainland = moving_avg(_mainland, self.h0)
+
+        # coarsen polygon outside polygon
+
+        self.inner = _inner
+        self.mainland = _mainland
 
     def plot(self, hold_on=False):
         """plot the content of the shp field"""
