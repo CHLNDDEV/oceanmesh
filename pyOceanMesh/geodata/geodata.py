@@ -2,14 +2,27 @@ import os
 import errno
 
 import numpy
-import numpy.ma as ma
 import matplotlib.path as mpltPath
 
-from netCDF4 import Dataset
 import shapefile
+from netCDF4 import Dataset
+
+nan = numpy.nan
+
+__all__ = ["Geodata", "Shoreline", "DEM"]
 
 
-def create_boubox(bbox):
+def _convert_to_array(lst):
+    """Converts a list of Numpy arrays to a Numpy array"""
+    return numpy.concatenate(lst, axis=0)
+
+
+def _convert_to_list(arr):
+    """Converts a nan-delimited array to a list of Numpy arrays"""
+
+
+def _create_boubox(bbox):
+    """Create a bounding box from domain extents `bbox`."""
     xmin, xmax, ymin, ymax = bbox
     return [
         [xmin, ymin],
@@ -20,8 +33,8 @@ def create_boubox(bbox):
     ]
 
 
-def create_ranges(start, stop, N, endpoint=True):
-    """Vectorized faster alternative to numpy.linspace"""
+def _create_ranges(start, stop, N, endpoint=True):
+    """Vectorized alternative to numpy.linspace"""
     if endpoint == 1:
         divisor = N - 1
     else:
@@ -30,109 +43,130 @@ def create_ranges(start, stop, N, endpoint=True):
     return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
-def densify(poly, maxdiff):
-    """ Fills in any gaps in latitude (lat) or longitude (lon) data vectors
-        that are greater than a defined tolerance maxdiff (degrees) apart in either dimension.
-
-        latout and lonout are the new latitude and longitude data vectors, in which any gaps
-        larger than maxdiff in the original vectors have been filled with additional points.
+def _densify(poly, maxdiff):
+    """ Fills in any gaps in latitude or longitude arrays
+        that are greater than a `maxdiff` (degrees) apart
     """
+    print("Densifying segments...")
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
     dlat = numpy.abs(lat[1:] - lat[:-1])
     dlon = numpy.abs(lon[1:] - lon[:-1])
     nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
-    sumnin = numpy.sum(nin)
+    sumnin = numpy.nansum(nin)
     if sumnin == 0:
-        print("No insertion is needed")
-        return lon, lat
+        print("No densification is needed")
+        return numpy.hstack((lon[:, None], lat[:, None]))
     nout = sumnin + nx
-    latout = ma.array(numpy.arange(nout), mask=1)
-    lonout = ma.array(numpy.arange(nout), mask=1)
+
+    lonout = numpy.full((int(nout)), nan, dtype=float)
+    latout = numpy.full((int(nout)), nan, dtype=float)
+
     n = 0
     for i in range(nx - 1):
         ni = nin[i]
-        if ni == 0 or ma.is_masked(ni):
+        if ni == 0 or numpy.isnan(ni):
             latout[n] = lat[i]
             lonout[n] = lon[i]
             nstep = 1
         else:
             ni = int(ni)
-            icoords = create_ranges(
-                numpy.array([lat[i], lat[i + 1]]),
-                numpy.array([lon[i], lon[i + 1]]),
+            icoords = _create_ranges(
+                numpy.array([lat[i], lon[i]]),
+                numpy.array([lat[i + 1], lon[i + 1]]),
                 ni + 2,
             )
-            latout[n : n + ni] = icoords[0, 1 : ni + 1]
-            lonout[n : n + ni] = icoords[1, 1 : ni + 1]
+            latout[n : n + ni + 1] = icoords[0, : ni + 1]
+            lonout[n : n + ni + 1] = icoords[1, : ni + 1]
             nstep = ni + 1
         n += nstep
 
     latout[-1] = lat[-1]
     lonout[-1] = lon[-1]
-    return numpy.hstack((lonout, latout))
+    return numpy.hstack((lonout[:, None], latout[:, None]))
 
 
-def moving_average(mylist, N):
-    """ Moving average of a list """
-    for i, x in enumerate(mylist, 1):
-        cumsum.append(cumsum[i - 1] + x)
-        if i >= N:
-            moving_ave = (cumsum[i] - cumsum[i - N]) / N
-            moving_aves.append(moving_ave)
-    return moving_aves
-
-
-def polyArea(x, y):
+def _polyArea(x, y):
+    """Calculates area of a polygon"""
     return 0.5 * numpy.abs(
         numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
     )
 
 
-def isOverlapping(bbox1, bbox2):
+def _isOverlapping(bbox1, bbox2):
+    """Determines if two boxes intersect"""
     x1min, x1max, y1min, y1max = bbox1
     x2min, x2max, y2min, y2max = bbox2
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def classifyShoreline(bbox, polys, h0):
-    """Classify vertices from polys as either inner or mainland.
-        (a) The mainland category contains vertices that are not totally enclosed inside the bbox.
-        (b) The inner (i.e., islands) category contains *polyons* totally enclosed inside the bbox.
-       NB: Removes islands with area smaller than 4*h0**2
-       NB: The cateogory `outer` is formed on-the-fly later on
+def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
+    """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
+        (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
+        (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
+            NB: Removes `inner` geometry with areas smaller than `minimum_area_mult`*`h0`**2
     """
-    print("Partitioning shoreline...")
+    print("Classifying the shoreline segments...")
 
-    boubox = create_boubox(bbox)
+    boubox = _create_boubox(bbox)
 
     inner = numpy.empty(shape=(0, 2))
+    inner[:] = nan
     mainland = numpy.empty(shape=(0, 2))
+    mainland[:] = nan
+
+    ixs = numpy.argwhere(numpy.isnan(polys[:, 0]))
+    ixs = numpy.insert(ixs, 0, 0)
 
     path = mpltPath.Path(boubox)
-    for poly in polys:
-        inside = path.contains_points(poly[:-1, :])
+    for i in range(len(ixs) - 1):
+        if i == 0:
+            poly = polys[ixs[i] : ixs[i + 1], :]
+        else:
+            poly = polys[ixs[i] + 1 : ixs[i + 1], :]
+        inside = path.contains_points(poly)
         if all(inside):
-            # compute area of polygon and don't save if too small
-            area = polyArea(poly[:-1, 0], poly[:-1, 1])
-            if area < 4 * h0 ** 2:
-                print("Island skipped...area too small for given h0")
+            area = _polyArea(poly[:, 0], poly[:, 1])
+            if area < minimum_area_mult * h0 ** 2:
                 continue
             inner = numpy.append(inner, poly, axis=0)
-            inner = ma.masked_where(inner == 999.0, inner)
         elif any(inside):
-            # a mainland polyline/polygon (may be non-closed)
             mainland = numpy.append(mainland, poly, axis=0)
-            mainland = ma.masked_where(mainland == 999.0, mainland)
 
     return inner, mainland
 
 
+def _moving_average(a, n=5):
+    """Moving average of a nan-delimited array"""
+    ret = numpy.cumsum(a.filled(0))
+    ret[n:] = ret[n:] - ret[:-n]
+    counts = numpy.cumsum(~a.mask)
+    counts[n:] = counts[n:] - counts[:-n]
+    ret[~a.mask] /= counts[~a.mask]
+    ret[a.mask] = nan
+
+    return ret
+
+
+def _smoothShoreline(shoreline, N):
+    """Smoothes the shoreline segment-by-segment using
+       a `N` point moving average.
+    """
+    print("Applying a {} point moving average smoother " "to segments...".format(N))
+    x, y = shoreline[:, 0], shoreline[:, 1]
+    mx = numpy.ma.masked_array(x, numpy.isnan(x))
+    my = numpy.ma.masked_array(y, numpy.isnan(y))
+    x = _moving_average(mx)
+    y = _moving_average(my)
+
+    return numpy.hstack((x[:, None], y[:, None]))
+
+
 class Geodata:
     """
-    Parent geographical data class that handles geographical data describing
-    coastlines or other features in the form of a shapefile and
-    topobathy in the form of a DEM.
+    Geographical data class that handles geographical data describing
+    shorelines in the form of a shapefile and topobathy in the form of a
+    digital elevation model (DEM).
     """
 
     def __init__(self, bbox, h0):
@@ -168,13 +202,33 @@ class Geodata:
         self.__h0 = value
 
 
+def _from_shapefile(filename, bbox):
+    """Reads a ESRI Shapefile from `filename` that intersects with `bbox`"""
+
+    polys = []  # tmp storage for polygons and polylines
+
+    print("Reading in shapefile... " + filename)
+    s = shapefile.Reader(filename)
+    for shape in s.shapes():
+        # only read in shapes that intersect with bbox
+        if _isOverlapping(bbox, shape.bbox):
+            poly = numpy.asarray(shape.points + [(nan, nan)])
+            polys.append(poly)
+
+    if len(polys) == 0:
+        raise ValueError("Shoreline data does not intersect with bbox")
+
+    return _convert_to_array(polys)
+
+
 class Shoreline(Geodata):
-    """Repr. of shoreline
-       The shoreline is represented as a list of numpy array
-       of winding points with mask values representing breaks.
+    """
+    The shoreline class extends :class:`Geodata` to create
+    signed distance functions that take into account complex
+    shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, window=0):
+    def __init__(self, shp, bbox, h0, window=5, minimum_area_mult=4.0):
         super().__init__(bbox, h0)
 
         self.shp = shp
@@ -182,16 +236,19 @@ class Shoreline(Geodata):
         self.outer = []
         self.mainland = []
         self.window = window
+        self.minimum_area_mult = minimum_area_mult
 
         @property
         def shp(self):
             return self.__shp
 
         @shp.setter
-        def shp(self, fname):
-            if not os.path.isfile(fname):
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-            self.__shp = fname
+        def shp(self, filename):
+            if not os.path.isfile(filename):
+                raise FileNotFoundError(
+                    errno.ENOENT, os.strerror(errno.ENOENT), filename
+                )
+            self.__shp = filename
 
         @property
         def window(self):
@@ -203,39 +260,33 @@ class Shoreline(Geodata):
                 raise ValueError("Moving average smoothing window must be odd")
             self.__window = value
 
-        polys = []  # tmp storage for polygons and polylines
+        @property
+        def minimum_area_mult(self, value):
+            return self.__minimum_area_mult
 
-        print("Reading in shapefile... " + self.shp)
-        s = shapefile.Reader(self.shp)
-        for shape in s.shapes():
-            # only read in shapes that intersect with bbox
-            if isOverlapping(bbox, shape.bbox):
-                poly = numpy.asarray(shape.points + [(999.0, 999.0)])
-                poly = ma.masked_where(poly == 999.0, poly)
-                polys.append(poly)
+        @minimum_area_mult.setter
+        def minimum_area_mult(self, value):
+            if value <= 0.0:
+                raise ValueError(
+                    "Minimum area multiplier * h0**2 to "
+                    " prune inner geometry must be > 0.0"
+                )
+            self.__minimum_area_mult = value
 
-        if len(polys) == 0:
-            raise ValueError("Shoreline does not intersect bbox")
+        polys = _from_shapefile(self.shp, self.bbox)
 
-        _inner, _mainland = classifyShoreline(self.bbox, polys, self.h0)
+        polys = _densify(polys, self.h0)
 
-        # densification of point spacing
-        _inner = densify(_inner, self.h0)
-        _mainland = densify(_mainland, self.h0)
+        # TODO func to coarsen polygon outside boubox for faster SDF eval
 
-        # apply shoreline smoother (if active)
-        if self.window > 0:
-            print("Applying 5-point moving average window")
-            _inner = moving_avg(_inner, self.window)
-            _mainland = moving_avg(_mainland, self.h0)
+        polys = _smoothShoreline(polys, self.window)
 
-        # coarsen polygon outside polygon
-
-        self.inner = _inner
-        self.mainland = _mainland
+        self.inner, self.mainland = _classifyShoreline(
+            self.bbox, polys, self.h0, self.minimum_area_mult
+        )
 
     def plot(self, hold_on=False):
-        """plot the content of the shp field"""
+        """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
         flg1, flg2 = False, False
@@ -270,7 +321,7 @@ class Shoreline(Geodata):
 
 
 class DEM(Geodata):
-    """Repr. of digitial elevation model"""
+    """Digitial elevation model read in from a NetCDF file"""
 
     def __init__(self, dem, bbox, h0):
         super().__init__(bbox, h0)
