@@ -103,7 +103,7 @@ def _polyArea(x, y):
 
 
 def _isOverlapping(bbox1, bbox2):
-    """Determines if two boxes intersect"""
+    """Determines if two axis-aligned boxes intersect"""
     x1min, x1max, y1min, y1max = bbox1
     x2min, x2max, y2min, y2max = bbox2
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
@@ -184,7 +184,9 @@ def _nth_simplify(polys, bbox):
             if inside[j]:  # keep point (in domain)
                 line = numpy.append(line, [poly[j, :]], axis=0)
             else:  # pt is outside of domain
-                bd = min(j + 200, len(inside) - 1) # collapses 200 pts to 1 vertex (arbitary)
+                bd = min(
+                    j + 200, len(inside) - 1
+                )  # collapses 200 pts to 1 vertex (arbitary)
                 exte = min(200, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
@@ -245,9 +247,11 @@ def _from_shapefile(filename, bbox):
 
     print("Reading in shapefile... " + filename)
     s = shapefile.Reader(filename)
+    re = numpy.array([0, 2, 1, 3], dtype=int)
     for shape in s.shapes():
         # only read in shapes that intersect with bbox
-        if _isOverlapping(bbox, shape.bbox):
+        bbox2 = [shape.bbox[r] for r in re]
+        if _isOverlapping(bbox, bbox2):
             poly = numpy.asarray(shape.points + [(nan, nan)])
             polys.append(poly)
 
@@ -352,9 +356,10 @@ class Shoreline(Geodata):
         elif flg1 and not flg2:
             ax.legend((line1), ("mainland"))
         elif flg2 and not flg1:
-            ax.legend((line1), ("inner"))
+            ax.legend((line2), ("inner"))
 
         plt.show()
+        ax.set_aspect("equal", adjustable="box")
 
 
 class DEM(Geodata):
