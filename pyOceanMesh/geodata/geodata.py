@@ -163,6 +163,35 @@ def _smoothShoreline(polys, N):
     return _convert_to_array(out)
 
 
+def _nth_simplify(polys, bbox):
+    """Collapse segments in `polys` outside of `bbox`"""
+    print("Collapsing segments outside of the bbox...")
+    boubox = _create_boubox(bbox)
+    path = mpltPath.Path(boubox)
+    polys = _convert_to_list(polys)
+    out = []
+    for poly in polys:
+        j = 0
+        inside = path.contains_points(poly[:-2, :])
+        line = numpy.empty(shape=(0, 2))
+        while j < len(poly[:-2]):
+            if inside[j]:  # keep point (in domain)
+                line = numpy.append(line, [poly[j, :]], axis=0)
+            else:  # pt is outside of domain
+                bd = min(j + 200, len(inside) - 1)
+                exte = min(200, bd - j)
+                if sum(inside[j:bd]) == 0:  # next points are all outside
+                    line = numpy.append(line, [poly[j, :]], axis=0)
+                    line = numpy.append(line, [poly[j + exte, :]], axis=0)
+                    j += exte
+                else:  # otherwise keep
+                    line = numpy.append(line, [poly[j, :]], axis=0)
+            j += 1
+        line = numpy.append(line, [[nan, nan]], axis=0)
+        out.append(line)
+    return _convert_to_array(out)
+
+
 class Geodata:
     """
     Geographical data class that handles geographical data describing
@@ -224,8 +253,9 @@ def _from_shapefile(filename, bbox):
 
 class Shoreline(Geodata):
     """
-    The shoreline class extends :class:`Geodata` to create
-    signed distance functions that take into account complex
+    The shoreline class extends :class:`Geodata` to store data
+    that is later used to create
+    signed distance functions to represent irregular
     shoreline geometries.
     """
 
@@ -280,7 +310,7 @@ class Shoreline(Geodata):
 
         polys = _densify(polys, self.h0)
 
-        # TODO func to coarsen polygon outside boubox for faster SDF eval
+        polys = _nth_simplify(polys, self.bbox)
 
         self.inner, self.mainland = _classifyShoreline(
             self.bbox, polys, self.h0, self.minimum_area_mult
