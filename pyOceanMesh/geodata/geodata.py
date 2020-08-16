@@ -18,7 +18,9 @@ def _convert_to_array(lst):
 
 
 def _convert_to_list(arr):
-    """Converts a nan-delimited array to a list of Numpy arrays"""
+    """Converts a nan-delimited Numpy array to a list of Numpy arrays"""
+    a = numpy.insert(arr, 0, [[nan, nan]], axis=0)
+    return [a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))]
 
 
 def _create_boubox(bbox):
@@ -115,15 +117,9 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     mainland = numpy.empty(shape=(0, 2))
     mainland[:] = nan
 
-    ixs = numpy.argwhere(numpy.isnan(polys[:, 0]))
-    ixs = numpy.insert(ixs, 0, 0)
-
+    polys = _convert_to_list(polys)
     path = mpltPath.Path(boubox)
-    for i in range(len(ixs) - 1):
-        if i == 0:
-            poly = polys[ixs[i] : ixs[i + 1], :]
-        else:
-            poly = polys[ixs[i] + 1 : ixs[i + 1], :]
+    for poly in polys:
         inside = path.contains_points(poly)
         if all(inside):
             area = _polyArea(poly[:, 0], poly[:, 1])
@@ -136,30 +132,26 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     return inner, mainland
 
 
-def _moving_average(a, n=5):
+def _moving_average(x, N=5):
     """Moving average of a nan-delimited array"""
-    ret = numpy.cumsum(a.filled(0))
-    ret[n:] = ret[n:] - ret[:-n]
-    counts = numpy.cumsum(~a.mask)
-    counts[n:] = counts[n:] - counts[:-n]
-    ret[~a.mask] /= counts[~a.mask]
-    ret[a.mask] = nan
-
-    return ret
+    cumsum = numpy.cumsum(numpy.insert(x, 0, 0))
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
 
 
-def _smoothShoreline(shoreline, N):
+def _smoothShoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
        a `N` point moving average.
     """
-    print("Applying a {} point moving average smoother " "to segments...".format(N))
-    x, y = shoreline[:, 0], shoreline[:, 1]
-    mx = numpy.ma.masked_array(x, numpy.isnan(x))
-    my = numpy.ma.masked_array(y, numpy.isnan(y))
-    x = _moving_average(mx)
-    y = _moving_average(my)
-
-    return numpy.hstack((x[:, None], y[:, None]))
+    print("Applying a {} point moving average smoother to segments...".format(N))
+    polys = _convert_to_list(polys)
+    out = []
+    for poly in polys:
+        x = _moving_average(poly[:-2, 0], N)
+        x = numpy.append(x, [nan])
+        y = _moving_average(poly[:-2, 1], N)
+        y = numpy.append(y, [nan])
+        out.append(numpy.hstack((x[:, None], y[:, None])))
+    return _convert_to_array(out)
 
 
 class Geodata:
