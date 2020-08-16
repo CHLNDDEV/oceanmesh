@@ -46,16 +46,22 @@ def _create_ranges(start, stop, N, endpoint=True):
     return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
-def _densify(poly, maxdiff):
+def _densify(poly, maxdiff, bbox):
     """ Fills in any gaps in latitude or longitude arrays
         that are greater than a `maxdiff` (degrees) apart
     """
     print("Densifying segments...")
+
+    boubox = _create_boubox(bbox)
+    path = mpltPath.Path(boubox)
+    inside = path.contains_points(poly)
+
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
     dlat = numpy.abs(lat[1:] - lat[:-1])
     dlon = numpy.abs(lon[1:] - lon[:-1])
     nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
+    nin[~inside[1:]] = 0  # no need to densify outside of bbox please
     sumnin = numpy.nansum(nin)
     if sumnin == 0:
         print("No densification is needed")
@@ -178,7 +184,7 @@ def _nth_simplify(polys, bbox):
             if inside[j]:  # keep point (in domain)
                 line = numpy.append(line, [poly[j, :]], axis=0)
             else:  # pt is outside of domain
-                bd = min(j + 200, len(inside) - 1)
+                bd = min(j + 200, len(inside) - 1) # collapses 200 pts to 1 vertex (arbitary)
                 exte = min(200, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
@@ -308,7 +314,7 @@ class Shoreline(Geodata):
 
         polys = _smoothShoreline(polys, self.refinements)
 
-        polys = _densify(polys, self.h0)
+        polys = _densify(polys, self.h0, self.bbox)
 
         polys = _nth_simplify(polys, self.bbox)
 
