@@ -20,7 +20,8 @@ def _convert_to_array(lst):
 def _convert_to_list(arr):
     """Converts a nan-delimited Numpy array to a list of Numpy arrays"""
     a = numpy.insert(arr, 0, [[nan, nan]], axis=0)
-    return [a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))]
+    tmp = [a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))]
+    return [numpy.append(a, [[nan, nan]], axis=0) for a in tmp]
 
 
 def _create_boubox(bbox):
@@ -120,9 +121,9 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     polys = _convert_to_list(polys)
     path = mpltPath.Path(boubox)
     for poly in polys:
-        inside = path.contains_points(poly)
+        inside = path.contains_points(poly[:-2])
         if all(inside):
-            area = _polyArea(poly[:, 0], poly[:, 1])
+            area = _polyArea(poly[:-2, 0], poly[:-2, 1])
             if area < minimum_area_mult * h0 ** 2:
                 continue
             inner = numpy.append(inner, poly, axis=0)
@@ -132,25 +133,33 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     return inner, mainland
 
 
-def _moving_average(x, N=5):
-    """Moving average of a nan-delimited array"""
-    cumsum = numpy.cumsum(numpy.insert(x, 0, 0))
-    return (cumsum[N:] - cumsum[:-N]) / float(N)
+def chaikins_corner_cutting(coords, refinements=5):
+    """http://www.cs.unc.edu/~dm/UNC/COMP258/LECTURES/Chaikins-Algorithm.pdf"""
+    coords = numpy.array(coords)
+
+    for _ in range(refinements):
+        L = coords.repeat(2, axis=0)
+        R = numpy.empty_like(L)
+        R[0] = L[0]
+        R[2::2] = L[1:-1:2]
+        R[1:-1:2] = L[2::2]
+        R[-1] = L[-1]
+        coords = L * 0.75 + R * 0.25
+
+    return coords
 
 
 def _smoothShoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
-       a `N` point moving average.
+       a `N` refinement Chaikins Corner cutting algorithm.
     """
-    print("Applying a {} point moving average smoother to segments...".format(N))
+    print("Applying a {} refinement Chaikin Corner cut to segments...".format(N))
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
-        x = _moving_average(poly[:-2, 0], N)
-        x = numpy.append(x, [nan])
-        y = _moving_average(poly[:-2, 1], N)
-        y = numpy.append(y, [nan])
-        out.append(numpy.hstack((x[:, None], y[:, None])))
+        tmp = chaikins_corner_cutting(poly[:-1], refinements=N)
+        tmp = numpy.append(tmp, [[nan, nan]], axis=0)
+        out.append(tmp)
     return _convert_to_array(out)
 
 
@@ -220,14 +229,14 @@ class Shoreline(Geodata):
     shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, window=5, minimum_area_mult=4.0):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0):
         super().__init__(bbox, h0)
 
         self.shp = shp
         self.inner = []
         self.outer = []
         self.mainland = []
-        self.window = window
+        self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
         @property
@@ -243,14 +252,14 @@ class Shoreline(Geodata):
             self.__shp = filename
 
         @property
-        def window(self):
-            return self.__window
+        def refinements(self):
+            return self.__refinements
 
-        @window.setter
-        def window(self, value):
-            if value % 2 > 0:
-                raise ValueError("Moving average smoothing window must be odd")
-            self.__window = value
+        @refinements.setter
+        def refinements(self, value):
+            if value > 0:
+                raise ValueError("Refinements must be > 0")
+            self.__refinements = value
 
         @property
         def minimum_area_mult(self, value):
@@ -267,11 +276,11 @@ class Shoreline(Geodata):
 
         polys = _from_shapefile(self.shp, self.bbox)
 
+        polys = _smoothShoreline(polys, self.refinements)
+
         polys = _densify(polys, self.h0)
 
         # TODO func to coarsen polygon outside boubox for faster SDF eval
-
-        polys = _smoothShoreline(polys, self.window)
 
         self.inner, self.mainland = _classifyShoreline(
             self.bbox, polys, self.h0, self.minimum_area_mult
