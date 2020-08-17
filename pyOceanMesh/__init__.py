@@ -1,4 +1,3 @@
-from .geodata import Geodata, DEM, Shoreline
-from .msh import Msh
+from pyOceanMesh.geodata import Geodata, DEM, Shoreline
 
-__all__ = ["Geodata", "DEM", "Shoreline", "Msh"]
+__all__ = ["Geodata", "DEM", "Shoreline"]
