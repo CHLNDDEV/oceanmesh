@@ -20,5 +20,5 @@ setup(
     author_email="keithrbt0@gmail.com",
     url="https://github.com/CHLNDDEV/pyOceanMesh",
     packages=["pyOceanMesh"],
-    install_requires=["numpy", "netcdf4", "pyshp"],
+    install_requires=["numpy", "netcdf4", "pyshp", "matplotlib"],
 )

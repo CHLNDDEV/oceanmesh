@@ -16,3 +16,5 @@ def test_shoreline(boxes_h0):
         shoreline and test you get the write output"""
     bbox, h0 = boxes_h0
     shp = Shoreline(shp=fname, bbox=bbox, h0=h0)
+    assert len(shp.inner) > 0
+    assert len(shp.mainland) > 0
