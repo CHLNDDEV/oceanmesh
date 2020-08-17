@@ -1,8 +1,10 @@
+import os
+
 import pytest
 
 from pyOceanMesh import Shoreline
 
-fname = "GSHHS_l_L1.shp"
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 
 
 @pytest.mark.parametrize(
