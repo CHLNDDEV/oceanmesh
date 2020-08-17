@@ -16,7 +16,7 @@ setup(
     name="pyOceanMesh",
     version="0.1",
     description="Automatic coastal ocean mesh generator",
-    author="Keith Roberts",
+    author="Keith Jared Roberts",
     author_email="keithrbt0@gmail.com",
     url="https://github.com/CHLNDDEV/pyOceanMesh",
     packages=["pyOceanMesh"],
