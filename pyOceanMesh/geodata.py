@@ -2,6 +2,7 @@ import os
 import errno
 
 import numpy
+from scipy.interpolate import RegularGridInterpolator
 import matplotlib.path as mpltPath
 
 import shapefile
@@ -326,13 +327,16 @@ class Shoreline(Geodata):
             self.bbox, polys, self.h0, self.minimum_area_mult
         )
 
-    def plot(self, hold_on=False):
+    def plot(self, ax_old=None):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
         flg1, flg2 = False, False
 
-        fig, ax = plt.subplots()
+        if ax_old is None:
+            fig, ax = plt.subplots()
+        else:
+            ax = ax_old
         if len(self.mainland) != 0:
             (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "g-")
             flg1 = True
@@ -358,8 +362,65 @@ class Shoreline(Geodata):
         elif flg2 and not flg1:
             ax.legend((line2), ("inner"))
 
-        plt.show()
+        if ax_old is None:
+            plt.show()
         ax.set_aspect("equal", adjustable="box")
+        return ax
+
+
+def _from_netcdf(filename, bbox):
+    """Read in digitial elevation model from a NetCDF file"""
+
+    print("Reading in NetCDF... " + filename)
+    # well-known variable names
+    wkv_x = ["x", "Longitude", "longitude", "lon"]
+    wkv_y = ["y", "Latitude", "latitude", "lat"]
+    wkv_z = ["Band1", "z"]
+    try:
+        with Dataset(filename, "r") as nc_fid:
+            for x, y in zip(wkv_x, wkv_y):
+                for var in nc_fid.variables:
+                    if var == x:
+                        lon_name = var
+                    if var == y:
+                        lat_name = var
+            for z in wkv_z:
+                for var in nc_fid.variables:
+                    if var == z:
+                        z_name = var
+            lons = nc_fid.variables[lon_name][:]
+            lats = nc_fid.variables[lat_name][:]
+            # bounds (from DEM)
+            blol, blou = numpy.amin(lons), numpy.amax(lons)
+            blal, blau = numpy.amin(lats), numpy.amax(lats)
+            # check bounds
+            if bbox[0] < blol or bbox[1] > blou:
+                raise ValueError(
+                    "bounding box "
+                    + str(bbox)
+                    + " exceeds DEM extents "
+                    + str((blol, blou, blal, blau))
+                    + "!"
+                )
+            if bbox[2] < blal or bbox[3] > blau:
+                raise ValueError(
+                    "bounding box "
+                    + str(bbox)
+                    + " exceeds DEM extents "
+                    + str((blol, blou, blal, blau))
+                    + "!"
+                )
+            # latitude lower and upper index
+            latli = numpy.argmin(numpy.abs(lats - bbox[2]))
+            latui = numpy.argmin(numpy.abs(lats - bbox[3]))
+            # longitude lower and upper index
+            lonli = numpy.argmin(numpy.abs(lons - bbox[0]))
+            lonui = numpy.argmin(numpy.abs(lons - bbox[1]))
+            topobathy = nc_fid.variables[z_name][latli:latui, lonli:lonui]
+            return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
+    except IOError:
+        print("Unable to open file...quitting")
+        quit()
 
 
 class DEM(Geodata):
@@ -369,8 +430,7 @@ class DEM(Geodata):
         super().__init__(bbox, h0)
 
         self.dem = dem
-        self.lats = None
-        self.lons = None
+        self.Fb = None
 
         @property
         def dem(self):
@@ -382,46 +442,35 @@ class DEM(Geodata):
                 raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
             self.__dem = fname
 
-        # well-known variable names
-        wkv_x = ["x", "Longitude", "longitude", "lon"]
-        wkv_y = ["y", "Latitude", "latitude", "lat"]
-        wkv_z = ["Band1", "z"]
-        try:
-            with Dataset(self.dem, "r") as nc_fid:
-                for x, y in zip(wkv_x, wkv_y):
-                    for var in nc_fid.variables:
-                        if var == x:
-                            lon_name = var
-                        if var == y:
-                            lat_name = var
-                for z in wkv_z:
-                    for var in nc_fid.variables:
-                        if var == z:
-                            z_name = var
-                _lons = nc_fid.variables[lon_name][:]
-                _lats = nc_fid.variables[lat_name][:]
-                # latitude lower and upper index
-                latli = numpy.argmin(numpy.abs(_lats - bbox[2]))
-                latui = numpy.argmin(numpy.abs(_lats - bbox[3]))
-                # longitude lower and upper index
-                lonli = numpy.argmin(numpy.abs(_lons - bbox[0]))
-                lonui = numpy.argmin(numpy.abs(_lons - bbox[1]))
-                self.topobathy = nc_fid.variables[z_name][lonli:lonui, latli:latui]
-                self.lons = _lons[lonli:lonui]
-                self.lats = _lats[latli:latui]
-        except IOError:
-            print("Unable to open file.")
+        la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
+        lats, lons = la[0], lo[0]
 
-    def plot(self, hold_on=False):
+        self.Fb = RegularGridInterpolator(
+            (lats[la[1]], lons[lo[1]]), topobathy, bounds_error=False, fill_value=None,
+        )
+
+    def plot(self, ax_old=None):
         "Visualize content of DEM"
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots()
-        cs = ax.pcolorfast(self.lons, self.lats, self.topobathy)
+        xmin, xmax, ymin, ymax = self.bbox
+        # for memory savings when plotting big dems
+        x = numpy.arange(xmin, xmax, self.h0 * 10)
+        y = numpy.arange(ymin, ymax, self.h0 * 10)
+        xg, yg = numpy.meshgrid(y, x, indexing="ij")
+        TB = self.Fb((xg, yg))
+
+        if ax_old is None:
+            fig, ax = plt.subplots()
+        else:
+            ax = ax_old
+        cs = ax.pcolorfast(x, y, TB)
         ax.axis("equal")
         cbar = fig.colorbar(cs)
         cbar.set_label("meters above datum")
         ax.set_xlabel("Longitude (WGS84)")
         ax.set_ylabel("Latitude (WGS84)")
         ax.set_title("Topobathy from: " + str(self.dem))
-        plt.show()
+        if ax_old is None:
+            plt.show()
+        return ax
