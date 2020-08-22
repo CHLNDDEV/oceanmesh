@@ -369,6 +369,8 @@ class DEM(Geodata):
         super().__init__(bbox, h0)
 
         self.dem = dem
+        self.lats = None
+        self.lons = None
 
         @property
         def dem(self):
@@ -385,7 +387,7 @@ class DEM(Geodata):
         wkv_y = ["y", "Latitude", "latitude", "lat"]
         wkv_z = ["Band1", "z"]
         try:
-            with Dataset(dem, "r") as nc_fid:
+            with Dataset(self.dem, "r") as nc_fid:
                 for x, y in zip(wkv_x, wkv_y):
                     for var in nc_fid.variables:
                         if var == x:
@@ -396,8 +398,30 @@ class DEM(Geodata):
                     for var in nc_fid.variables:
                         if var == z:
                             z_name = var
-                self.lats = nc_fid.variables[lon_name][:]
-                self.lons = nc_fid.variables[lat_name][:]
-                self.topobathy = nc_fid.variables[z_name][:]
+                _lons = nc_fid.variables[lon_name][:]
+                _lats = nc_fid.variables[lat_name][:]
+                # latitude lower and upper index
+                latli = numpy.argmin(numpy.abs(_lats - bbox[2]))
+                latui = numpy.argmin(numpy.abs(_lats - bbox[3]))
+                # longitude lower and upper index
+                lonli = numpy.argmin(numpy.abs(_lons - bbox[0]))
+                lonui = numpy.argmin(numpy.abs(_lons - bbox[1]))
+                self.topobathy = nc_fid.variables[z_name][lonli:lonui, latli:latui]
+                self.lons = _lons[lonli:lonui]
+                self.lats = _lats[latli:latui]
         except IOError:
             print("Unable to open file.")
+
+    def plot(self, hold_on=False):
+        "Visualize content of DEM"
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots()
+        cs = ax.pcolorfast(self.lons, self.lats, self.topobathy)
+        ax.axis("equal")
+        cbar = fig.colorbar(cs)
+        cbar.set_label("meters above datum")
+        ax.set_xlabel("Longitude (WGS84)")
+        ax.set_ylabel("Latitude (WGS84)")
+        ax.set_title("Topobathy from: " + str(self.dem))
+        plt.show()

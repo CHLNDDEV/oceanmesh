@@ -18,3 +18,8 @@ def test_shoreline(boxes_h0):
     shp = Shoreline(shp=fname, bbox=bbox, h0=h0)
     assert len(shp.inner) > 0
     assert len(shp.mainland) > 0
+
+
+@pytest.mark.parametrize("bboxes_h0", [((), 50.0)])
+def test_geodata(bboxes_h0):
+    """Read in several subsets of a DEM"""
