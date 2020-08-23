@@ -17,7 +17,7 @@ def test_shoreline(boxes_h0):
     """ Read in a shapefile at different scales h0
         shoreline and test you get the write output"""
     bbox, h0 = boxes_h0
-    shp = Shoreline(shp=fname, bbox=bbox, h0=h0)
+    shp = Shoreline(fname, bbox, h0)
     assert len(shp.inner) > 0
     assert len(shp.mainland) > 0
 
@@ -26,5 +26,5 @@ def test_shoreline(boxes_h0):
 def test_geodata(bboxes_h0):
     """Read in a subset of a DEM"""
     bbox, h0 = bboxes_h0
-    dem = DEM(dem=dfname, bbox=bbox, h0=h0)
+    dem = DEM(dfname, bbox)
     assert isinstance(dem, DEM), "DEM class did not form"

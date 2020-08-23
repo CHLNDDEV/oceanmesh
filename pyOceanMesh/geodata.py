@@ -208,9 +208,8 @@ class Geodata:
     digital elevation model (DEM).
     """
 
-    def __init__(self, bbox, h0):
+    def __init__(self, bbox):
         self.bbox = bbox
-        self.h0 = h0
 
     @property
     def bbox(self):
@@ -228,17 +227,6 @@ class Geodata:
             if value[3] < value[2]:
                 raise ValueError("bbox has wrong values.")
             self.__bbox = value
-
-    @property
-    def h0(self):
-        return self.__h0
-
-    @h0.setter
-    def h0(self, value):
-        if value <= 0:
-            raise ValueError("h0 must be > 0")
-        value /= 111e3  # convert to wgs84 degrees
-        self.__h0 = value
 
 
 def _from_shapefile(filename, bbox):
@@ -265,55 +253,20 @@ def _from_shapefile(filename, bbox):
 class Shoreline(Geodata):
     """
     The shoreline class extends :class:`Geodata` to store data
-    that is later used to create
-    signed distance functions to represent irregular
-    shoreline geometries.
+    that is later used to create signed distance functions to
+    represent irregular shoreline geometries.
     """
 
     def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0):
-        super().__init__(bbox, h0)
+        super().__init__(bbox)
 
         self.shp = shp
+        self.h0 = h0
         self.inner = []
         self.outer = []
         self.mainland = []
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
-
-        @property
-        def shp(self):
-            return self.__shp
-
-        @shp.setter
-        def shp(self, filename):
-            if not os.path.isfile(filename):
-                raise FileNotFoundError(
-                    errno.ENOENT, os.strerror(errno.ENOENT), filename
-                )
-            self.__shp = filename
-
-        @property
-        def refinements(self):
-            return self.__refinements
-
-        @refinements.setter
-        def refinements(self, value):
-            if value > 0:
-                raise ValueError("Refinements must be > 0")
-            self.__refinements = value
-
-        @property
-        def minimum_area_mult(self, value):
-            return self.__minimum_area_mult
-
-        @minimum_area_mult.setter
-        def minimum_area_mult(self, value):
-            if value <= 0.0:
-                raise ValueError(
-                    "Minimum area multiplier * h0**2 to "
-                    " prune inner geometry must be > 0.0"
-                )
-            self.__minimum_area_mult = value
 
         polys = _from_shapefile(self.shp, self.bbox)
 
@@ -326,6 +279,50 @@ class Shoreline(Geodata):
         self.inner, self.mainland = _classifyShoreline(
             self.bbox, polys, self.h0, self.minimum_area_mult
         )
+
+    @property
+    def shp(self):
+        return self.__shp
+
+    @shp.setter
+    def shp(self, filename):
+        if not os.path.isfile(filename):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
+        self.__shp = filename
+
+    @property
+    def refinements(self):
+        return self.__refinements
+
+    @refinements.setter
+    def refinements(self, value):
+        if value < 0:
+            raise ValueError("Refinements must be > 0")
+        self.__refinements = value
+
+    @property
+    def minimum_area_mult(self):
+        return self.__minimum_area_mult
+
+    @minimum_area_mult.setter
+    def minimum_area_mult(self, value):
+        if value <= 0.0:
+            raise ValueError(
+                "Minimum area multiplier * h0**2 to "
+                " prune inner geometry must be > 0.0"
+            )
+        self.__minimum_area_mult = value
+
+    @property
+    def h0(self):
+        return self.__h0
+
+    @h0.setter
+    def h0(self, value):
+        if value <= 0:
+            raise ValueError("h0 must be > 0")
+        value /= 111e3  # convert to wgs84 degrees
+        self.__h0 = value
 
     def plot(self, ax_old=None):
         """Visualize the content in the shp field of Shoreline"""
@@ -426,37 +423,37 @@ def _from_netcdf(filename, bbox):
 class DEM(Geodata):
     """Digitial elevation model read in from a NetCDF file"""
 
-    def __init__(self, dem, bbox, h0):
-        super().__init__(bbox, h0)
+    def __init__(self, dem, bbox):
+        super().__init__(bbox)
 
         self.dem = dem
+        self.gridspacing = None
         self.Fb = None
-
-        @property
-        def dem(self):
-            return self.__dem
-
-        @dem.setter
-        def dem(self, fname):
-            if not os.path.isfile(fname):
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-            self.__dem = fname
-
         la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
         lats, lons = la[0], lo[0]
-
+        self.gridspacing = numpy.abs(lats[1] - lats[0])
         self.Fb = RegularGridInterpolator(
             (lats[la[1]], lons[lo[1]]), topobathy, bounds_error=False, fill_value=None,
         )
 
+    @property
+    def dem(self):
+        return self.__dem
+
+    @dem.setter
+    def dem(self, fname):
+        if not os.path.isfile(fname):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
+        self.__dem = fname
+
     def plot(self, ax_old=None):
-        "Visualize content of DEM"
+        """Visualize content of DEM"""
         import matplotlib.pyplot as plt
 
         xmin, xmax, ymin, ymax = self.bbox
         # for memory savings when plotting big dems
-        x = numpy.arange(xmin, xmax, self.h0 * 10)
-        y = numpy.arange(ymin, ymax, self.h0 * 10)
+        x = numpy.arange(xmin, xmax, self.gridspacing * 10)
+        y = numpy.arange(ymin, ymax, self.gridspacing * 10)
         xg, yg = numpy.meshgrid(y, x, indexing="ij")
         TB = self.Fb((xg, yg))
 
