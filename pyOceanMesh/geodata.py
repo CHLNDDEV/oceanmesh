@@ -324,18 +324,16 @@ class Shoreline(Geodata):
         value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
 
-    def plot(self, ax_old=None):
+    def plot(self, ax=None):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
         flg1, flg2 = False, False
 
-        if ax_old is None:
+        if ax is None:
             fig, ax = plt.subplots()
-        else:
-            ax = ax_old
         if len(self.mainland) != 0:
-            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "g-")
+            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
             flg1 = True
         if len(self.inner) != 0:
             (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
@@ -359,9 +357,9 @@ class Shoreline(Geodata):
         elif flg2 and not flg1:
             ax.legend((line2), ("inner"))
 
-        if ax_old is None:
-            plt.show()
         ax.set_aspect("equal", adjustable="box")
+
+        plt.show()
         return ax
 
 
@@ -446,7 +444,7 @@ class DEM(Geodata):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
         self.__dem = fname
 
-    def plot(self, ax_old=None):
+    def plot(self, hold=False):
         """Visualize content of DEM"""
         import matplotlib.pyplot as plt
 
@@ -457,10 +455,7 @@ class DEM(Geodata):
         xg, yg = numpy.meshgrid(y, x, indexing="ij")
         TB = self.Fb((xg, yg))
 
-        if ax_old is None:
-            fig, ax = plt.subplots()
-        else:
-            ax = ax_old
+        fig, ax = plt.subplots()
         cs = ax.pcolorfast(x, y, TB)
         ax.axis("equal")
         cbar = fig.colorbar(cs)
@@ -468,6 +463,6 @@ class DEM(Geodata):
         ax.set_xlabel("Longitude (WGS84)")
         ax.set_ylabel("Latitude (WGS84)")
         ax.set_title("Topobathy from: " + str(self.dem))
-        if ax_old is None:
+        if hold is False:
             plt.show()
         return ax
