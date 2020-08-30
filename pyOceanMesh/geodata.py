@@ -418,11 +418,12 @@ def _from_tif(filename, bbox):
     for n in range(nc):
         lons.extend([tie[0] + reso[0] * n])
     lats, lons = numpy.asarray(lats), numpy.asarray(lons)
+    lats = numpy.flipud(lats)
 
     latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
 
     topobathy = numpy.asarray(Image.open(filename))
-    topobathy = topobathy[lonli:lonui, latli:latui]
+    topobathy = topobathy[latli:latui, lonli:lonui]
 
     return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 
@@ -472,7 +473,7 @@ class DEM(Geodata):
         elif ext.lower() in [".tif"]:
             la, lo, topobathy = _from_tif(self.dem, self.bbox)
         else:
-            raise RunTimeError(
+            raise ValueError(
                 "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])
             )
 
