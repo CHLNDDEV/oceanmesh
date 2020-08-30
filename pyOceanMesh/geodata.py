@@ -418,12 +418,17 @@ def _from_tif(filename, bbox):
     for n in range(nc):
         lons.extend([tie[0] + reso[0] * n])
     lats, lons = numpy.asarray(lats), numpy.asarray(lons)
-    lats = numpy.flipud(lats)
+    # should be increasing
+    if lats[1] < lats[0]:
+        lats = numpy.flipud(lats)
+    if lons[1] < lons[0]:
+        lons = numpy.flipud(lons)
 
     latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
 
-    topobathy = numpy.asarray(Image.open(filename))
-    topobathy = topobathy[latli:latui, lonli:lonui]
+    tmp = numpy.asarray(Image.open(filename))
+    topobathy = tmp[latli:latui, lonli:lonui]
+    print(numpy.amin(lats[slice(latli, latui)]))
 
     return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 

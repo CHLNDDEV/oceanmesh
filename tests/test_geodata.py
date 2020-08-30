@@ -6,6 +6,7 @@ from pyOceanMesh import DEM, Shoreline
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
+tfname = os.path.join(os.path.dirname(__file__), "galv_sub.tif")
 
 
 @pytest.mark.parametrize(
@@ -21,9 +22,22 @@ def test_shoreline(boxes_h0):
     assert len(shp.mainland) > 0
 
 
-@pytest.mark.parametrize("bboxes_h0", [((-95.22, -95.21, 29.02, 29.098), 10.0)])
-def test_geodata(bboxes_h0):
-    """Read in a subset of a DEM"""
-    bbox, h0 = bboxes_h0
-    dem = DEM(dfname, bbox)
+@pytest.mark.parametrize(
+    "files_bboxes",
+    [
+        (
+            dfname,
+            (-95.25, -95.2000000014, 28.9000000112, 29.099907413009998),
+        ),
+        (
+            tfname,
+            (-95.24, -95.20, 29.56252314079749, 29.80004628229499),
+        ),
+    ],
+)
+def test_geodata(files_bboxes):
+    """Read in a subset of a DEM from netcdf/tif"""
+
+    f, bbox = files_bboxes
+    dem = DEM(f, bbox)
     assert isinstance(dem, DEM), "DEM class did not form"
