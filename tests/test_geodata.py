@@ -2,8 +2,7 @@ import os
 
 import pytest
 
-
-from pyOceanMesh import Shoreline, DEM
+from pyOceanMesh import DEM, Shoreline
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
@@ -14,8 +13,8 @@ dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
     [((166.0, 176.0, -48.0, -40.0), 1000.0), ((-74.0, -70.0, 35.0, 42.0), 50.0)],
 )
 def test_shoreline(boxes_h0):
-    """ Read in a shapefile at different scales h0
-        shoreline and test you get the write output"""
+    """Read in a shapefile at different scales h0
+    shoreline and test you get the write output"""
     bbox, h0 = boxes_h0
     shp = Shoreline(fname, bbox, h0)
     assert len(shp.inner) > 0

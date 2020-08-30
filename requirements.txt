@@ -3,3 +3,4 @@ scipy
 matplotlib
 netcdf4
 pyshp
+Pillow==7.0.0

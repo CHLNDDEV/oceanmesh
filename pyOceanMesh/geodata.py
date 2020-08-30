@@ -1,12 +1,13 @@
-import os
 import errno
+import os
 
-import numpy
-from scipy.interpolate import RegularGridInterpolator
 import matplotlib.path as mpltPath
-
+import numpy
 import shapefile
 from netCDF4 import Dataset
+from PIL import Image
+from PIL.TiffTags import TAGS
+from scipy.interpolate import RegularGridInterpolator
 
 nan = numpy.nan
 
@@ -48,8 +49,8 @@ def _create_ranges(start, stop, N, endpoint=True):
 
 
 def _densify(poly, maxdiff, bbox):
-    """ Fills in any gaps in latitude or longitude arrays
-        that are greater than a `maxdiff` (degrees) apart
+    """Fills in any gaps in latitude or longitude arrays
+    that are greater than a `maxdiff` (degrees) apart
     """
     print("Densifying segments...")
 
@@ -112,9 +113,9 @@ def _isOverlapping(bbox1, bbox2):
 
 def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
-        (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
-        (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
-            NB: Removes `inner` geometry with areas smaller than `minimum_area_mult`*`h0`**2
+    (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
+    (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
+        NB: Removes `inner` geometry with areas smaller than `minimum_area_mult`*`h0`**2
     """
     print("Classifying the shoreline segments...")
 
@@ -158,7 +159,7 @@ def chaikins_corner_cutting(coords, refinements=5):
 
 def _smoothShoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
-       a `N` refinement Chaikins Corner cutting algorithm.
+    a `N` refinement Chaikins Corner cutting algorithm.
     """
     print("Applying a {} refinement Chaikin Corner cut to segments...".format(N))
     polys = _convert_to_list(polys)
@@ -341,7 +342,12 @@ class Shoreline(Geodata):
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
-            (xmin, ymin), xmax - xmin, ymax - ymin, fill=None, hatch="///", alpha=0.2,
+            (xmin, ymin),
+            xmax - xmin,
+            ymax - ymin,
+            fill=None,
+            hatch="///",
+            alpha=0.2,
         )
 
         border = 0.10 * (xmax - xmin)
@@ -361,6 +367,64 @@ class Shoreline(Geodata):
 
         plt.show()
         return ax
+
+
+def _extract_bounds(lons, lats, bbox):
+    """Extract the indices of the subregion"""
+    # bounds (from DEM)
+    blol, blou = numpy.amin(lons), numpy.amax(lons)
+    blal, blau = numpy.amin(lats), numpy.amax(lats)
+    # check bounds
+    if bbox[0] < blol or bbox[1] > blou:
+        raise ValueError(
+            "bounding box "
+            + str(bbox)
+            + " exceeds DEM extents "
+            + str((blol, blou, blal, blau))
+            + "!"
+        )
+    if bbox[2] < blal or bbox[3] > blau:
+        raise ValueError(
+            "bounding box "
+            + str(bbox)
+            + " exceeds DEM extents "
+            + str((blol, blou, blal, blau))
+            + "!"
+        )
+    # latitude lower and upper index
+    latli = numpy.argmin(numpy.abs(lats - bbox[2]))
+    latui = numpy.argmin(numpy.abs(lats - bbox[3]))
+    # longitude lower and upper index
+    lonli = numpy.argmin(numpy.abs(lons - bbox[0]))
+    lonui = numpy.argmin(numpy.abs(lons - bbox[1]))
+    return latli, latui, lonli, lonui
+
+
+def _from_tif(filename, bbox):
+    """Read in a digitial elevation model from a tif file"""
+
+    print("Reading in tif... " + filename)
+
+    with Image.open(filename) as img:
+        meta_dict = {TAGS[key]: img.tag[key] for key in img.tag.keys()}
+
+    nc, nr = meta_dict["ImageLength"][0], meta_dict["ImageWidth"][0]
+    reso = meta_dict["ModelPixelScaleTag"]
+    tie = meta_dict["ModelTiepointTag"][3:5]
+
+    lats, lons = [], []
+    for n in range(nr):
+        lats.extend([tie[1] - reso[1] * n])
+    for n in range(nc):
+        lons.extend([tie[0] + reso[0] * n])
+    lats, lons = numpy.asarray(lats), numpy.asarray(lons)
+
+    latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
+
+    topobathy = numpy.asarray(Image.open(filename))
+    topobathy = topobathy[lonli:lonui, latli:latui]
+
+    return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 
 
 def _from_netcdf(filename, bbox):
@@ -385,32 +449,7 @@ def _from_netcdf(filename, bbox):
                         z_name = var
             lons = nc_fid.variables[lon_name][:]
             lats = nc_fid.variables[lat_name][:]
-            # bounds (from DEM)
-            blol, blou = numpy.amin(lons), numpy.amax(lons)
-            blal, blau = numpy.amin(lats), numpy.amax(lats)
-            # check bounds
-            if bbox[0] < blol or bbox[1] > blou:
-                raise ValueError(
-                    "bounding box "
-                    + str(bbox)
-                    + " exceeds DEM extents "
-                    + str((blol, blou, blal, blau))
-                    + "!"
-                )
-            if bbox[2] < blal or bbox[3] > blau:
-                raise ValueError(
-                    "bounding box "
-                    + str(bbox)
-                    + " exceeds DEM extents "
-                    + str((blol, blou, blal, blau))
-                    + "!"
-                )
-            # latitude lower and upper index
-            latli = numpy.argmin(numpy.abs(lats - bbox[2]))
-            latui = numpy.argmin(numpy.abs(lats - bbox[3]))
-            # longitude lower and upper index
-            lonli = numpy.argmin(numpy.abs(lons - bbox[0]))
-            lonui = numpy.argmin(numpy.abs(lons - bbox[1]))
+            latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
             topobathy = nc_fid.variables[z_name][latli:latui, lonli:lonui]
             return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
     except IOError:
@@ -419,7 +458,7 @@ def _from_netcdf(filename, bbox):
 
 
 class DEM(Geodata):
-    """Digitial elevation model read in from a NetCDF file"""
+    """Digitial elevation model read in from a tif or NetCDF file"""
 
     def __init__(self, dem, bbox):
         super().__init__(bbox)
@@ -427,11 +466,23 @@ class DEM(Geodata):
         self.dem = dem
         self.gridspacing = None
         self.Fb = None
-        la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
+        basename, ext = os.path.splitext(self.dem)
+        if ext.lower() in [".nc"]:
+            la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
+        elif ext.lower() in [".tif"]:
+            la, lo, topobathy = _from_tif(self.dem, self.bbox)
+        else:
+            raise RunTimeError(
+                "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])
+            )
+
         lats, lons = la[0], lo[0]
         self.gridspacing = numpy.abs(lats[1] - lats[0])
         self.Fb = RegularGridInterpolator(
-            (lats[la[1]], lons[lo[1]]), topobathy, bounds_error=False, fill_value=None,
+            (lats[la[1]], lons[lo[1]]),
+            topobathy,
+            bounds_error=False,
+            fill_value=None,
         )
 
     @property
