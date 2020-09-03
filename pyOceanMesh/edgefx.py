@@ -15,7 +15,7 @@ class Edgefx:
         # fields defines "reasonable" default values
         for name, field in kwargs.items():
             if name in self.fields.keys():
-                self.fields[name].assign(field)
+                self.fields[name] = field
 
     @property
     def gdat(self):
@@ -42,3 +42,9 @@ class Edgefx:
         for item in self.fields():
             if item[1] is not None:
                 print("Building " + item[0] + " sizing function")
+                if item[1] == "dis":
+                    tmp = self._dis()
+
+    def _dis(self):
+        """Calculations shortest distance to mainland ∪ inner"""
+

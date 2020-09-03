@@ -115,7 +115,7 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
-        NB: Removes `inner` geometry with areas smaller than `minimum_area_mult`*`h0`**2
+        NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
     """
     print("Classifying the shoreline segments...")
 
@@ -231,7 +231,7 @@ class Geodata:
 
 
 def _from_shapefile(filename, bbox):
-    """Reads a ESRI Shapefile from `filename` that intersects with `bbox`"""
+    """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
 
     polys = []  # tmp storage for polygons and polylines
 
