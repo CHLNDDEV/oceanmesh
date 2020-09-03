@@ -1,50 +1,59 @@
-from .geodata import Geodata
+import numpy
 
-__all__ = ["Edgefx"]
+__all__ = ["Grid", "DistanceSizingFunction"]
 
 
-class Edgefx:
-    def __init__(self, gdat, hmin, **kwargs):
-        """Construct a mesh sizing function using geospatial
-        datata from an instance gdat of :class:`Geodata`"""
+class Grid:
+    def __init__(self, bbox, grid_spacing):
+        """Class to create abstract a structured grid"""
 
-        self.gdat = gdat
-        self.fields = {"hmin": None, "dis": None}
-        self.hh_m = None
-
-        # fields defines "reasonable" default values
-        for name, field in kwargs.items():
-            if name in self.fields.keys():
-                self.fields[name] = field
-
-    @property
-    def gdat(self):
-        return self.__gdat
-
-    @gdat.setter
-    def gdat(self, obj):
-        if not isinstance(obj, Geodata):
-            raise ValueError("Passed object is not a Geodata object")
-        self.__gdat = obj
+        self.x0y0 = (
+            min(bbox[0:2]),
+            min(bbox[3:]),
+        )  # bottom left corner coordinates
+        self.grid_spacing = grid_spacing
+        ceil, abs = numpy.ceil, numpy.abs
+        self.nx = ceil(abs(self.x0y0(0) - bbox(1)) / self.grid_spacing)
+        self.ny = ceil(abs(self.x0y0(1) - bbox(3)) / self.grid_spacing)
 
     @property
-    def hmin(self):
-        return self.__hmin
+    def grid_spacing(self):
+        return self.__grid_spacing
 
-    @hmin.setter
-    def hmin(self, value):
+    @grid_spacing.setter
+    def grid_spacing(self, value):
         if value < 0:
-            raise ValueError("Hmin must be > 0.0")
-        self.__hmin = value
+            raise ValueError("Grid spacing must be > 0.0")
+        self.__grid_spacing = value
 
-    def build(self):
-        """Build each sizing function"""
-        for item in self.fields():
-            if item[1] is not None:
-                print("Building " + item[0] + " sizing function")
-                if item[1] == "dis":
-                    tmp = self._dis()
+    @property
+    def bbox(self):
+        return self.__bbox
 
-    def _dis(self):
-        """Calculations shortest distance to mainland ∪ inner"""
+    @bbox.setter
+    def bbox(self, value):
+        if value is None:
+            self.__bbox = value
+        else:
+            if len(value) < 4:
+                raise ValueError("bbox has wrong number of values.")
+            if value[1] < value[0]:
+                raise ValueError("bbox has wrong values.")
+            if value[3] < value[2]:
+                raise ValueError("bbox has wrong values.")
+            self.__bbox = value
 
+    def create_grid(self):
+        x = self.x0y0[0] + numpy.arange(0, self.nx - 1) * self.grid_spacing
+        y = self.x0y0[1] + numpy.arange(0, self.ny - 1) * self.grid_spacing
+        return numpy.meshgrid(x, y, sparse=False, indexing="ij")
+
+    # TODO overload plus for grid objects
+
+
+class DistanceSizingFunction(Grid):
+    def __init__(self, Shoreline, dis=0.15):
+        """Create a sizing functiont that varies linearly at a rate `dis`
+        from the union of the shoreline features"""
+        super().__init__(bbox=Shoreline.bbox, grid_spacing=Shoreline.h0)
+        # TODO calculate distance from
