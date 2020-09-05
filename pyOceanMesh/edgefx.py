@@ -1,4 +1,8 @@
 import numpy
+import scipy.spatial
+import skfmm
+
+from .geodata import Shoreline
 
 __all__ = ["Grid", "DistanceSizingFunction"]
 
@@ -9,12 +13,12 @@ class Grid:
 
         self.x0y0 = (
             min(bbox[0:2]),
-            min(bbox[3:]),
+            min(bbox[2:]),
         )  # bottom left corner coordinates
         self.grid_spacing = grid_spacing
         ceil, abs = numpy.ceil, numpy.abs
-        self.nx = ceil(abs(self.x0y0(0) - bbox(1)) / self.grid_spacing)
-        self.ny = ceil(abs(self.x0y0(1) - bbox(3)) / self.grid_spacing)
+        self.nx = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing))
+        self.ny = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing))
 
     @property
     def grid_spacing(self):
@@ -48,12 +52,62 @@ class Grid:
         y = self.x0y0[1] + numpy.arange(0, self.ny - 1) * self.grid_spacing
         return numpy.meshgrid(x, y, sparse=False, indexing="ij")
 
-    # TODO overload plus for grid objects
+    def find_indices(self, points, lon, lat, tree=None):
+        if tree is None:
+            lon, lat = lon.T, lat.T
+            lonlat = numpy.column_stack((lon.ravel(), lat.ravel()))
+            tree = scipy.spatial.cKDTree(lonlat)
+        dist, idx = tree.query(points, k=1)
+        ind = numpy.column_stack(numpy.unravel_index(idx, lon.shape))
+        return [(i, j) for i, j in ind]
+
+
+# TODO overload plus for grid objects
 
 
 class DistanceSizingFunction(Grid):
-    def __init__(self, Shoreline, dis=0.15):
-        """Create a sizing functiont that varies linearly at a rate `dis`
-        from the union of the shoreline features"""
+    def __init__(self, Shoreline, dis=0.15, max_scale=0.0):
+        """Create a sizing function that varies linearly at a rate `dis`
+        from the union of the shoreline points"""
+        self.Shoreline = Shoreline
         super().__init__(bbox=Shoreline.bbox, grid_spacing=Shoreline.h0)
-        # TODO calculate distance from
+        # create phi (1 where shoreline point intersects grid 0 elsewhere)
+        phi = numpy.zeros(shape=(self.nx, self.ny))
+        lon, lat = self.create_grid()
+        points = numpy.vstack((Shoreline.inner, Shoreline.mainland))
+        indices = self.find_indices(points, lon, lat)
+        phi[indices] = 1.0
+        self.DistanceSizing = skfmm.distance(phi, self.gridspacing, narrow=max_scale)
+
+    @property
+    def Shoreline(self):
+        return self.__Shoreline
+
+    @Shoreline.setter
+    def Shoreline(self, obj):
+        if not isinstance(obj, Shoreline):
+            raise ValueError
+        self.__Shoreline = obj
+
+    @property
+    def DistanceSizing(self):
+        return self.__DistanceSizing
+
+    @DistanceSizing.setter
+    def DistanceSizing(self, vals):
+        self.__DistanceSizing = vals
+
+    def plot(self, hold_on=False):
+        """Visualize the distance function"""
+        import matplotlib.pyplot as plt
+
+        xmin, xmax, ymin, ymax = self.bbox
+        x = numpy.arange(xmin, xmax, self.gridspacing * 10)
+        y = numpy.arange(ymin, ymax, self.gridspacing * 10)
+
+        fig, ax = plt.subplots()
+        cs = ax.pcolorfast(x, y, self.DistanceSizing)
+        ax.axis("equal")
+        if hold is False:
+            plt.show()
+        return ax
