@@ -19,6 +19,7 @@ class Grid:
         ceil, abs = numpy.ceil, numpy.abs
         self.nx = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing))
         self.ny = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing))
+        self.bbox = bbox
 
     @property
     def grid_spacing(self):
@@ -48,18 +49,18 @@ class Grid:
             self.__bbox = value
 
     def create_grid(self):
-        x = self.x0y0[0] + numpy.arange(0, self.nx - 1) * self.grid_spacing
-        y = self.x0y0[1] + numpy.arange(0, self.ny - 1) * self.grid_spacing
+        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.grid_spacing
+        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.grid_spacing
         return numpy.meshgrid(x, y, sparse=False, indexing="ij")
 
     def find_indices(self, points, lon, lat, tree=None):
+        points = points[~numpy.isnan(points[:, 0]), :]
         if tree is None:
-            lon, lat = lon.T, lat.T
+            print("Building tree...")
             lonlat = numpy.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
         dist, idx = tree.query(points, k=1)
-        ind = numpy.column_stack(numpy.unravel_index(idx, lon.shape))
-        return [(i, j) for i, j in ind]
+        return numpy.unravel_index(idx, lon.shape)
 
 
 # TODO overload plus for grid objects
@@ -69,15 +70,17 @@ class DistanceSizingFunction(Grid):
     def __init__(self, Shoreline, dis=0.15, max_scale=0.0):
         """Create a sizing function that varies linearly at a rate `dis`
         from the union of the shoreline points"""
+        print("Building distance function...")
         self.Shoreline = Shoreline
         super().__init__(bbox=Shoreline.bbox, grid_spacing=Shoreline.h0)
         # create phi (1 where shoreline point intersects grid 0 elsewhere)
-        phi = numpy.zeros(shape=(self.nx, self.ny))
+        phi = numpy.ones(shape=(self.nx, self.ny))
         lon, lat = self.create_grid()
         points = numpy.vstack((Shoreline.inner, Shoreline.mainland))
         indices = self.find_indices(points, lon, lat)
-        phi[indices] = 1.0
-        self.DistanceSizing = skfmm.distance(phi, self.gridspacing, narrow=max_scale)
+        phi[indices] = -1.0
+
+        self.DistanceSizing = skfmm.distance(phi, self.grid_spacing, narrow=max_scale)
 
     @property
     def Shoreline(self):
@@ -97,16 +100,17 @@ class DistanceSizingFunction(Grid):
     def DistanceSizing(self, vals):
         self.__DistanceSizing = vals
 
-    def plot(self, hold_on=False):
+    def plot(self, hold=False):
         """Visualize the distance function"""
         import matplotlib.pyplot as plt
 
         xmin, xmax, ymin, ymax = self.bbox
-        x = numpy.arange(xmin, xmax, self.gridspacing * 10)
-        y = numpy.arange(ymin, ymax, self.gridspacing * 10)
+        x = numpy.arange(xmin, xmax, self.grid_spacing * 10)
+        y = numpy.arange(ymin, ymax, self.grid_spacing * 10)
 
         fig, ax = plt.subplots()
-        cs = ax.pcolorfast(x, y, self.DistanceSizing)
+        cs = ax.pcolorfast(x, y, self.DistanceSizing.T,vmin=0.0, vmax=0.10)
+        plt.title("Distance Sizing Function")
         ax.axis("equal")
         if hold is False:
             plt.show()
