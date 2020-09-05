@@ -67,7 +67,7 @@ class Grid:
 
 
 class DistanceSizingFunction(Grid):
-    def __init__(self, Shoreline, dis=0.15, max_scale=0.0):
+    def __init__(self, Shoreline, rate=0.15, max_scale=0.0):
         """Create a sizing function that varies linearly at a rate `dis`
         from the union of the shoreline points"""
         print("Building distance function...")
@@ -80,7 +80,8 @@ class DistanceSizingFunction(Grid):
         indices = self.find_indices(points, lon, lat)
         phi[indices] = -1.0
 
-        self.DistanceSizing = skfmm.distance(phi, self.grid_spacing, narrow=max_scale)
+        dis = skfmm.distance(phi, self.grid_spacing, narrow=max_scale)
+        self.DistanceSizing = Shoreline.h0 + dis.T * rate
 
     @property
     def Shoreline(self):
@@ -109,7 +110,7 @@ class DistanceSizingFunction(Grid):
         y = numpy.arange(ymin, ymax, self.grid_spacing * 10)
 
         fig, ax = plt.subplots()
-        cs = ax.pcolorfast(x, y, self.DistanceSizing.T,vmin=0.0, vmax=0.10)
+        cs = ax.pcolorfast(x, y, self.DistanceSizing, vmin=0.0, vmax=0.50)
         plt.title("Distance Sizing Function")
         ax.axis("equal")
         if hold is False:
