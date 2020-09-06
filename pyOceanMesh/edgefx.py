@@ -1,17 +1,19 @@
 import numpy
 import scipy.spatial
-from scipy.interpolate import RegularGridInterpolator
 import skfmm
+from scipy.interpolate import RegularGridInterpolator
 
 from .geodata import Shoreline
 
 __all__ = ["Grid", "DistanceSizingFunction"]
 
+fill = -99999.0
+
 
 class Grid:
     def __init__(self, bbox, grid_spacing, values=None):
-        """Class to abstract a structured grid with
-        data `values` defined at each grid point.
+        """Class to abstract a structured grid and operations define on it
+        with data `values` defined at each grid point.
         """
 
         self.x0y0 = (
@@ -60,9 +62,9 @@ class Grid:
     def values(self, data):
         if numpy.isscalar(data):
             data = numpy.tile(data, (self.nx, self.ny))
-        # elif data.shape == (self.nx, self.ny):
-        #    print("Shape of values does not match grid size")
-        #    raise ValueError
+        if data.shape != (self.nx, self.ny):
+            print("Shape of values does not match grid size")
+            raise ValueError
         self.__values = data
 
     def create_vecs(self):
@@ -90,7 +92,6 @@ class Grid:
         take precedence elsewhere grid2 values are retained. Grid3 has
         grid_spacing and resolution of grid2."""
         # is grid2 even a grid object?
-        fill = -99999.0
         if not isinstance(grid2, Grid):
             print("Both objects must be grids")
             raise ValueError
@@ -100,7 +101,7 @@ class Grid:
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         if overlap is False:
             print("Grid objects do not overlap, nothing to do.")
-            return
+            raise ValueError
         lon1, lat1 = self.create_vecs()
         lon2, lat2 = grid2.create_vecs()
         # take data from grid1 --> grid2
@@ -114,7 +115,6 @@ class Grid:
         xg, yg = numpy.meshgrid(lon2, lat2, indexing="ij", sparse=True)
         new_values = fp((xg, yg))
         # where fill replace with grid2 values
-        print(grid2.values[new_values == fill])
         new_values[new_values == fill] = grid2.values[new_values == fill]
         return Grid(bbox=grid2.bbox, grid_spacing=grid2.grid_spacing, values=new_values)
 
@@ -122,9 +122,7 @@ class Grid:
         """Visualize the values in :class:`Grid`"""
         import matplotlib.pyplot as plt
 
-        xmin, xmax, ymin, ymax = self.bbox
-        x = numpy.arange(xmin, xmax, self.grid_spacing)
-        y = numpy.arange(ymin, ymax, self.grid_spacing)
+        x, y = self.create_vecs()
 
         fig, ax = plt.subplots()
         ax.pcolorfast(x, y, self.values)
