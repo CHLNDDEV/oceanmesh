@@ -11,10 +11,31 @@ fill = -99999.0
 
 
 class Grid:
+    """Abstracts a structured grid along with
+    operations (e.g., min, project, etc.) with data
+    `values` defined at each grid point.
+
+    Parameters
+    ----------
+    bbox: tuple
+        domain extents
+    grid_spacing: float
+        spacing between grid points
+    values: scalar or array-like
+        values at grid points
+
+    Attributes
+    ----------
+        x0y0: tuple
+            bottom left corner coordinate
+        nx: int
+            number of grid points in x-direction
+        ny: int
+            number of grid points in y-direction
+
+    """
+
     def __init__(self, bbox, grid_spacing, values=None):
-        """Class to abstract a structured grid and operations define on it
-        with data `values` defined at each grid point.
-        """
 
         self.x0y0 = (
             min(bbox[0:2]),
@@ -68,15 +89,64 @@ class Grid:
         self.__values = data
 
     def create_vecs(self):
+        """Build coordinate vectors
+
+        Parameters
+        ----------
+            None
+
+        Returns
+        -------
+        x: ndarray
+            1D array contain data with `float` type of x-coordinates.
+        y: ndarray
+            1D array contain data with `float` type of y-coordinates.
+
+        """
         x = self.x0y0[0] + numpy.arange(0, self.nx) * self.grid_spacing
         y = self.x0y0[1] + numpy.arange(0, self.ny) * self.grid_spacing
         return x, y
 
     def create_grid(self):
+        """Build a structured grid
+
+        Parameters
+        ----------
+            None
+
+        Returns
+        -------
+        xg: ndarray
+            2D array contain data with `float` type.
+        yg: ndarray
+            2D array contain data with `float` type.
+
+        """
         x, y = self.create_vecs()
         return numpy.meshgrid(x, y, sparse=False, indexing="ij")
 
     def find_indices(self, points, lon, lat, tree=None):
+        """Find linear indices `indices` into a 2D array such that they
+        return the closest point in the structured grid defined by `x` and `y`
+        to `points`.
+
+        Parameters
+        ----------
+        points: ndarray
+            Query points. 2D array with `float` type.
+        lon: ndarray
+            Grid points in x-dimension. 2D array with `float` type.
+        lat: ndarray
+            Grid points in y-dimension. 2D array with `float` type.
+        tree: :obj:`scipy.spatial.ckdtree`, optional
+            A KDtree with coordinates from :class:`Shoreline`
+
+        Returns
+        -------
+        indices: ndarray
+            Indicies into an array. 1D array with `int` type.
+
+        """
         points = points[~numpy.isnan(points[:, 0]), :]
         if tree is None:
             print("Building tree...")
@@ -88,9 +158,24 @@ class Grid:
     def project(self, grid2):
         """Projects linearly self.values onto :class`Grid` grid2 forming a new
         :class:`Grid` object grid3.
+
+        Note
+        ----
         In other words, in areas of overlap, grid1 values
         take precedence elsewhere grid2 values are retained. Grid3 has
-        grid_spacing and resolution of grid2."""
+        grid_spacing and resolution of grid2.
+
+        Parameters
+        ----------
+        grid2: :obj:`Grid`
+            A :obj:`Grid` with `values`.
+
+        Returns
+        -------
+        grid3: :obj:`Grid`
+            A new `obj`:`Grid` with projected `values`.
+
+        """
         # is grid2 even a grid object?
         if not isinstance(grid2, Grid):
             print("Both objects must be grids")
@@ -119,7 +204,20 @@ class Grid:
         return Grid(bbox=grid2.bbox, grid_spacing=grid2.grid_spacing, values=new_values)
 
     def plot(self, hold=False):
-        """Visualize the values in :class:`Grid`"""
+        """Visualize the values in :obj:`Grid`
+
+        Parameters
+        ----------
+        hold: boolean, optional
+            Whether to create a new plot axis.
+
+        Returns
+        -------
+        ax: handle to axis of plot
+            handle to axis of plot.
+
+        """
+
         import matplotlib.pyplot as plt
 
         x, y = self.create_vecs()
@@ -133,6 +231,19 @@ class Grid:
 
 
 class DistanceSizingFunction(Grid):
+    """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
+
+    Parameters
+    ----------
+    Shoreline: :obj:`Shoreline`
+        Data processed from :class:`Shoreline`.
+    rate: float, optional
+        The rate of expansion in decimal percent from the shoreline.
+    max_scale: float, optional
+        Distance is only calculated in narrow band of `max_scale` width.
+
+    """
+
     def __init__(self, Shoreline, rate=0.15, max_scale=0.0):
         """Create a sizing function that varies linearly at a rate `dis`
         from the union of the shoreline points"""
