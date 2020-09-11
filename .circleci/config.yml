@@ -18,7 +18,7 @@ jobs:
       - run: pip install . --user
       - run: pip install -U pytest pytest-cov --user
       - run:
-          command: pytest --cov pyOceanMesh
+          command: pytest --cov oceanmesh
       - run: bash <(curl -s https://codecov.io/bash)
 workflows:
   version: 2
