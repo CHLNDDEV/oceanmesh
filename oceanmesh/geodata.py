@@ -97,21 +97,21 @@ def _densify(poly, maxdiff, bbox):
     return numpy.hstack((lonout[:, None], latout[:, None]))
 
 
-def _polyArea(x, y):
+def _poly_area(x, y):
     """Calculates area of a polygon"""
     return 0.5 * numpy.abs(
         numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
     )
 
 
-def _isOverlapping(bbox1, bbox2):
+def _is_overlapping(bbox1, bbox2):
     """Determines if two axis-aligned boxes intersect"""
     x1min, x1max, y1min, y1max = bbox1
     x2min, x2max, y2min, y2max = bbox2
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
+def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
@@ -131,7 +131,7 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     for poly in polys:
         inside = path.contains_points(poly[:-2])
         if all(inside):
-            area = _polyArea(poly[:-2, 0], poly[:-2, 1])
+            area = _poly_area(poly[:-2, 0], poly[:-2, 1])
             if area < minimum_area_mult * h0 ** 2:
                 continue
             inner = numpy.append(inner, poly, axis=0)
@@ -141,7 +141,7 @@ def _classifyShoreline(bbox, polys, h0, minimum_area_mult):
     return inner, mainland
 
 
-def chaikins_corner_cutting(coords, refinements=5):
+def _chaikins_corner_cutting(coords, refinements=5):
     """http://www.cs.unc.edu/~dm/UNC/COMP258/LECTURES/Chaikins-Algorithm.pdf"""
     coords = numpy.array(coords)
 
@@ -157,7 +157,7 @@ def chaikins_corner_cutting(coords, refinements=5):
     return coords
 
 
-def _smoothShoreline(polys, N):
+def _smooth_shoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
     a `N` refinement Chaikins Corner cutting algorithm.
     """
@@ -165,7 +165,7 @@ def _smoothShoreline(polys, N):
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
-        tmp = chaikins_corner_cutting(poly[:-1], refinements=N)
+        tmp = _chaikins_corner_cutting(poly[:-1], refinements=N)
         tmp = numpy.append(tmp, [[nan, nan]], axis=0)
         out.append(tmp)
     return _convert_to_array(out)
@@ -241,7 +241,7 @@ def _from_shapefile(filename, bbox):
     for shape in s.shapes():
         # only read in shapes that intersect with bbox
         bbox2 = [shape.bbox[r] for r in re]
-        if _isOverlapping(bbox, bbox2):
+        if _is_overlapping(bbox, bbox2):
             poly = numpy.asarray(shape.points + [(nan, nan)])
             polys.append(poly)
 
@@ -271,13 +271,13 @@ class Shoreline(Geodata):
 
         polys = _from_shapefile(self.shp, self.bbox)
 
-        polys = _smoothShoreline(polys, self.refinements)
+        polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
         polys = _nth_simplify(polys, self.bbox)
 
-        self.inner, self.mainland = _classifyShoreline(
+        self.inner, self.mainland = _classify_shoreline(
             self.bbox, polys, self.h0, self.minimum_area_mult
         )
 
@@ -470,7 +470,7 @@ class DEM(Geodata):
         super().__init__(bbox)
 
         self.dem = dem
-        self.gridspacing = None
+        self.grid_spacing = None
         self.Fb = None
         basename, ext = os.path.splitext(self.dem)
         if ext.lower() in [".nc"]:
@@ -483,7 +483,7 @@ class DEM(Geodata):
             )
 
         lats, lons = la[0], lo[0]
-        self.gridspacing = numpy.abs(lats[1] - lats[0])
+        self.grid_spacing = numpy.abs(lats[1] - lats[0])
         self.Fb = RegularGridInterpolator(
             (lats[la[1]], lons[lo[1]]),
             topobathy,
@@ -507,8 +507,8 @@ class DEM(Geodata):
 
         xmin, xmax, ymin, ymax = self.bbox
         # for memory savings when plotting big dems
-        x = numpy.arange(xmin, xmax, self.gridspacing * 10)
-        y = numpy.arange(ymin, ymax, self.gridspacing * 10)
+        x = numpy.arange(xmin, xmax, self.grid_spacing * 10)
+        y = numpy.arange(ymin, ymax, self.grid_spacing * 10)
         xg, yg = numpy.meshgrid(y, x, indexing="ij")
         TB = self.Fb((xg, yg))
 

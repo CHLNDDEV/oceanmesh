@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from pyOceanMesh import DEM, Shoreline
+from oceanmesh import DEM, Shoreline
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
