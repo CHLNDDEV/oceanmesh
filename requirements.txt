@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+netcdf4
+pyshp
+Pillow==7.1.0
+scikit-fmm==2019.1.30
