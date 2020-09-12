@@ -13,12 +13,20 @@ if sys.version_info < (3, 0):
 
 
 setup(
-    name="pyOceanMesh",
+    name="oceanmesh",
     version="0.1.0",
     description="Automatic coastal ocean mesh generator",
-    author="Keith Jared Roberts",
+    author="Keith J. Roberts",
     author_email="keithrbt0@gmail.com",
-    url="https://github.com/CHLNDDEV/pyOceanMesh",
-    packages=["pyOceanMesh"],
-    install_requires=["numpy", "scipy", "netcdf4", "pyshp", "matplotlib", "Pillow"],
+    url="https://github.com/CHLNDDEV/oceanmesh",
+    packages=["oceanmesh"],
+    install_requires=[
+        "numpy",
+        "scipy",
+        "netcdf4",
+        "pyshp",
+        "matplotlib",
+        "Pillow",
+        "scikit-fmm",
+    ],
 )
