@@ -24,7 +24,6 @@ def distance_sizing_function(shoreline, rate=0.15, max_scale=0.0):
         A sizing function that takes a point and returns a value
 
     """
-
     print("Building distance function...")
     grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
