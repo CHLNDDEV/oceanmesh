@@ -38,7 +38,7 @@ def signed_distance_function(shoreline):
     qry = numpy.vstack((lon, lat)).T
 
     inside, _ = inpoly(qry, poly, e)
-    
+
     grid.values = dis * inside.reshape((dis.shape))
     grid.build_interpolant()
-    return grid.eval
+    return grid
