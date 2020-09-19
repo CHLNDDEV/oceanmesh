@@ -1,4 +1,5 @@
 import numpy as np
+from numba import jit
 
 
 def inpoly(vert, node, edge=None, ftol=4.9485e-14):
@@ -72,10 +73,10 @@ def inpoly(vert, node, edge=None, ftol=4.9485e-14):
 
     # prune points using bbox
     mask = (
-        (vert[:, 0] >= np.min(node[:, 0]))
-        & (vert[:, 0] <= np.max(node[:, 0]))
-        & (vert[:, 1] >= np.min(node[:, 1]))
-        & (vert[:, 1] <= np.max(node[:, 1]))
+        (vert[:, 0] >= np.nanmin(node[:, 0]))
+        & (vert[:, 0] <= np.nanmax(node[:, 0]))
+        & (vert[:, 1] >= np.nanmin(node[:, 1]))
+        & (vert[:, 1] <= np.nanmax(node[:, 1]))
     )
 
     vert = vert[mask]
@@ -113,6 +114,7 @@ def inpoly(vert, node, edge=None, ftol=4.9485e-14):
     return STAT, BNDS
 
 
+@jit(nopython=True)
 def _inpoly(vert, node, edge, ftol, lbar):
 
     feps = ftol * lbar ** 2
