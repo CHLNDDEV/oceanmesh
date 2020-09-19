@@ -7,8 +7,8 @@ FILL = -99999.0
 
 class Grid:
     """Abstracts a structured grid along with
-    operations (e.g., min, project, etc.), stores data
-    `values` defined at each grid point.
+    primitive operations (e.g., min, project, etc.) and
+    stores data `values` defined at each grid point.
 
     Parameters
     ----------

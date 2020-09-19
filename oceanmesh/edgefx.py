@@ -1,7 +1,7 @@
 import numpy
 import skfmm
 
-from .Grid import Grid
+from .grid import Grid
 
 __all__ = ["distance_sizing_function"]
 

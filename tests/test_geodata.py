@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from oceanmesh import DEM, Shoreline
+from oceanmesh import DEM, Shoreline, edges
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
@@ -20,6 +20,10 @@ def test_shoreline(boxes_h0):
     shp = Shoreline(fname, bbox, h0)
     assert len(shp.inner) > 0
     assert len(shp.mainland) > 0
+    e = edges.get_poly_edges(shp.inner)
+    print(e)
+    print(shp.inner)
+    edges.draw_edges(shp.inner, e)
 
 
 @pytest.mark.parametrize(
