@@ -12,10 +12,15 @@ Coastal ocean mesh generation from ESRI Shapefiles and digitial elevation models
 Functionality
 =============
 
+* WIP
+
 Examples
 ==========
 
-### Testing
+* WIP 
+
+Testing
+============
 
 To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type
 ```
@@ -23,7 +28,8 @@ MPLBACKEND=Agg pytest --maxfail=1
 ```
 
 
-### License
+License
+=======
 
 This software is published under the [GPLv3 license](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
