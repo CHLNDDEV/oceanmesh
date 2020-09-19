@@ -36,19 +36,9 @@ def signed_distance_function(shoreline):
     lon = numpy.reshape(lon, -1)
     lat = numpy.reshape(lat, -1)
     qry = numpy.vstack((lon, lat)).T
-    print(len(qry), len(poly))
-    import time
 
-    t1 = time.time()
     inside, _ = inpoly(qry, poly, e)
-    print(time.time() - t1)
-
-    import matplotlib.pyplot as plt
-
-    plt.pcolor(inside.reshape((dis.shape)).T)
-
-    plt.show()
-
+    
     grid.values = dis * inside.reshape((dis.shape))
     grid.build_interpolant()
     return grid.eval
