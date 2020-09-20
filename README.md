@@ -13,11 +13,10 @@ Coastal ocean mesh generation from ESRI Shapefiles and digitial elevation models
 Functionality
 =============
 
-* A self-contained mesh generation toolkit for the development of coastal oceans meshes composed of two-dimensional, unstructured triangles. The software embeds the mesh generation into an object-orientated framework that integrates the necessary pre- and post-processing tools to inevitably perform numerical simulations with the mesh.
-    * The ability to automatically handle and convert arbitrarily complex vector data that represent complex coastal boundaries into practical mesh boundaries used in the mesh generation process.
-    * A variety of commonly used mesh size functions that can easily be controlled via name-value pairs.
-    * Post-processing and visualization methods to ensure the mesh is ready for simulation.
-    * A modified version of the DistMesh mesh generator that can mesh according to geophysical datasets.
+* A toolkit for the development of meshes and their auxiliary. files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a succesful numerical simulations with the developed model.
+    * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and use them in the mesh generation process.
+    * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
+    * Post-processing utilties such as model file creation, mesh checking, and mesh visualization methods.
 
 Installation
 ============
@@ -33,7 +32,7 @@ After that, clone the repo and oceanmesh can be updated/installed using pip.
 
 :warning:
 
-**WARNING: THIS PROGRAM IN ACTIVE DEVELOPMENT AND INSTALLATION IS ONLY RECOMMENDED FOR DEVELOPERS AT THIS TIME. WHEN A STABLE API IS REACHED, THE PROGRAM WILL BE AVAILABLE VIA pypi**
+**WARNING: THIS PROGRAM IS IN ACTIVE DEVELOPMENT. INSTALLATION IS ONLY RECOMMENDED FOR DEVELOPERS AT THIS TIME. WHEN A STABLE API IS REACHED, THE PROGRAM WILL BE AVAILABLE VIA pypi**
 
 Examples
 ==========

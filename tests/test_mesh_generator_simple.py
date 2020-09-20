@@ -3,7 +3,7 @@ import numpy as np
 from oceanmesh import generate_mesh, simp_vol
 
 
-def simple():
+def test_mesh_generator_rectangle():
     h0 = 0.1
     bbox = (0.0, 1.0, 0.0, 1.0)
 
