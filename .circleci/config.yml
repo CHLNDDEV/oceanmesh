@@ -15,6 +15,8 @@ jobs:
       - image: circleci/python:3
     steps:
       - checkout
+      - run: sudo apt install -y cmake python-pybind11
+      - run: git clone https://github.com/CGAL/cgal.git && cd cgal/ && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && sudo make install
       - run: pip install . --user
       - run: pip install -U pytest pytest-cov --user
       - run:
