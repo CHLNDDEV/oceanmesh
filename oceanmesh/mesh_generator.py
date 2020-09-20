@@ -7,6 +7,7 @@ from .cpp.delaunay_class import DelaunayTriangulation as DT2
 from .cpp.delaunay_class3 import DelaunayTriangulation3 as DT3
 from .fix_mesh import fix_mesh
 from .grid import Grid
+from .signed_distance_function import Domain
 
 __all__ = ["generate_mesh"]
 
@@ -185,7 +186,7 @@ def _unpack_sizing(cell_size):
 
 
 def _unpack_domain(domain):
-    if isinstance(domain, Grid):
+    if isinstance(domain, Domain):
         bbox = domain.bbox
         fd = domain.eval
     elif callable(domain):
@@ -310,7 +311,7 @@ def _generate_initial_points(h0, geps, dim, bbox, fh, fd, pfix):
     p = p.reshape(dim, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
-    r0m = r0.min()
+    r0m = np.min(r0[r0 > 0])
     return np.vstack(
         (
             pfix,
@@ -324,22 +325,17 @@ def _dist(p1, p2):
     return np.sqrt(((p1 - p2) ** 2).sum(1))
 
 
-def _unpack_pfix(dim, opts, comm):
+def _unpack_pfix(dim, opts):
     """Unpack fixed points"""
+    pfix = np.empty((0, dim))
+    nfix = 0
     if opts["pfix"] is not None:
-        if comm.size > 1:
-            raise Exception("Fixed points are not yet supported in parallel.")
-        else:
-            pfix = np.array(opts["pfix"], dtype="d")
-            nfix = len(pfix)
-        if comm.rank == 0:
-            print(
-                "Constraining " + str(nfix) + " fixed points..",
-                flush=True,
-            )
-    else:
-        pfix = np.empty((0, dim))
-        nfix = 0
+        pfix = np.array(opts["pfix"], dtype="d")
+        nfix = len(pfix)
+        print(
+            "Constraining " + str(nfix) + " fixed points..",
+            flush=True,
+        )
     return pfix, nfix
 
 

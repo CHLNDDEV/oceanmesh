@@ -68,8 +68,8 @@ def inpoly(vert, node, edge=None, ftol=4.9485e-14):
         edge = np.vstack((np.arange(0, nnod - 1), np.arange(1, nnod))).T
         edge = np.concatenate((edge, [[nnod - 1, 0]]))
 
-    STAT = np.zeros((nvrt))
-    BNDS = np.zeros((nvrt))
+    STAT = np.zeros((nvrt), dtype=int)
+    BNDS = np.zeros((nvrt), dtype=int)
 
     # prune points using bbox
     mask = (

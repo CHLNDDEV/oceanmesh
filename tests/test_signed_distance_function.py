@@ -12,5 +12,3 @@ def test_signed_distance_function():
     shp = Shoreline(fname, bbox, h0)
 
     domain = signed_distance_function(shp)
-
-    domain.plot(vmin=-0.1, vmax=0.1)
