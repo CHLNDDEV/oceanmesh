@@ -21,21 +21,39 @@ opts = {
 }
 
 
+def _parse_kwargs(kwargs):
+    for key in kwargs:
+        if key in {
+            "nscreen",
+            "max_iter",
+            "seed",
+            "perform_checks",
+            "pfix",
+            "points",
+            "domain",
+            "cell_size",
+            "bbox",
+        }:
+            pass
+        else:
+            raise ValueError(
+                "Option %s with parameter %s not recognized " % (key, kwargs[key])
+            )
+
+
 def generate_mesh(domain, cell_size, h0, **kwargs):
     r"""Generate a 2D/3D triangular mesh using callbacks to a
         sizing function `cell_size` and signed distance function.
 
-    :param domain:
+    Parameters
+    ----------
+    domain: A function object.
         A function that takes a point and returns the signed nearest distance to the domain boundary Ω.
-    :type domain: A function object.
-    :param cell_size:
+    cell_size: A function object.
         A function that can evalulate a point and return a mesh size.
-    :type cell_size: A :class:`cell_size` object or a function object.
-    :param h0:
+    h0: `float`
         The minimum element size in the domain.
-    :type h0: `float`
-
-    :param \**kwargs:
+    \**kwargs:
         See below
 
     :Keyword Arguments:
@@ -54,10 +72,12 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
         * *axis* (`int`) --
             The axis to decompose the mesh (1,2, or 3). (default==1)
 
-    :return: points: vertex coordinates of mesh
-    :rtype: points: (numpy.ndarray[`float` x dim])
-    :return: t: mesh connectivity table.
-    :rtype: t: numpy.ndarray[`int` x (dim + 1)]
+    Returns
+    -------
+    points: array-like
+        vertex coordinates of mesh
+    t: array-like
+        mesh connectivity table.
 
     """
     # check call was correct
@@ -175,26 +195,6 @@ def _unpack_domain(domain):
     else:
         raise ValueError("`domain` must be a function or a :class:`geometry` object")
     return fd, bbox
-
-
-def _parse_kwargs(kwargs):
-    for key in kwargs:
-        if key in {
-            "nscreen",
-            "max_iter",
-            "seed",
-            "perform_checks",
-            "pfix",
-            "points",
-            "domain",
-            "cell_size",
-            "bbox",
-        }:
-            pass
-        else:
-            raise ValueError(
-                "Option %s with parameter %s not recognized " % (key, kwargs[key])
-            )
 
 
 def _display_progress(p, t, count, nscreen, maxdp):

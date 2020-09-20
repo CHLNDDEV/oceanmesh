@@ -33,9 +33,7 @@ def signed_distance_function(shoreline):
     # now sign it
     e = edges.get_poly_edges(poly)
     print("Signing the distance...")
-    lon = numpy.reshape(lon, -1)
-    lat = numpy.reshape(lat, -1)
-    qry = numpy.vstack((lon, lat)).T
+    qry = numpy.column_stack((lon.ravel(), lat.ravel()))
 
     inside, _ = inpoly(qry, poly, e)
 
