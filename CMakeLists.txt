@@ -24,13 +24,13 @@ endif()
 # include helper file
 include( ${CGAL_USE_FILE})
 
-set (GENERATION_SRCE "oceanmesh/cpp")
+set (SRC "oceanmesh/cpp")
 
-include_directories (${GENERATION_SRCE})
+include_directories (${SRC})
 
 find_package(pybind11)
 message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
 #add_subdirectory(pybind11)
-pybind11_add_module(delaunay_class ${SOURCES} "${GENERATION_SRCE}/delaunay_class.cpp")
-pybind11_add_module(delaunay_class3 ${SOURCES} "${GENERATION_SRCE}/delaunay_class3.cpp")
+pybind11_add_module(delaunay_class ${SOURCES} "${SRC}/delaunay_class.cpp")
+pybind11_add_module(delaunay_class3 ${SOURCES} "${SRC}/delaunay_class3.cpp")
