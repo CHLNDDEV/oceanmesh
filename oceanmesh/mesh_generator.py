@@ -3,11 +3,10 @@ import time
 import numpy as np
 import scipy.sparse as spsparse
 
-from .grid import Grid
-from .fix_mesh import fix_mesh
-
 from .cpp.delaunay_class import DelaunayTriangulation as DT2
 from .cpp.delaunay_class3 import DelaunayTriangulation3 as DT3
+from .fix_mesh import fix_mesh
+from .grid import Grid
 
 __all__ = ["generate_mesh"]
 

@@ -1,9 +1,9 @@
 import numpy
 import skfmm
 
+from . import edges
 from .grid import Grid
 from .inpoly import inpoly
-from . import edges
 
 __all__ = ["signed_distance_function"]
 
