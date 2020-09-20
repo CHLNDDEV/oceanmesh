@@ -1,5 +1,6 @@
 oceanmesh: Automatic coastal ocean mesh generation
 =====================================================
+:ocean: :cyclone:
 
 [![CircleCI](https://circleci.com/gh/circleci/circleci-docs.svg?style=svg)](https://circleci.com/gh/CHLNDDEV/oceanmesh)
 [![CodeCov](https://codecov.io/gh/CHLNDDEV/oceanmesh/branch/master/graph/badge.svg)](https://codecov.io/gh/CHLNDDEV/oceanmesh)
@@ -29,6 +30,8 @@ For installation, oceanmesh needs [CGAL](https://www.cgal.org/) and
 After that, clone the repo and oceanmesh can be updated/installed using pip.
 
     pip install -U -e .
+
+:warning:
 
 **WARNING: THIS PROGRAM IN ACTIVE DEVELOPMENT AND INSTALLATION IS ONLY RECOMMENDED FOR DEVELOPERS AT THIS TIME. WHEN A STABLE API IS REACHED, THE PROGRAM WILL BE AVAILABLE VIA pypi**
 
