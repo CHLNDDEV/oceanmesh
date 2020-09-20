@@ -7,8 +7,8 @@ FILL = -99999.0
 
 class Grid:
     """Abstracts a structured grid along with
-    operations (e.g., min, project, etc.), stores data
-    `values` defined at each grid point.
+    primitive operations (e.g., min, project, etc.) and
+    stores data `values` defined at each grid point.
 
     Parameters
     ----------
@@ -200,7 +200,7 @@ class Grid:
         new_values[new_values == FILL] = grid2.values[new_values == FILL]
         return Grid(bbox=grid2.bbox, grid_spacing=grid2.grid_spacing, values=new_values)
 
-    def plot(self, hold=False):
+    def plot(self, hold=False, vmin=0.0, vmax=0.1):
         """Visualize the values in :obj:`Grid`
 
         Parameters
@@ -222,7 +222,7 @@ class Grid:
         x, y = self.create_grid()
 
         fig, ax = plt.subplots()
-        ax.pcolor(x, y, self.values, vmin=0.0, vmax=0.1, shading="auto")
+        ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
         ax.axis("equal")
         if hold is False:
             plt.show()

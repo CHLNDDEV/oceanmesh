@@ -28,5 +28,6 @@ setup(
         "matplotlib",
         "Pillow",
         "scikit-fmm",
+        "numba",
     ],
 )
