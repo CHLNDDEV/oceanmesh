@@ -1,2 +1,14 @@
-__pycache__
-*.nc
+*.pyc
+*.swp
+*.prof
+dist/
+build/
+.coverage
+.cache/
+*.egg-info/
+.pytest_cache/
+*.segy
+*.vtk
+*.hdf5
+*.msh
+*.so
