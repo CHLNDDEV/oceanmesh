@@ -4,7 +4,6 @@ import numpy as np
 import scipy.sparse as spsparse
 
 from .cpp.delaunay_class import DelaunayTriangulation as DT2
-from .cpp.delaunay_class3 import DelaunayTriangulation3 as DT3
 from .fix_mesh import fix_mesh
 from .grid import Grid
 from .signed_distance_function import Domain
@@ -42,7 +41,7 @@ def _parse_kwargs(kwargs):
 
 
 def generate_mesh(domain, cell_size, h0, **kwargs):
-    r"""Generate a 2D/3D triangular mesh using callbacks to a
+    r"""Generate a 2D triangular mesh using callbacks to a
         sizing function `cell_size` and signed distance function.
 
     Parameters
@@ -93,6 +92,8 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
 
     # check bbox shape
     dim = int(len(bbox) / 2)
+    if dim != 2:
+        raise ValueError("`dim` must be 2")
 
     bbox = np.array(bbox).reshape(-1, 2)
 
@@ -111,7 +112,7 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
     geps = 1e-1 * h0
     deps = np.sqrt(np.finfo(np.double).eps) * h0
 
-    DT = _select_cgal_dim(dim)
+    DT = _select_cgal_dim()
 
     pfix, nfix = _unpack_pfix(dim, opts)
 
@@ -216,10 +217,7 @@ def _termination(p, t):
 
 def _get_bars(t):
     """Describe each bar by a unique pair of nodes"""
-    dim = t.shape[1] - 1
     bars = np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]])
-    if dim == 3:
-        bars = np.concatenate((bars, t[:, [0, 3]], t[:, [1, 3]], t[:, [2, 3]]), axis=0)
     return _unique_rows(np.ascontiguousarray(bars, dtype=np.uint32))
 
 
@@ -339,12 +337,9 @@ def _unpack_pfix(dim, opts):
     return pfix, nfix
 
 
-def _select_cgal_dim(dim):
+def _select_cgal_dim():
     """Select back-end CGAL Delaunay call"""
-    if dim == 2:
-        return DT2
-    elif dim == 3:
-        return DT3
+    return DT2
 
 
 def _get_topology(dt):

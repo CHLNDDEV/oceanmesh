@@ -5,8 +5,7 @@ from oceanmesh.grid import Grid
 from oceanmesh.signed_distance_function import signed_distance_function
 
 from .cpp.delaunay_class import DelaunayTriangulation
-from .cpp.delaunay_class3 import DelaunayTriangulation3
-from .fix_mesh import fix_mesh
+from .fix_mesh import fix_mesh, simp_vol
 from .inpoly import inpoly
 from .mesh_generator import generate_mesh
 
@@ -22,7 +21,7 @@ __all__ = [
     "draw_edges",
     "inpoly",
     "DelaunayTriangulation",
-    "DelaunayTriangulation3",
     "generate_mesh",
     "fix_mesh",
+    "simp_vol",
 ]

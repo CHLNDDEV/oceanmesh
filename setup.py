@@ -81,7 +81,6 @@ class CMakeBuild(build_ext):
 setup(
     ext_modules=[
         CMakeExtension("oceanmesh/cpp/delaunay_class"),
-        CMakeExtension("oceanmesh/cpp/delaunay_class3"),
     ],
     cmdclass=dict(build_ext=CMakeBuild),
     python_requires=">=3.0",
