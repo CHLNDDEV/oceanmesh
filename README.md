@@ -26,9 +26,9 @@ For installation, oceanmesh needs [CGAL](https://www.cgal.org/) and
 
     sudo apt install libcgal-dev python3-pybind11
 
-After that, clone the repo and oceanmesh can be installed using pip.
+After that, clone the repo and oceanmesh can be updated/installed using pip.
 
-    pip install -U oceanmesh
+    pip install -U -e .
 
 **WARNING: THIS PROGRAM IN ACTIVE DEVELOPMENT AND INSTALLATION IS ONLY RECOMMENDED FOR DEVELOPERS AT THIS TIME. WHEN A STABLE API IS REACHED, THE PROGRAM WILL BE AVAILABLE VIA pypi**
 
