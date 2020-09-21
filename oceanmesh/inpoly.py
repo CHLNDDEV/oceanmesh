@@ -2,7 +2,7 @@ import numpy as np
 from numba import jit
 
 
-def inpoly(vert, node, edge=None, ftol=4.9485e-14):
+def inpoly(vert, node, edge=None, ftol=4.9485e-16):
     """A port of Darren Engwirda's `inpoly` routine into Python.
 
        Returns the "inside/outside" status for a set of vertices VERT and

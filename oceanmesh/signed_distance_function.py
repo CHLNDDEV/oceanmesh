@@ -35,31 +35,14 @@ def signed_distance_function(shoreline):
 
     """
     print("Building a signed distance function...")
-    poly1 = numpy.vstack((shoreline.inner, shoreline.mainland))
-    tree = scipy.spatial.cKDTree(poly1)
-
-    boubox = _create_boubox(shoreline.bbox)
-    poly2 = numpy.vstack((poly1, boubox))
-
-    e = edges.get_poly_edges(poly2)
+    poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
+    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :])
+    e = edges.get_poly_edges(poly)
 
     def func(x):
         dist, _ = tree.query(x, k=1)
-        inside, _ = inpoly(x, poly2, e)
-        dist[inside == 1] *= -1.0
+        inside_shoreline, _ = inpoly(x, poly, e)
+        dist[inside_shoreline == 1] *= -1.0
         return dist
 
     return Domain(shoreline.bbox, func)
-
-
-def _create_boubox(bbox):
-    """Create a bounding box from domain extents `bbox`."""
-    xmin, xmax, ymin, ymax = bbox
-    return [
-        [xmin, ymin],
-        [xmax, ymin],
-        [xmax, ymax],
-        [xmin, ymax],
-        [xmin, ymin],
-        [nan, nan],
-    ]

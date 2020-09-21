@@ -79,25 +79,21 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
         mesh connectivity table.
 
     """
-    # check call was correct
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
-    # unpack domain
     fd, bbox = _unpack_domain(domain)
     fh = _unpack_sizing(cell_size)
 
     if not isinstance(bbox, tuple):
         raise ValueError("`bbox` must be a tuple")
 
-    # check bbox shape
     dim = int(len(bbox) / 2)
     if dim != 2:
         raise ValueError("`dim` must be 2")
 
     bbox = np.array(bbox).reshape(-1, 2)
 
-    # check h0
     if h0 < 0:
         raise ValueError("`h0` must be > 0")
 
@@ -143,6 +139,11 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
 
+        # Number of iterations reached, stop.
+        if count == (max_iter - 1):
+            p, t = _termination(p, t)
+            break
+
         # Compute the forces on the bars
         Ftot = _compute_forces(p, t, fh, h0, L0mult)
 
@@ -154,11 +155,6 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
 
         # Bring outside points back to the boundary
         p = _project_points_back(p, fd, deps)
-
-        # Number of iterations reached, stop.
-        if count == (max_iter - 1):
-            p, t = _termination(p, t)
-            break
 
         # Show the user some progress so they know something is happening
         if count % nscreen == 0:

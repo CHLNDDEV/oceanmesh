@@ -48,13 +48,13 @@ def _create_ranges(start, stop, N, endpoint=True):
     return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
-def _densify(poly, maxdiff, bbox):
+def _densify(poly, maxdiff, bbox, radius=0):
     """Fills in any gaps in latitude or longitude arrays
     that are greater than a `maxdiff` (degrees) apart
     """
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
-    inside = path.contains_points(poly)
+    inside = path.contains_points(poly, radius=radius)
 
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
@@ -134,7 +134,10 @@ def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
         elif any(inside):
             mainland = numpy.append(mainland, poly, axis=0)
 
-    return inner, mainland
+    boubox = _densify(numpy.array(boubox), h0 / 2, bbox, radius=0.1)
+    boubox = numpy.append(boubox, [[nan, nan]], axis=0)
+
+    return inner, mainland, boubox
 
 
 def _chaikins_corner_cutting(coords, refinements=5):
@@ -260,6 +263,7 @@ class Shoreline(Geodata):
         self.inner = []
         self.outer = []
         self.mainland = []
+        self.boubox = []
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
@@ -271,8 +275,8 @@ class Shoreline(Geodata):
 
         polys = _nth_simplify(polys, self.bbox)
 
-        self.inner, self.mainland = _classify_shoreline(
-            self.bbox, polys, self.h0, self.minimum_area_mult
+        self.inner, self.mainland, self.boubox = _classify_shoreline(
+            self.bbox, polys, self.h0 / 2, self.minimum_area_mult
         )
 
     @property
