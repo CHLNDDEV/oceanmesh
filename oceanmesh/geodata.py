@@ -48,15 +48,13 @@ def _create_ranges(start, stop, N, endpoint=True):
     return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
-def _densify(poly, maxdiff, bbox):
+def _densify(poly, maxdiff, bbox, radius=0):
     """Fills in any gaps in latitude or longitude arrays
     that are greater than a `maxdiff` (degrees) apart
     """
-    print("Densifying segments...")
-
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
-    inside = path.contains_points(poly)
+    inside = path.contains_points(poly, radius=radius)
 
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
@@ -117,8 +115,6 @@ def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
     """
-    print("Classifying the shoreline segments...")
-
     boubox = _create_boubox(bbox)
 
     inner = numpy.empty(shape=(0, 2))
@@ -138,7 +134,10 @@ def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
         elif any(inside):
             mainland = numpy.append(mainland, poly, axis=0)
 
-    return inner, mainland
+    boubox = _densify(numpy.array(boubox), h0 / 2, bbox, radius=0.1)
+    boubox = numpy.append(boubox, [[nan, nan]], axis=0)
+
+    return inner, mainland, boubox
 
 
 def _chaikins_corner_cutting(coords, refinements=5):
@@ -161,7 +160,6 @@ def _smooth_shoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
     a `N` refinement Chaikins Corner cutting algorithm.
     """
-    print("Applying a {} refinement Chaikin Corner cut to segments...".format(N))
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
@@ -173,7 +171,6 @@ def _smooth_shoreline(polys, N):
 
 def _nth_simplify(polys, bbox):
     """Collapse segments in `polys` outside of `bbox`"""
-    print("Collapsing segments outside of the bbox...")
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
@@ -266,6 +263,7 @@ class Shoreline(Geodata):
         self.inner = []
         self.outer = []
         self.mainland = []
+        self.boubox = []
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
@@ -277,8 +275,8 @@ class Shoreline(Geodata):
 
         polys = _nth_simplify(polys, self.bbox)
 
-        self.inner, self.mainland = _classify_shoreline(
-            self.bbox, polys, self.h0, self.minimum_area_mult
+        self.inner, self.mainland, self.boubox = _classify_shoreline(
+            self.bbox, polys, self.h0 / 2, self.minimum_area_mult
         )
 
     @property
@@ -428,7 +426,6 @@ def _from_tif(filename, bbox):
 
     tmp = numpy.asarray(Image.open(filename))
     topobathy = tmp[latli:latui, lonli:lonui]
-    print(numpy.amin(lats[slice(latli, latui)]))
 
     return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 
