@@ -38,18 +38,38 @@ def signed_distance_function(shoreline):
     poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
     tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :])
     e = edges.get_poly_edges(poly)
-    e_box = edges.get_poly_edges(shoreline.boubox)
+
+    boubox = _create_boubox(shoreline.bbox)
+    e_box = edges.get_poly_edges(boubox)
 
     def func(x):
         # Initialize d with some positive number larger than geps
         dist = numpy.zeros(len(x)) + 1.0
-        in_boubox, _ = inpoly(x, shoreline.boubox, e_box)
-        # for points inside boubox, compute dist to shoreline
-        if numpy.sum(in_boubox) > 0:
-            in_outer, _ = inpoly(x[in_boubox == 1], poly, e)
-            d, _ = tree.query(x[in_boubox == 1], k=1)
-        # d is signed negative if inside and vice versa.
-        dist[in_boubox == 1] = (-1) ** (in_outer) * d
+        # are points inside the boubox?
+        in_boubox, _ = inpoly(x, boubox, e_box)
+        # are points inside the shoreline?
+        in_shoreline, _ = inpoly(x, poly, e)
+        # compute dist to shoreline
+        d, _ = tree.query(x, k=1)
+        # d is signed negative if inside the
+        # intersection of two areas and vice versa.
+        cond = numpy.logical_and(in_shoreline, in_boubox)
+        dist = (-1) ** (cond) * d
         return dist
 
     return Domain(shoreline.bbox, func)
+
+
+def _create_boubox(bbox):
+    """Create a bounding box from domain extents `bbox`."""
+    xmin, xmax, ymin, ymax = bbox
+    return numpy.array(
+        [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+            [nan, nan],
+        ]
+    )
