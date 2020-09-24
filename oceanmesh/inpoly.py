@@ -2,7 +2,7 @@ import numpy as np
 from numba import jit
 
 
-def inpoly(vert, node, edge=None, ftol=4.9485e-16):
+def inpoly(vert, node, edge=None, ftol=4.9485e-14):
     """A port of Darren Engwirda's `inpoly` routine into Python.
 
        Returns the "inside/outside" status for a set of vertices VERT and
@@ -68,8 +68,8 @@ def inpoly(vert, node, edge=None, ftol=4.9485e-16):
         edge = np.vstack((np.arange(0, nnod - 1), np.arange(1, nnod))).T
         edge = np.concatenate((edge, [[nnod - 1, 0]]))
 
-    STAT = np.zeros((nvrt), dtype=int)
-    BNDS = np.zeros((nvrt), dtype=int)
+    STAT = np.zeros((nvrt))
+    BNDS = np.zeros((nvrt))
 
     # prune points using bbox
     mask = (

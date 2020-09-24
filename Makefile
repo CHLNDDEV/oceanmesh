@@ -6,10 +6,10 @@ default:
 clean:
 	@find . | grep -E "(__pycache__|\.pyc|\.pyo$\)" | xargs rm -rf
 	@rm -rf build/*
-	@rm -rf oceanmesh.egg-info/
+	@rm -rf pyOceanMesh.egg-info/
 	@rm -rf dist/
 
 format:
-	isort -rc oceanmesh/ tests/*.py
-	black oceanmesh/ tests/*.py
+	isort -rc pyOceanMesh/ tests/*.py
+	black pyOceanMesh/ tests/*.py
 	blacken-docs README.md

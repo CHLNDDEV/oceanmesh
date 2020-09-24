@@ -1,6 +1,6 @@
 import os
 
-from oceanmesh import Shoreline, signed_distance_function, Domain
+from oceanmesh import Shoreline, signed_distance_function
 
 
 def test_signed_distance_function():
@@ -13,4 +13,4 @@ def test_signed_distance_function():
 
     domain = signed_distance_function(shp)
 
-    assert isinstance(domain, Domain)
+    domain.plot(vmin=-0.1, vmax=0.1)

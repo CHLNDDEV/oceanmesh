@@ -2,6 +2,8 @@ import numpy
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
+FILL = -99999.0
+
 
 class Grid:
     """Abstracts a structured grid along with
@@ -28,7 +30,7 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, grid_spacing, values=None, fill=None):
+    def __init__(self, bbox, grid_spacing, values=None):
 
         self.x0y0 = (
             min(bbox[0:2]),
@@ -41,7 +43,6 @@ class Grid:
         self.bbox = bbox
         self.values = values
         self.eval = None
-        self.fill = fill
 
     @property
     def grid_spacing(self):
@@ -145,6 +146,7 @@ class Grid:
         """
         points = points[~numpy.isnan(points[:, 0]), :]
         if tree is None:
+            print("Building tree...")
             lonlat = numpy.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
         dist, idx = tree.query(points, k=1)
@@ -190,12 +192,12 @@ class Grid:
             self.values,
             method="linear",
             bounds_error=False,
-            fill_value=self.fill,
+            fill_value=FILL,
         )
         xg, yg = numpy.meshgrid(lon2, lat2, indexing="ij", sparse=True)
         new_values = fp((xg, yg))
         # where fill replace with grid2 values
-        new_values[new_values == self.fill] = grid2.values[new_values == self.fill]
+        new_values[new_values == FILL] = grid2.values[new_values == FILL]
         return Grid(bbox=grid2.bbox, grid_spacing=grid2.grid_spacing, values=new_values)
 
     def plot(self, hold=False, vmin=0.0, vmax=0.1):
@@ -215,13 +217,14 @@ class Grid:
 
         import matplotlib.pyplot as plt
 
+        print("Plotting a grid...")
+
         x, y = self.create_grid()
 
         fig, ax = plt.subplots()
-        c = ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
+        ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
         ax.axis("equal")
         if hold is False:
-            fig.colorbar(c, ax=ax)
             plt.show()
         return ax
 
@@ -241,7 +244,7 @@ class Grid:
             self.values,
             method="linear",
             bounds_error=False,
-            fill_value=self.fill,
+            fill_value=FILL,
         )
 
         def sizing_function(x):

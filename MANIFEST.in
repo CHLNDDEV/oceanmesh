@@ -1,5 +1,0 @@
-include oceanmesh/cpp/*.cpp
-include tests/*
-
-include README.md LICENSE.txt
-global-include CMakeLists.txt

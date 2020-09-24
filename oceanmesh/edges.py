@@ -1,6 +1,7 @@
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib import collections as mc
+
 
 nan = np.nan
 
