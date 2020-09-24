@@ -6,7 +6,7 @@ from .grid import Grid
 __all__ = ["distance_sizing_function"]
 
 
-def distance_sizing_function(shoreline, rate=0.15):
+def distance_sizing_function(shoreline, rate=0.15, max_size=99999.0):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
 
     Parameters
@@ -31,5 +31,6 @@ def distance_sizing_function(shoreline, rate=0.15):
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, grid.grid_spacing))
     grid.values = shoreline.h0 + dis * rate
+    grid.values[grid.values > max_size] = max_size
     grid.build_interpolant()
     return grid

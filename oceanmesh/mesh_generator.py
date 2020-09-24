@@ -112,7 +112,7 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
 
     pfix, nfix = _unpack_pfix(dim, opts)
 
-    p = _generate_initial_points(h0, geps, dim, bbox, fh, fd, pfix)
+    p = _generate_initial_points(h0, geps, bbox, fh, fd, pfix)
 
     N = p.shape[0]
 
@@ -206,8 +206,7 @@ def _display_progress(p, t, count, nscreen, maxdp):
 def _termination(p, t):
     """Shut it down when reacing `max_iter`"""
     print("Termination reached...maximum number of iterations reached.", flush=True)
-    dim = p.shape[1]
-    p, t, _ = fix_mesh(p, t, dim=dim, delete_unused=True)
+    p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
     return p, t
 
 
@@ -226,25 +225,24 @@ def _unique_rows(ar):
 
 def _compute_forces(p, t, fh, h0, L0mult):
     """Compute the forces on each edge based on the sizing function"""
-    dim = p.shape[1]
     N = p.shape[0]
     bars = _get_bars(t)
     barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
     L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     hbars = fh(p[bars].sum(1) / 2)
-    L0 = hbars * L0mult * ((L ** dim).sum() / (hbars ** dim).sum()) ** (1.0 / dim)
+    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
     F = L0 - L
     F[F < 0] = 0  # Bar forces (scalars)
     Fvec = (
-        F[:, None] / L[:, None].dot(np.ones((1, dim))) * barvec
+        F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
     )  # Bar forces (x,y components)
 
     Ftot = _dense(
-        bars[:, [0] * dim + [1] * dim],
-        np.repeat([list(range(dim)) * 2], len(F), axis=0),
+        bars[:, [0] * 2 + [1] * 2],
+        np.repeat([list(range(2)) * 2], len(F), axis=0),
         np.hstack((Fvec, -Fvec)),
-        shape=(N, dim),
+        shape=(N, 2),
     )
     return Ftot
 
@@ -274,42 +272,40 @@ def _dense(Ix, J, S, shape=None, dtype=None):
 
 def _remove_triangles_outside(p, t, fd, geps):
     """Remove vertices outside the domain"""
-    dim = p.shape[1]
-    pmid = p[t].sum(1) / (dim + 1)  # Compute centroids
+    pmid = p[t].sum(1) / 3  # Compute centroids
     return t[fd(pmid) < -geps]  # Keep interior triangles
 
 
 def _project_points_back(p, fd, deps):
     """Project points outsidt the domain back within"""
-    dim = p.shape[1]
 
     d = fd(p)
     ix = d > 0  # Find points outside (d>0)
     if ix.any():
 
         def _deps_vec(i):
-            a = [0] * dim
+            a = [0] * 2
             a[i] = deps
             return a
 
-        dgrads = [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(dim)]
+        dgrads = [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)]
         dgrad2 = sum(dgrad ** 2 for dgrad in dgrads)
         dgrad2 = np.where(dgrad2 < deps, deps, dgrad2)
         p[ix] -= (d[ix] * np.vstack(dgrads) / dgrad2).T  # Project
     return p
 
 
-def _generate_initial_points(h0, geps, dim, bbox, fh, fd, pfix):
+def _generate_initial_points(h0, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
     p = np.mgrid[tuple(slice(min, max + h0, h0) for min, max in bbox)].astype(float)
-    p = p.reshape(dim, -1).T
+    p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
     r0m = np.min(r0[r0 > 0])
     return np.vstack(
         (
             pfix,
-            p[np.random.rand(p.shape[0]) < r0m ** dim / r0 ** dim],
+            p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2],
         )
     )
 

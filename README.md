@@ -13,6 +13,7 @@ Coastal ocean mesh generation from ESRI Shapefiles and digitial elevation models
 Functionality
 =============
 
+
 * A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a succesful numerical simulations with the developed model.
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
@@ -81,8 +82,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
      points,
      [("triangle", cells)],
      file_format="vtk",
- )
-~           
+ )           
 ```
 
 Testing
