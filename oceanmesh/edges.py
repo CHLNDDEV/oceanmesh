@@ -58,3 +58,52 @@ def draw_edges(poly, edges):
     ax.add_collection(lc)
     ax.autoscale()
     plt.show()
+
+
+def get_boundary_edges(entities, dim=2):
+    """Get the boundary edges of the mesh. Boundary edges only appear (dim-1) times
+
+    Parameters
+    ----------
+    entities: array-like
+        the mesh connectivity
+
+    Returns
+    -------
+    boundary_edges: array-like
+        the edges that make up the boundary of the mesh
+
+    """
+    edges = get_edges(entities, dim=dim)
+    edges = np.sort(edges, axis=1)
+    unq, cnt = np.unique(edges, axis=0, return_counts=True)
+    boundary_edges = np.array([e for e, c in zip(unq, cnt) if c == (dim - 1)])
+    return boundary_edges
+
+
+def get_edges(entities, dim=2):
+    """Get the undirected edges of mesh in no order (NB: are repeated)
+
+    Parameters
+    ----------
+    entities: array-like
+        the mesh connectivity
+    dim: int, optional
+        dimension of the mesh
+
+    Returns
+    -------
+    edges: array-like
+        the edges that make up the mesh
+
+    """
+
+    num_entities = len(entities)
+    entities = np.array(entities)
+    if dim == 2:
+        edges = entities[:, [[0, 1], [0, 2], [1, 2]]]
+        edges = edges.reshape((num_entities * 3, 2))
+    elif dim == 3:
+        edges = entities[:, [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]]]
+        edges = edges.reshape((num_entities * 6, 2))
+    return edges
