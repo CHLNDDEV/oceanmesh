@@ -3,9 +3,10 @@ import copy
 import numpy as np
 
 from fix_mesh import fix_mesh
+from geometry import simp_vol
 import edges
 
-__all__ = ["make_mesh_boundaries_traversable", "cell_to_cell"]
+__all__ = ["make_mesh_boundaries_traversable"]
 
 
 def _arg_sortrows(arr):
@@ -15,7 +16,7 @@ def _arg_sortrows(arr):
     return i[j]
 
 
-def cell_to_cell(t):
+def _cell_to_cell(t):
     """Cell to cell connectivity table.
         Cell `i` is connected to cells `ctoc[ix[i]:ix[i+1]]`
         By connected, I mean shares a mutual edge.
@@ -124,10 +125,8 @@ def _delete_exterior_cells(points, cells, dj_cutoff):
     """
     t1 = copy.copy(cells)
     t = []
-    X, Y = points[:, 0], points[:, 1]
-    # Calculate the area of the patch
-    # (not taking into consideration projections yet)
-    A = np.sum(_poly_area(X, Y))
+    # Calculate the total area of the patch
+    A = np.sum(simp_vol(points, cells))
     An = A
     while An / A > dj_cutoff:
         # Perform the Breadth-First-Search to get `nflag`
@@ -135,19 +134,17 @@ def _delete_exterior_cells(points, cells, dj_cutoff):
 
         # Get new triangulation and its area
         t2 = t1[nflag == 1, :]
-        An = np.sum(_poly_area(X[t2], Y[t2]))
+        An = np.sum(simp_vol(points, t2))
 
-        # If large enough, retain this component of the
-        # triangulation
+        # If large enough, retain this component
         if An / A > dj_cutoff:
             t = np.append(t, t2, axis=0)
 
-        # Delete where nflag == 1 since this patch didn't
-        # meet the fraction limit criterion.
+        # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
 
         # Calculate the remaining area
-        An = np.sum(_poly_area(X[t1], Y[t1]))
+        An = np.sum(simp_vol(points, t1))
 
     p_cleaner, t_cleaner = fix_mesh(points, t)
 
@@ -159,9 +156,37 @@ def _delete_interior_cells(points, cells, dj_cutoff):
 
 
 def _breadth_first_search(points, cells):
-    """Breadth-First-Search"""
-    return 0
+    """Breadth-First-Search across the triangulation"""
 
+    nt = len(cells)
+    EToS = np.random.randint(0, 1, nt)
+    # Get cell-to-cell connectivity.
+    ctoc, ix = _cell_to_cell(cells)
 
-def _poly_area(X, Y):
-    """Calculate the area of a polygon"""
+    # Traverse grid deleting elements outside.
+    ic = np.zeros(np.ceil(np.sqrt(nt) * 2))
+    ic0 = np.zeros(np.ceil(np.sqrt(nt) * 2))
+    nflag = np.zeros(nt)
+
+    ic[0] = EToS
+    icc = 1
+
+    # Using BFS loop over until convergence is reached (i.e., we
+    # obtained a connected region).
+    while icc:
+        ic0[:icc] = ic[:icc]
+        icc0 = icc
+        icc = 0
+        for nn in range(icc0):
+            i = ic0[nn]
+            # Flag the current cell as OK
+            nflag[i] = 1
+            # Search neighboring elements
+            nb = ctoc[ix[i] : ix[i + 1]]
+            # Flag connected neighbors as OK
+            for nnb in range(len(nb)):
+                if not nflag[nb[nnb]]:
+                    icc += 1
+                    ic[icc] = nb[nnb]
+                    nflag[nb[nnb]] = 1
+    return nflag
