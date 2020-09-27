@@ -46,7 +46,7 @@ def _cell_to_cell(t):
     ctoc = np.concatenate((trinum[k], trinum[k + 1]), axis=1)
     ctoc = np.append(ctoc, np.fliplr(ctoc), axis=0)
     ctoc = ctoc[np.argsort(ctoc[:, 0]), :]
-    idx = np.argwhere(np.diff(ctoc[:, 0]))
+    idx = np.argwhere(np.diff(ctoc[:, 0])) + 1
     idx = np.insert(idx, 0, 0)
     idx = np.append(idx, len(ctoc))
     return ctoc, idx
