@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 
 from fix_mesh import fix_mesh
@@ -46,14 +48,14 @@ def cell_to_cell(t):
     idx = np.argwhere(np.diff(ctoc[:, 0]))
     idx = np.insert(idx, 0, 0)
     idx = np.append(idx, len(ctoc))
-    return ctoc, ix
+    return ctoc, idx
 
 
 def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
     """
     A mesh described by points and cells is  "cleaned" and returned.
     Alternates between checking interior and exterior portions
-    of the graph exhaustively until convergence is obtained, defined as:
+    of the mesh exhaustively until convergence is obtained, defined as:
     Having no vertices connected to more than two boundary edges.
 
     Parameters
@@ -87,7 +89,7 @@ def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
     are connected to that node. In the case of a choice between cells to
     delete, the one with the lowest quality is chosen.
 
-    Exterior Check: Finds small disjoint portions of the graph and removes
+    Exterior Check: Finds small disjoint portions of the mesh and removes
     them using a breadth-first search. The individual disjoint portions are
     removed based on `dj_cutoff`.
 
@@ -95,6 +97,8 @@ def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
 
     boundary_edges, boundary_points = _external_topology(points, cells)
 
+    # NB: when this inequality is not met, the mesh boundary '
+    # is valid.
     while len(boundary_edges) > len(boundary_points):
 
         cells = _delete_exterior_cells(points, cells, dj_cutoff)
@@ -112,6 +116,52 @@ def _external_topology(points, cells):
     boundary_points = points[np.unique(boundary_edges.reshape(-1))]
     return boundary_edges, boundary_points
 
-def _delete_exterior_cells(points, cells, dj_cutoff):
 
-def _delete_interior_cells(points, cells, dj_cutoff)
+def _delete_exterior_cells(points, cells, dj_cutoff):
+    """Deletes portions of the mesh that are "outside" or not
+    connected to the majority which represent a fractional
+    area less than `dj_cutoff`.
+    """
+    t1 = copy.copy(cells)
+    t = []
+    X, Y = points[:, 0], points[:, 1]
+    # Calculate the area of the patch
+    # (not taking into consideration projections yet)
+    A = np.sum(_poly_area(X, Y))
+    An = A
+    while An / A > dj_cutoff:
+        # Perform the Breadth-First-Search to get `nflag`
+        nflag = _breadth_first_search(points, t1)
+
+        # Get new triangulation and its area
+        t2 = t1[nflag == 1, :]
+        An = np.sum(_poly_area(X[t2], Y[t2]))
+
+        # If large enough, retain this component of the
+        # triangulation
+        if An / A > dj_cutoff:
+            t = np.append(t, t2, axis=0)
+
+        # Delete where nflag == 1 since this patch didn't
+        # meet the fraction limit criterion.
+        t1 = np.delete(t1, nflag == 1, axis=0)
+
+        # Calculate the remaining area
+        An = np.sum(_poly_area(X[t1], Y[t1]))
+
+    p_cleaner, t_cleaner = fix_mesh(points, t)
+
+    return p_cleaner, t_cleaner
+
+
+def _delete_interior_cells(points, cells, dj_cutoff):
+    return 0
+
+
+def _breadth_first_search(points, cells):
+    """Breadth-First-Search"""
+    return 0
+
+
+def _poly_area(X, Y):
+    """Calculate the area of a polygon"""
