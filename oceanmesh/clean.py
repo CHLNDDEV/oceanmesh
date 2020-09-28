@@ -52,36 +52,39 @@ def _cell_to_cell(t):
     return ctoc, idx
 
 
-def _vertex_to_cells(vertices, cells, dim=2):
+def _vertex_to_cell(vertices, cells):
     """Determine which elements are connected to which vertices.
-    :param vertices: point coordinates of mesh vertices
-    :type vertices: numpy.ndarray[`float` x dim]
-    :param cells: mesh connectivity
-    :type cells: numpy.ndarray[`int` x (dim + 1)]
-    :param dim: dimension of mesh
-    :type dim: `int`, optional
-    :return: vtoe: indices of cells connected to each vertex
-    :rtype: numpy.ndarray[`int` x 1]
-    :return: vtoe_pointer: indices into `vtoe` such that vertex `v` is connected to
-                          `vtoe[vtoe_pointer[v]:vtoe_pointer[v+1]]` cells
-    :rtype: numpy.ndarray[`int` x 1]
+
+     Parameters
+    ----------
+    vertices: array-like
+        Vertices of the mesh.
+    t: array-like
+        Mesh connectivity table.
+
+    Returns
+    -------
+    vtoc: array-like
+        cell numbers connected to vertices.
+    ix: array-like
+        indices into `vtoc`
 
     """
     num_cells = len(cells)
 
-    ext = np.tile(np.arange(0, num_cells), (dim + 1, 1)).reshape(-1, order="F")
+    ext = np.tile(np.arange(0, num_cells), (3, 1)).reshape(-1, order="F")
     ve = np.reshape(cells, (-1,))
     ve = np.vstack((ve, ext)).T
     ve = ve[ve[:, 0].argsort(), :]
 
     idx = np.insert(np.diff(ve[:, 0]), 0, 0)
-    vtoe_pointer = np.argwhere(idx)
-    vtoe_pointer = np.insert(vtoe_pointer, 0, 0)
-    vtoe_pointer = np.append(vtoe_pointer, num_cells * (dim + 1))
+    vtoc_pointer = np.argwhere(idx)
+    vtoc_pointer = np.insert(vtoc_pointer, 0, 0)
+    vtoc_pointer = np.append(vtoc_pointer, num_cells * 3)
 
-    vtoe = ve[:, 1]
+    vtoc = ve[:, 1]
 
-    return vtoe, vtoe_pointer
+    return vtoc, vtoc_pointer
 
 
 def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
@@ -194,7 +197,7 @@ def _delete_interior_cells(points, cells, dj_cutoff):
     # Count how many edges a vertex appears in.
     _, count = np.unique(boundary_edges.reshape(-1), return_counts=True)
     # Get the cells connected to the vertices
-    vtoe, nne = _vertex_to_cells(cells)
+    vtoc, nne = _vertex_to_cell(cells)
     # Get the nodes which appear more than twice and delete element connected
     # to these nodes where all nodes of element are on boundary edges
     # del_elem_idx = [];
