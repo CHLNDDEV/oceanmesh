@@ -52,6 +52,38 @@ def _cell_to_cell(t):
     return ctoc, idx
 
 
+def _vertex_to_cells(vertices, cells, dim=2):
+    """Determine which elements are connected to which vertices.
+    :param vertices: point coordinates of mesh vertices
+    :type vertices: numpy.ndarray[`float` x dim]
+    :param cells: mesh connectivity
+    :type cells: numpy.ndarray[`int` x (dim + 1)]
+    :param dim: dimension of mesh
+    :type dim: `int`, optional
+    :return: vtoe: indices of cells connected to each vertex
+    :rtype: numpy.ndarray[`int` x 1]
+    :return: vtoe_pointer: indices into `vtoe` such that vertex `v` is connected to
+                          `vtoe[vtoe_pointer[v]:vtoe_pointer[v+1]]` cells
+    :rtype: numpy.ndarray[`int` x 1]
+
+    """
+    num_cells = len(cells)
+
+    ext = np.tile(np.arange(0, num_cells), (dim + 1, 1)).reshape(-1, order="F")
+    ve = np.reshape(cells, (-1,))
+    ve = np.vstack((ve, ext)).T
+    ve = ve[ve[:, 0].argsort(), :]
+
+    idx = np.insert(np.diff(ve[:, 0]), 0, 0)
+    vtoe_pointer = np.argwhere(idx)
+    vtoe_pointer = np.insert(vtoe_pointer, 0, 0)
+    vtoe_pointer = np.append(vtoe_pointer, num_cells * (dim + 1))
+
+    vtoe = ve[:, 1]
+
+    return vtoe, vtoe_pointer
+
+
 def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
     """
     A mesh described by points and cells is  "cleaned" and returned.
@@ -83,9 +115,11 @@ def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
 
     Interior Check: Deletes cells that are within the interior of the
     mesh so that no nodes are connected to more than 2 boundary edges. For
-    example, a split could become very thin in a middle portion so that you
-    a node is connected to two cells but four boundary edges, in a
-    bow-tie type formation. This code will delete one of those connecting
+    example, an island could become very thin in a middle portion so that you
+    have a vertex connected to two cells but four boundary edges, in a
+    bow-tie type formation.
+
+    This code will delete one of those connecting
     cells to ensure the spit is continous and only two boundary edges
     are connected to that node. In the case of a choice between cells to
     delete, the one with the lowest quality is chosen.
@@ -152,41 +186,86 @@ def _delete_exterior_cells(points, cells, dj_cutoff):
 
 
 def _delete_interior_cells(points, cells, dj_cutoff):
-    return 0
+    """Delete interior cells that have vertices with more than
+    two vertices declared as boundary vertices
+    """
+    # Get updated boundary topology
+    boundary_edges, boundary_points = _external_topology(points, cells)
+    # Count how many edges a vertex appears in.
+    _, count = np.unique(boundary_edges.reshape(-1), return_counts=True)
+    # Get the cells connected to the vertices
+    vtoe, nne = _vertex_to_cells(cells)
+    # Get the nodes which appear more than twice and delete element connected
+    # to these nodes where all nodes of element are on boundary edges
+    # del_elem_idx = [];
+    # for i = nodes_on_edge(count > 2)'
+    #    con_elem = vtoe(1:nne(i),i);
+    #    n = 0; del_elem = [];
+    #    for elem = con_elem'
+    #        I = etbv(:) == t(elem,1);
+    #        J = etbv(:) == t(elem,2);
+    #        K = etbv(:) == t(elem,3);
+    #        % All nodes on element are boundary edges
+    #        if any(I) && any(J) && any(K)
+    #            n = n + 1;
+    #            del_elem(n) = elem;
+    #        end
+    #    end
+    #    if n == 1
+    #        % Only one element to delete.
+    #        del_elem_idx(end+1) = del_elem;
+    #    elseif n > 1
+    #        % Delete worst quality qualifying element.
+    #        tq = gettrimeshquan( p, t(del_elem,:));
+    #        [~,idx] = min(tq.qm);
+    #        del_elem_idx(end+1) = del_elem(idx);
+    #    else
+    #        % No connected elements have all nodes on boundary edge so we
+    #        % select the worst quality connecting element.
+    #        tq = gettrimeshquan( p, t(con_elem,:));
+    #        [~,idx] = min(tq.qm);
+    #        del_elem_idx(end+1) = con_elem(idx);
+    #    end
+    # end
+    #
+    # t(del_elem_idx,:) = [];
+    #
+    # end
+    return cells
 
 
 def _breadth_first_search(points, cells):
-    """Breadth-First-Search across the triangulation"""
+    """Breadth-First-Search (BFS) across the triangulation"""
 
     nt = len(cells)
-    EToS = np.random.randint(0, 1, nt)
+    EToS = np.random.randint(0, nt, 1)
     # Get cell-to-cell connectivity.
     ctoc, ix = _cell_to_cell(cells)
 
-    # Traverse grid deleting elements outside.
-    ic = np.zeros(np.ceil(np.sqrt(nt) * 2))
-    ic0 = np.zeros(np.ceil(np.sqrt(nt) * 2))
+    # temporary arrays
+    sz = int(np.ceil(np.sqrt(nt) * 2))
+    ic = np.zeros(sz, dtype=int)
+    ic0 = np.zeros(sz, dtype=int)
     nflag = np.zeros(nt)
 
     ic[0] = EToS
     icc = 1
 
-    # Using BFS loop over until convergence is reached (i.e., we
-    # obtained a connected region).
+    # Spider-search through connected mesh
     while icc:
         ic0[:icc] = ic[:icc]
         icc0 = icc
         icc = 0
         for nn in range(icc0):
-            i = ic0[nn]
-            # Flag the current cell as OK
-            nflag[i] = 1
-            # Search neighboring elements
-            nb = ctoc[ix[i] : ix[i + 1]]
-            # Flag connected neighbors as OK
-            for nnb in range(len(nb)):
-                if not nflag[nb[nnb]]:
+            curr = ic0[nn]
+            # Flag the current cell as visited
+            nflag[curr] = 1
+            # Search connected cells
+            neis = ctoc[ix[curr] : ix[curr + 1], 1]
+            # Flag connected cells as visited
+            for nei in neis:
+                if nflag[nei] == 0:
+                    nflag[nei] = 1
+                    ic[icc] = nei
                     icc += 1
-                    ic[icc] = nb[nnb]
-                    nflag[nb[nnb]] = 1
     return nflag
