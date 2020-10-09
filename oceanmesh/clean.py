@@ -3,7 +3,7 @@ import copy
 import numpy as np
 
 from fix_mesh import fix_mesh
-from geometry import simp_vol
+from geometry import simp_vol, simp_qual
 import edges
 
 __all__ = ["make_mesh_boundaries_traversable"]
@@ -87,16 +87,16 @@ def _vertex_to_cell(vertices, cells):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
+def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
     """
-    A mesh described by points and cells is  "cleaned" and returned.
-    Alternates between checking interior and exterior portions
-    of the mesh exhaustively until convergence is obtained, defined as:
-    Having no vertices connected to more than two boundary edges.
+    A mesh described by vertices and cells is  "cleaned" and returned.
+    Alternates between checking "interior" and "exterior" portions
+    of the mesh until convergence is obtained. Convergence is defined as:
+    having no vertices connected to more than two boundary edges.
 
     Parameters
     ----------
-    points: array-like
+    vertices: array-like
         The vertices of the "uncleaned" mesh.
     cells: array-like
         The "cleaned" mesh connectivity.
@@ -107,7 +107,7 @@ def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
 
     Returns
     -------
-    points: array-like
+    vertices: array-like
         The vertices of the "cleaned" mesh.
 
     cells: array-like
@@ -117,45 +117,46 @@ def make_mesh_boundaries_traversable(points, cells, dj_cutoff=0.05):
     -----
 
     Interior Check: Deletes cells that are within the interior of the
-    mesh so that no nodes are connected to more than 2 boundary edges. For
-    example, an island could become very thin in a middle portion so that you
+    mesh so that no vertices are connected to more than two boundary edges. For
+    example, a barrier island could become very thin in a middle portion so that you
     have a vertex connected to two cells but four boundary edges, in a
     bow-tie type formation.
 
     This code will delete one of those connecting
-    cells to ensure the spit is continous and only two boundary edges
-    are connected to that node. In the case of a choice between cells to
+    cells to ensure the spit is `clean` in the sense that two boundary edges
+    are connected to that vertex. In the case of a choice between cells to
     delete, the one with the lowest quality is chosen.
 
     Exterior Check: Finds small disjoint portions of the mesh and removes
     them using a breadth-first search. The individual disjoint portions are
-    removed based on `dj_cutoff`.
+    removed based on `dj_cutoff` which is a decimal representing a fractional
+    threshold component of the total mesh.
 
     """
 
-    boundary_edges, boundary_points = _external_topology(points, cells)
+    boundary_edges, boundary_vertices = _external_topology(vertices, cells)
 
     # NB: when this inequality is not met, the mesh boundary '
-    # is valid.
-    while len(boundary_edges) > len(boundary_points):
+    # is valid and non-manifold
+    while len(boundary_edges) > len(boundary_vertices):
 
-        cells = _delete_exterior_cells(points, cells, dj_cutoff)
-        points, cells = fix_mesh(points, cells)
+        cells = _delete_exterior_cells(vertices, cells, dj_cutoff)
+        vertices, cells = fix_mesh(vertices, cells)
 
-        cells = _delete_interior_cells(points, cells)
-        points, cells = fix_mesh(points, cells)
+        cells = _delete_interior_cells(vertices, cells)
+        vertices, cells = fix_mesh(vertices, cells)
 
-        boundary_edges, boundary_points = _external_topology(points, cells)
-
-
-def _external_topology(points, cells):
-    """Get edges and points that make up the boundary of the mesh"""
-    boundary_edges = edges.get_boundary(points, cells)
-    boundary_points = points[np.unique(boundary_edges.reshape(-1))]
-    return boundary_edges, boundary_points
+        boundary_edges, boundary_vertices = _external_topology(vertices, cells)
 
 
-def _delete_exterior_cells(points, cells, dj_cutoff):
+def _external_topology(vertices, cells):
+    """Get edges and vertices that make up the boundary of the mesh"""
+    boundary_edges = edges.get_boundary(vertices, cells)
+    boundary_vertices = vertices[np.unique(boundary_edges.reshape(-1))]
+    return boundary_edges, boundary_vertices
+
+
+def _delete_exterior_cells(vertices, cells, dj_cutoff):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
     area less than `dj_cutoff`.
@@ -163,15 +164,15 @@ def _delete_exterior_cells(points, cells, dj_cutoff):
     t1 = copy.copy(cells)
     t = []
     # Calculate the total area of the patch
-    A = np.sum(simp_vol(points, cells))
+    A = np.sum(simp_vol(vertices, cells))
     An = A
     while An / A > dj_cutoff:
         # Perform the Breadth-First-Search to get `nflag`
-        nflag = _breadth_first_search(points, t1)
+        nflag = _breadth_first_search(vertices, t1)
 
         # Get new triangulation and its area
         t2 = t1[nflag == 1, :]
-        An = np.sum(simp_vol(points, t2))
+        An = np.sum(simp_vol(vertices, t2))
 
         # If large enough, retain this component
         if An / A > dj_cutoff:
@@ -181,63 +182,58 @@ def _delete_exterior_cells(points, cells, dj_cutoff):
         t1 = np.delete(t1, nflag == 1, axis=0)
 
         # Calculate the remaining area
-        An = np.sum(simp_vol(points, t1))
+        An = np.sum(simp_vol(vertices, t1))
 
-    p_cleaner, t_cleaner = fix_mesh(points, t)
+    p_cleaner, t_cleaner = fix_mesh(vertices, t)
 
     return p_cleaner, t_cleaner
 
 
-def _delete_interior_cells(points, cells, dj_cutoff):
+def _delete_interior_cells(vertices, cells, dj_cutoff):
     """Delete interior cells that have vertices with more than
     two vertices declared as boundary vertices
     """
     # Get updated boundary topology
-    boundary_edges, boundary_points = _external_topology(points, cells)
+    boundary_edges, boundary_vertices = _external_topology(vertices, cells)
+    etbv = boundary_edges.reshape(-1)
     # Count how many edges a vertex appears in.
-    _, count = np.unique(boundary_edges.reshape(-1), return_counts=True)
+    _, count = np.unique(etbv, return_counts=True)
     # Get the cells connected to the vertices
     vtoc, nne = _vertex_to_cell(cells)
-    # Get the nodes which appear more than twice and delete element connected
-    # to these nodes where all nodes of element are on boundary edges
-    # del_elem_idx = [];
-    # for i = nodes_on_edge(count > 2)'
-    #    con_elem = vtoe(1:nne(i),i);
-    #    n = 0; del_elem = [];
-    #    for elem = con_elem'
-    #        I = etbv(:) == t(elem,1);
-    #        J = etbv(:) == t(elem,2);
-    #        K = etbv(:) == t(elem,3);
-    #        % All nodes on element are boundary edges
-    #        if any(I) && any(J) && any(K)
-    #            n = n + 1;
-    #            del_elem(n) = elem;
-    #        end
-    #    end
-    #    if n == 1
-    #        % Only one element to delete.
-    #        del_elem_idx(end+1) = del_elem;
-    #    elseif n > 1
-    #        % Delete worst quality qualifying element.
-    #        tq = gettrimeshquan( p, t(del_elem,:));
-    #        [~,idx] = min(tq.qm);
-    #        del_elem_idx(end+1) = del_elem(idx);
-    #    else
-    #        % No connected elements have all nodes on boundary edge so we
-    #        % select the worst quality connecting element.
-    #        tq = gettrimeshquan( p, t(con_elem,:));
-    #        [~,idx] = min(tq.qm);
-    #        del_elem_idx(end+1) = con_elem(idx);
-    #    end
-    # end
-    #
-    # t(del_elem_idx,:) = [];
-    #
-    # end
+    # Vertices which appear more than twice (implying they are shared by
+    # more than two boundary edges)
+    del_cell_idx = []
+    for ix in boundary_edges[count > 2]:
+        conn_cells = vtoc[nne[ix] : nne[ix + 1]]
+        del_cell = []
+        for conn_cell in conn_cells:
+            II = etbv == cells[conn_cell, 0]
+            JJ = etbv == cells[conn_cell, 1]
+            KK = etbv == cells[conn_cell, 2]
+            if np.any(II) and np.any(JJ) and np.any(KK):
+                del_cell.append(conn_cell)
+
+       if len(del_cell) == 1:
+           del_cell_idx.append(del_cell)
+       elif len(dell_cell) > 1:
+           # Delete worst quality qualifying cell.
+           qual = simp_qual(vertices, cells[del_cell])
+           idx = np.argmin(qual)
+           del_cell_idx.append(del_cell[idx])
+       else:
+           # No connected cells have all vertices on boundary edge so we
+           # select the worst quality connecting cell.
+           tq = simp_qual(vertices, cells[conn_cells])
+           idx = np.argmin(qual)
+           del_cell_idx.append(conn_cell(idx))
+
+        print('ACCEPTED: Deleting {}  cells inside the main mesh').{len(del_cell_idx)}
+        cells.delete(del_cell_idx,axis=1)
+
     return cells
 
 
-def _breadth_first_search(points, cells):
+def _breadth_first_search(vertices, cells):
     """Breadth-First-Search (BFS) across the triangulation"""
 
     nt = len(cells)
