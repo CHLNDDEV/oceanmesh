@@ -2,11 +2,14 @@ import copy
 
 import numpy as np
 
-from fix_mesh import fix_mesh
-from geometry import simp_vol, simp_qual
-import edges
+from .fix_mesh import fix_mesh, simp_vol, simp_qual
+from . import edges
 
-__all__ = ["make_mesh_boundaries_traversable"]
+__all__ = [
+    "make_mesh_boundaries_traversable",
+    "delete_interior_cells",
+    "delete_exterior_cells",
+]
 
 
 def _arg_sortrows(arr):
@@ -140,10 +143,10 @@ def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
     # is valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        cells = _delete_exterior_cells(vertices, cells, dj_cutoff)
+        cells = delete_exterior_cells(vertices, cells, dj_cutoff)
         vertices, cells = fix_mesh(vertices, cells)
 
-        cells = _delete_interior_cells(vertices, cells)
+        cells = delete_interior_cells(vertices, cells)
         vertices, cells = fix_mesh(vertices, cells)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, cells)
@@ -151,12 +154,12 @@ def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
 
 def _external_topology(vertices, cells):
     """Get edges and vertices that make up the boundary of the mesh"""
-    boundary_edges = edges.get_boundary(vertices, cells)
+    boundary_edges = edges.get_boundary_edges(cells)
     boundary_vertices = vertices[np.unique(boundary_edges.reshape(-1))]
     return boundary_edges, boundary_vertices
 
 
-def _delete_exterior_cells(vertices, cells, dj_cutoff):
+def delete_exterior_cells(vertices, cells, dj_cutoff):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
     area less than `dj_cutoff`.
@@ -189,7 +192,7 @@ def _delete_exterior_cells(vertices, cells, dj_cutoff):
     return p_cleaner, t_cleaner
 
 
-def _delete_interior_cells(vertices, cells, dj_cutoff):
+def delete_interior_cells(vertices, cells):
     """Delete interior cells that have vertices with more than
     two vertices declared as boundary vertices
     """
@@ -197,13 +200,13 @@ def _delete_interior_cells(vertices, cells, dj_cutoff):
     boundary_edges, boundary_vertices = _external_topology(vertices, cells)
     etbv = boundary_edges.reshape(-1)
     # Count how many edges a vertex appears in.
-    _, count = np.unique(etbv, return_counts=True)
+    uebtv, count = np.unique(etbv, return_counts=True)
     # Get the cells connected to the vertices
-    vtoc, nne = _vertex_to_cell(cells)
+    vtoc, nne = _vertex_to_cell(vertices, cells)
     # Vertices which appear more than twice (implying they are shared by
     # more than two boundary edges)
     del_cell_idx = []
-    for ix in boundary_edges[count > 2]:
+    for ix in uebtv[count > 2]:
         conn_cells = vtoc[nne[ix] : nne[ix + 1]]
         del_cell = []
         for conn_cell in conn_cells:
@@ -213,24 +216,24 @@ def _delete_interior_cells(vertices, cells, dj_cutoff):
             if np.any(II) and np.any(JJ) and np.any(KK):
                 del_cell.append(conn_cell)
 
-       if len(del_cell) == 1:
-           del_cell_idx.append(del_cell)
-       elif len(dell_cell) > 1:
-           # Delete worst quality qualifying cell.
-           qual = simp_qual(vertices, cells[del_cell])
-           idx = np.argmin(qual)
-           del_cell_idx.append(del_cell[idx])
-       else:
-           # No connected cells have all vertices on boundary edge so we
-           # select the worst quality connecting cell.
-           tq = simp_qual(vertices, cells[conn_cells])
-           idx = np.argmin(qual)
-           del_cell_idx.append(conn_cell(idx))
+        if len(del_cell) == 1:
+            del_cell_idx.append(del_cell)
+        elif len(del_cell) > 1:
+            # Delete worst quality qualifying cell.
+            qual = simp_qual(vertices, cells[del_cell])
+            idx = np.argmin(qual)
+            del_cell_idx.append(del_cell[idx])
+        else:
+            # No connected cells have all vertices on boundary edge so we
+            # select the worst quality connecting cell.
+            qual = simp_qual(vertices, cells[conn_cells])
+            idx = np.argmin(qual)
+            del_cell_idx.append(conn_cell(idx))
 
-        print('ACCEPTED: Deleting {}  cells inside the main mesh').{len(del_cell_idx)}
-        cells.delete(del_cell_idx,axis=1)
+    print("ACCEPTED: Deleting {}  cells inside the main mesh".format(len(del_cell_idx)))
+    cells = np.delete(cells, del_cell_idx, 0)
 
-    return cells
+    return cells, del_cell_idx
 
 
 def _breadth_first_search(vertices, cells):
