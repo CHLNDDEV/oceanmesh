@@ -164,6 +164,7 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
     connected to the majority which represent a fractional
     area less than `dj_cutoff`.
     """
+    vertices, cells, _ = fix_mesh(vertices, cells, delete_unused=True)
     t1 = copy.copy(cells)
     t = []
     # Calculate the total area of the patch
@@ -183,11 +184,16 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
+        print(
+            "ACCEPTED: Deleting {}  cells outside the main mesh".format(np.sum(nflag))
+        )
 
         # Calculate the remaining area
         An = np.sum(simp_vol(vertices, t1))
 
-    p_cleaner, t_cleaner = fix_mesh(vertices, t)
+        vertices, t1, _ = fix_mesh(vertices, t1, delete_unused=True)
+
+    p_cleaner, t_cleaner, _ = fix_mesh(vertices, t, delete_unused=True)
 
     return p_cleaner, t_cleaner
 
@@ -236,38 +242,66 @@ def delete_interior_cells(vertices, cells):
     return cells, del_cell_idx
 
 
-def _breadth_first_search(vertices, cells):
+def _breadth_first_search(points, cells):
     """Breadth-First-Search (BFS) across the triangulation"""
 
     nt = len(cells)
-    EToS = np.random.randint(0, nt, 1)
+
+    # select a random cell
+    selected = np.random.randint(0, nt, 1)
+
     # Get cell-to-cell connectivity.
     ctoc, ix = _cell_to_cell(cells)
 
-    # temporary arrays
-    sz = int(np.ceil(np.sqrt(nt) * 2))
-    ic = np.zeros(sz, dtype=int)
-    ic0 = np.zeros(sz, dtype=int)
     nflag = np.zeros(nt)
 
-    ic[0] = EToS
-    icc = 1
+    searching = True
 
-    # Spider-search through connected mesh
-    while icc:
-        ic0[:icc] = ic[:icc]
-        icc0 = icc
-        icc = 0
-        for nn in range(icc0):
-            curr = ic0[nn]
+    visited = []
+    visited.append(*selected)
+
+    # Traverse through connected mesh
+    while searching:
+        searching = False
+        for c in visited:
             # Flag the current cell as visited
-            nflag[curr] = 1
+            nflag[c] = 1
             # Search connected cells
-            neis = ctoc[ix[curr] : ix[curr + 1], 1]
+            neis = ctoc[ix[c] : ix[c + 1], 1]
             # Flag connected cells as visited
             for nei in neis:
                 if nflag[nei] == 0:
                     nflag[nei] = 1
-                    ic[icc] = nei
-                    icc += 1
+                    visited.append(nei)
+                    searching = True
     return nflag
+
+
+# def _breadth_first_search(vertices, cells):
+#    """Breadth-First-Search (BFS) across the triangulation"""
+#
+#    nt = len(cells)
+#    EToS = np.random.randint(0, nt, 1)
+#    ctoc, ix = _cell_to_cell(cells)
+#
+#    # temporary arrays
+#    sz = int(np.ceil(np.sqrt(nt) * 2))
+#    ic = np.zeros(sz, dtype=int)
+#    ic0 = np.zeros(sz, dtype=int)
+#    nflag = np.zeros(nt)
+#
+#    ic[0] = EToS
+#    icc = 1
+#
+#    while icc:
+#        ic0[:icc] = ic[:icc]
+#        icc = 0
+#        for curr in ic0:
+#            nflag[curr] = 1
+#            neis = ctoc[ix[curr] : ix[curr + 1], 1]
+#            for nei in neis:
+#                if nflag[nei] == 0:
+#                    nflag[nei] = 1
+#                    ic[icc] = nei
+#                    icc += 1
+#    return nflag
