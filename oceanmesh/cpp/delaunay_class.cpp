@@ -209,7 +209,7 @@ PYBIND11_MODULE(delaunay_class, m) {
                // circulate around the neighbors
                for (size_t j=0; j < 3; ++j){
                   DT::Face_handle fh = face->neighbor(j);
-                  if(DT::is_infinite(fh)){
+                  if(dt.is_infinite(fh)){
                     nei_faces[i * 3 + j] = -1;
                    }
                   else {
