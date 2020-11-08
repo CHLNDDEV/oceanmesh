@@ -16,12 +16,14 @@
 #include <CGAL/Delaunay_triangulation_2.h>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
+#include <CGAL/Triangulation_face_base_with_info_2.h>
 
 namespace py = pybind11;
 
 using K = CGAL::Exact_predicates_inexact_constructions_kernel;
 using Vb = CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>;
-using Tds = CGAL::Triangulation_data_structure_2<Vb>;
+using Fb = CGAL::Triangulation_face_base_with_info_2<unsigned int, K>;
+using Tds = CGAL::Triangulation_data_structure_2<Vb, Fb>;
 using DT = CGAL::Delaunay_triangulation_2<K, Tds>;
 
 using Point = K::Point_2;
@@ -168,6 +170,8 @@ PYBIND11_MODULE(delaunay_class, m) {
                   fit != dt.finite_faces_end(); ++fit) {
 
                DT::Face_handle face = fit;
+               // critical! update the face index table so faces comes out correctly
+               face->info() = i;
                faces[i * 3] = face->vertex(0)->info();
                faces[i * 3 + 1] = face->vertex(1)->info();
                faces[i * 3 + 2] = face->vertex(2)->info();
@@ -189,6 +193,48 @@ PYBIND11_MODULE(delaunay_class, m) {
                  strides /* strides for each axis     */
                  ));
            })
+
+        .def("get_finite_face_neighbors",
+           [](DT &dt) {
+             // ouput the neighbors of each face
+             // infite neighbors are labeled as -1
+             std::vector<int> nei_faces;
+             nei_faces.resize(dt.number_of_faces() * 3);
+
+             int i = 0;
+             for (DT::Finite_faces_iterator fit = dt.finite_faces_begin();
+                  fit != dt.finite_faces_end(); ++fit) {
+               // get the handle
+               DT::Face_handle face = fit;
+               // circulate around the neighbors
+               for (size_t j=0; j < 3; ++j){
+                  DT::Face_handle fh = face->neighbor(j);
+                  if(DT::is_infinite(fh)){
+                    nei_faces[i * 3 + j] = -1;
+                   }
+                  else {
+                    nei_faces[i * 3 + j] = fh->info();
+                  }
+               }
+               i += 1;
+             }
+             ssize_t soint = sizeof(int);
+             ssize_t num_faces = nei_faces.size() / 3;
+             ssize_t ndim = 2;
+             std::vector<ssize_t> shape = {num_faces, 3};
+             std::vector<ssize_t> strides = {soint * 3, soint};
+
+             // return 2-D NumPy array
+             return py::array(py::buffer_info(
+                 nei_faces.data(), /* data as contiguous array  */
+                 sizeof(int),  /* size of one scalar        */
+                 py::format_descriptor<int>::format(), /* data type */
+                 2,      /* number of dimensions      */
+                 shape,  /* shape of the matrix       */
+                 strides /* strides for each axis     */
+                 ));
+           })
+
 
       .def("get_finite_vertices", [](DT &dt) {
         // ouput the vertices
