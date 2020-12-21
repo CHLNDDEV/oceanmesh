@@ -3,7 +3,7 @@ version: 2
 jobs:
   lint:
     docker:
-      - image: circleci/python:3
+      - image: circleci/python:3.8.1
     steps:
       - checkout
       - run: pip install -U black flake8 --user

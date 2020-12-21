@@ -153,7 +153,7 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
         faces = delete_exterior_faces(vertices, faces, dj_cutoff)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
-        faces = delete_interior_faces(vertices, faces)
+        faces, _ = delete_interior_faces(vertices, faces)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, faces)
@@ -245,7 +245,7 @@ def delete_interior_faces(vertices, faces):
     print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
     faces = np.delete(faces, del_face_idx, 0)
 
-    return faces
+    return faces, del_face_idx
 
 
 def _depth_first_search(points, faces):
