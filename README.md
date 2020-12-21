@@ -77,6 +77,9 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
      domain=domain, cell_size=cell_size, h0=1e3 / 111e3
  )
  
+ # remove degenerate mesh faces and other common problems in the mesh 
+ points, cells = make_mesh_boundaries_traversable(points, cells)
+ 
  meshio.write_points_cells(
      "simple_new_york.vtk",
      points,
