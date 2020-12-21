@@ -20,8 +20,8 @@ def _arg_sortrows(arr):
 
 
 def _face_to_face(t):
-    """Cell to cell connectivity table.
-        Cell `i` is connected to cells `ctoc[ix[i]:ix[i+1]]`
+    """Face to face connectivity table.
+        Face `i` is connected to faces `ctoc[ix[i]:ix[i+1], 1]`
         By connected, I mean shares a mutual edge.
 
     Parameters
@@ -32,27 +32,35 @@ def _face_to_face(t):
     Returns
     -------
     ctoc: array-like
-        Cell numbers connected to cells.
+        Face numbers connected to faces.
     ix: array-like
         indices into `ctoc`
 
     """
     nt = len(t)
     t = np.sort(t, axis=1)
-    # NB: we use order="F" to reshape because the `np.tile` command below
-    e = t[:, [[0, 1], [0, 2], [1, 2]]].reshape((nt * 3, 2), order="F")
-    trinum = np.tile(np.arange(nt), 3)
+    e = t[:, [[0, 1], [0, 2], [1, 2]]].reshape((nt * 3, 2))
+    trinum = np.repeat(np.arange(nt), 3)
     j = _arg_sortrows(e)
     e = e[j, :]
     trinum = trinum[j]
     k = np.argwhere(~np.diff(e, axis=0).any(axis=1))
     ctoc = np.concatenate((trinum[k], trinum[k + 1]), axis=1)
-    ctoc = np.append(ctoc, np.fliplr(ctoc), axis=0)
-    ctoc = ctoc[np.argsort(ctoc[:, 0]), :]
-    idx = np.argwhere(np.diff(ctoc[:, 0])) + 1
-    idx = np.insert(idx, 0, 0)
-    idx = np.append(idx, len(ctoc))
-    return ctoc, idx
+    dmy1 = ctoc[:, 0].argsort()
+    dmy2 = ctoc[:, 1].argsort()
+    tmp = np.vstack(
+        (
+            ctoc[dmy1, :],
+            np.fliplr(ctoc[dmy2]),
+            np.column_stack((np.arange(nt), np.arange(nt))),
+        )
+    )
+    j = _arg_sortrows(tmp)
+    ctoc = tmp[j, :]
+    ix = np.argwhere(np.diff(ctoc[:, 0])) + 1
+    ix = np.insert(ix, 0, 0)
+    ix = np.append(ix, len(ctoc))
+    return ctoc, ix
 
 
 def _vertex_to_cell(vertices, cells):
@@ -102,9 +110,9 @@ def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
     vertices: array-like
         The vertices of the "uncleaned" mesh.
     cells: array-like
-        The "cleaned" mesh connectivity.
+        The "uncleaned" mesh connectivity.
     dj_cutoff: float
-        A decimal percentage used to decide whether to keep or remove
+        A decimal percentage (max 1.0) used to decide whether to keep or remove
         disconnected portions of the meshing domain.
 
 
@@ -139,15 +147,14 @@ def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
 
     boundary_edges, boundary_vertices = _external_topology(vertices, cells)
 
-    # NB: when this inequality is not met, the mesh boundary '
-    # is valid and non-manifold
+    # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
         cells = delete_exterior_cells(vertices, cells, dj_cutoff)
-        vertices, cells = fix_mesh(vertices, cells)
+        vertices, cells, _ = fix_mesh(vertices, cells, delete_unused=True)
 
         cells = delete_interior_cells(vertices, cells)
-        vertices, cells = fix_mesh(vertices, cells)
+        vertices, cells, _ = fix_mesh(vertices, cells, delete_unused=True)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, cells)
 
@@ -164,13 +171,13 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
     connected to the majority which represent a fractional
     area less than `dj_cutoff`.
     """
-    vertices, cells, _ = fix_mesh(vertices, cells, delete_unused=True)
     t1 = copy.copy(cells)
-    t = [[]]
+    t = np.array([])
     # Calculate the total area of the patch
     A = np.sum(simp_vol(vertices, cells))
     An = A
-    while An / A > dj_cutoff:
+    # Based on area proportion
+    while (An / A) > dj_cutoff:
         # Perform the depth-First-Search to get `nflag`
         nflag = _depth_first_search(vertices, t1)
 
@@ -179,23 +186,20 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
         An = np.sum(simp_vol(vertices, t2))
 
         # If large enough, retain this component
-        if An / A > dj_cutoff:
-            t.append(t2)
+        if (An / A) > dj_cutoff:
+            if len(t) == 0:
+                t = t2
+            else:
+                t = np.concatenate((t, t2))
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
-        print(
-            "ACCEPTED: Deleting {}  cells outside the main mesh".format(np.sum(nflag))
-        )
+        print(f"ACCEPTED: Deleting {int(np.sum(nflag))} cells outside the main mesh")
 
         # Calculate the remaining area
         An = np.sum(simp_vol(vertices, t1))
 
-        vertices, t1, _ = fix_mesh(vertices, t1, delete_unused=True)
-
-    p_cleaner, t_cleaner, _ = fix_mesh(vertices, t, delete_unused=True)
-
-    return p_cleaner, t_cleaner
+    return t
 
 
 def delete_interior_cells(vertices, cells):
@@ -223,7 +227,7 @@ def delete_interior_cells(vertices, cells):
                 del_cell.append(conn_cell)
 
         if len(del_cell) == 1:
-            del_cell_idx.append(del_cell)
+            del_cell_idx.append(del_cell[0])
         elif len(del_cell) > 1:
             # Delete worst quality qualifying cell.
             qual = simp_qual(vertices, cells[del_cell])
@@ -234,16 +238,16 @@ def delete_interior_cells(vertices, cells):
             # select the worst quality connecting cell.
             qual = simp_qual(vertices, cells[conn_cells])
             idx = np.argmin(qual)
-            del_cell_idx.append(conn_cell(idx))
+            del_cell_idx.append(conn_cells[idx])
 
-    print("ACCEPTED: Deleting {}  cells inside the main mesh".format(len(del_cell_idx)))
+    print(f"ACCEPTED: Deleting {len(del_cell_idx)} cells inside the main mesh")
     cells = np.delete(cells, del_cell_idx, 0)
 
-    return cells, del_cell_idx
+    return cells
 
 
 def _depth_first_search(points, cells):
-    """depth-First-Search (DFS) across the triangulation"""
+    """Depth-First-Search (DFS) across the triangulation"""
 
     # Get graph connectivity.
     ctoc, idx = _face_to_face(cells)
@@ -267,7 +271,7 @@ def _depth_first_search(points, cells):
             # Flag the current cell as visited
             nflag[c] = 1
             # Search connected cells
-            neis = [nei for nei in ctoc[c] if nei > -1]
+            neis = [nei for nei in ctoc[idx[c] : idx[c + 1], 1]]
             # Flag connected cells as visited
             for nei in neis:
                 if nflag[nei] == 0:
