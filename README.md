@@ -50,7 +50,8 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
 **Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView.**
 
-![NewYorkMesh](https://user-images.githubusercontent.com/18619644/94013474-8196b400-fd80-11ea-8471-21fa8853f264.png)
+![NewYorkMesh](https://user-images.githubusercontent.com/18619644/102819581-7587b600-43b2-11eb-9410-fbf3cadf95b9.png)
+
 
 ```
  import meshio
@@ -76,6 +77,9 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
  points, cells = generate_mesh(
      domain=domain, cell_size=cell_size, h0=1e3 / 111e3
  )
+ 
+ # remove degenerate mesh faces and other common problems in the mesh 
+ points, cells = make_mesh_boundaries_traversable(points, cells)
  
  meshio.write_points_cells(
      "simple_new_york.vtk",

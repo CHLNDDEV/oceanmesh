@@ -1,6 +1,28 @@
 import numpy as np
 
 
+def simp_qual(p, t):
+    """Simplex quality radius-to-edge ratio
+    :param p: vertex coordinates of mesh
+    :type p: numpy.ndarray[`float` x dim]
+    :param t: mesh connectivity
+    :type t: numpy.ndarray[`int` x (dim + 1)]
+    :return: signed mesh quality: signed mesh quality (1.0 is perfect)
+    :rtype: numpy.ndarray[`float` x 1]
+    """
+    assert p.ndim == 2 and t.ndim == 2 and p.shape[1] + 1 == t.shape[1]
+
+    def length(p1):
+        return np.sqrt((p1 ** 2).sum(1))
+
+    a = length(p[t[:, 1]] - p[t[:, 0]])
+    b = length(p[t[:, 2]] - p[t[:, 0]])
+    c = length(p[t[:, 2]] - p[t[:, 1]])
+    r = 0.5 * np.sqrt((b + c - a) * (c + a - b) * (a + b - c) / (a + b + c))
+    R = a * b * c / np.sqrt((a + b + c) * (b + c - a) * (c + a - b) * (a + b - c))
+    return 2 * r / R
+
+
 def fix_mesh(p, t, ptol=2e-13, dim=2, delete_unused=False):
     """Remove duplicated/unused vertices and entities and
        ensure orientation of entities is CCW.

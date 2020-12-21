@@ -1,8 +1,9 @@
 import numpy
 import scipy.spatial
+from inpoly import inpoly2
 
 from . import edges
-from .inpoly import inpoly
+
 
 __all__ = ["signed_distance_function", "Domain"]
 
@@ -46,9 +47,9 @@ def signed_distance_function(shoreline):
         # Initialize d with some positive number larger than geps
         dist = numpy.zeros(len(x)) + 1.0
         # are points inside the boubox?
-        in_boubox, _ = inpoly(x, boubox, e_box)
+        in_boubox, _ = inpoly2(x, boubox, e_box)
         # are points inside the shoreline?
-        in_shoreline, _ = inpoly(x, poly, e)
+        in_shoreline, _ = inpoly2(x, poly, e)
         # compute dist to shoreline
         d, _ = tree.query(x, k=1)
         # d is signed negative if inside the
