@@ -4,15 +4,20 @@ from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
 from oceanmesh.grid import Grid
 from oceanmesh.signed_distance_function import signed_distance_function, Domain
-from oceanmesh.clean import delete_interior_cells, delete_exterior_cells
+from oceanmesh.clean import (
+    delete_interior_faces,
+    delete_exterior_faces,
+    make_mesh_boundaries_traversable,
+)
 
 from .cpp.delaunay_class import DelaunayTriangulation
 from .inpoly import inpoly
 from .mesh_generator import generate_mesh
 
 __all__ = [
-    "delete_interior_cells",
-    "delete_exterior_cells",
+    "make_mesh_boundaries_traversable",
+    "delete_interior_faces",
+    "delete_exterior_faces",
     "SizeFunction",
     "Grid",
     "Geodata",
