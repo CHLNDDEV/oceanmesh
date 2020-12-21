@@ -11,7 +11,6 @@ from oceanmesh.clean import (
 )
 
 from .cpp.delaunay_class import DelaunayTriangulation
-from .inpoly import inpoly
 from .mesh_generator import generate_mesh
 
 __all__ = [
@@ -28,7 +27,6 @@ __all__ = [
     "signed_distance_function",
     "get_poly_edges",
     "draw_edges",
-    "inpoly",
     "DelaunayTriangulation",
     "generate_mesh",
     "fix_mesh",
