@@ -19,7 +19,7 @@ def _arg_sortrows(arr):
     return i[j]
 
 
-def _cell_to_cell(t):
+def _face_to_face(t):
     """Cell to cell connectivity table.
         Cell `i` is connected to cells `ctoc[ix[i]:ix[i+1]]`
         By connected, I mean shares a mutual edge.
@@ -131,7 +131,7 @@ def make_mesh_boundaries_traversable(vertices, cells, dj_cutoff=0.05):
     delete, the one with the lowest quality is chosen.
 
     Exterior Check: Finds small disjoint portions of the mesh and removes
-    them using a breadth-first search. The individual disjoint portions are
+    them using a depth-first search. The individual disjoint portions are
     removed based on `dj_cutoff` which is a decimal representing a fractional
     threshold component of the total mesh.
 
@@ -166,13 +166,13 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
     """
     vertices, cells, _ = fix_mesh(vertices, cells, delete_unused=True)
     t1 = copy.copy(cells)
-    t = []
+    t = [[]]
     # Calculate the total area of the patch
     A = np.sum(simp_vol(vertices, cells))
     An = A
     while An / A > dj_cutoff:
-        # Perform the Breadth-First-Search to get `nflag`
-        nflag = _breadth_first_search(vertices, t1)
+        # Perform the depth-First-Search to get `nflag`
+        nflag = _depth_first_search(vertices, t1)
 
         # Get new triangulation and its area
         t2 = t1[nflag == 1, :]
@@ -180,7 +180,7 @@ def delete_exterior_cells(vertices, cells, dj_cutoff):
 
         # If large enough, retain this component
         if An / A > dj_cutoff:
-            t = np.append(t, t2, axis=0)
+            t.append(t2)
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
@@ -242,16 +242,16 @@ def delete_interior_cells(vertices, cells):
     return cells, del_cell_idx
 
 
-def _breadth_first_search(points, cells):
-    """Breadth-First-Search (BFS) across the triangulation"""
+def _depth_first_search(points, cells):
+    """depth-First-Search (DFS) across the triangulation"""
+
+    # Get graph connectivity.
+    ctoc, idx = _face_to_face(cells)
 
     nt = len(cells)
 
     # select a random cell
     selected = np.random.randint(0, nt, 1)
-
-    # Get cell-to-cell connectivity.
-    ctoc, ix = _cell_to_cell(cells)
 
     nflag = np.zeros(nt)
 
@@ -267,7 +267,7 @@ def _breadth_first_search(points, cells):
             # Flag the current cell as visited
             nflag[c] = 1
             # Search connected cells
-            neis = ctoc[ix[c] : ix[c + 1], 1]
+            neis = [nei for nei in ctoc[c] if nei > -1]
             # Flag connected cells as visited
             for nei in neis:
                 if nflag[nei] == 0:
@@ -275,33 +275,3 @@ def _breadth_first_search(points, cells):
                     visited.append(nei)
                     searching = True
     return nflag
-
-
-# def _breadth_first_search(vertices, cells):
-#    """Breadth-First-Search (BFS) across the triangulation"""
-#
-#    nt = len(cells)
-#    EToS = np.random.randint(0, nt, 1)
-#    ctoc, ix = _cell_to_cell(cells)
-#
-#    # temporary arrays
-#    sz = int(np.ceil(np.sqrt(nt) * 2))
-#    ic = np.zeros(sz, dtype=int)
-#    ic0 = np.zeros(sz, dtype=int)
-#    nflag = np.zeros(nt)
-#
-#    ic[0] = EToS
-#    icc = 1
-#
-#    while icc:
-#        ic0[:icc] = ic[:icc]
-#        icc = 0
-#        for curr in ic0:
-#            nflag[curr] = 1
-#            neis = ctoc[ix[curr] : ix[curr + 1], 1]
-#            for nei in neis:
-#                if nflag[nei] == 0:
-#                    nflag[nei] = 1
-#                    ic[icc] = nei
-#                    icc += 1
-#    return nflag
