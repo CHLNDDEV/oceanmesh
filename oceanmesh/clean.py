@@ -98,7 +98,7 @@ def _vertex_to_face(vertices, faces):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
+def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05, verbose=1):
     """
     A mesh described by vertices and faces is  "cleaned" and returned.
     Alternates between checking "interior" and "exterior" portions
@@ -147,13 +147,15 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
 
     boundary_edges, boundary_vertices = _external_topology(vertices, faces)
 
+    if verbose > 0:
+        print("Performing mesh cleaning operations...")
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        faces = delete_exterior_faces(vertices, faces, dj_cutoff)
+        faces = delete_exterior_faces(vertices, faces, dj_cutoff, verbose)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
-        faces, _ = delete_interior_faces(vertices, faces)
+        faces, _ = delete_interior_faces(vertices, faces, verbose)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, faces)
@@ -168,7 +170,7 @@ def _external_topology(vertices, faces):
     return boundary_edges, boundary_vertices
 
 
-def delete_exterior_faces(vertices, faces, dj_cutoff):
+def delete_exterior_faces(vertices, faces, dj_cutoff, verbose):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
     area less than `dj_cutoff`.
@@ -196,7 +198,10 @@ def delete_exterior_faces(vertices, faces, dj_cutoff):
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
-        print(f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh")
+        if verbose > 1:
+            print(
+                f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh"
+            )
 
         # Calculate the remaining area
         An = np.sum(simp_vol(vertices, t1))
@@ -204,7 +209,7 @@ def delete_exterior_faces(vertices, faces, dj_cutoff):
     return t
 
 
-def delete_interior_faces(vertices, faces):
+def delete_interior_faces(vertices, faces, verbose):
     """Delete interior faces that have vertices with more than
     two vertices declared as boundary vertices
     """
@@ -242,7 +247,8 @@ def delete_interior_faces(vertices, faces):
             idx = np.argmin(qual)
             del_face_idx.append(conn_faces[idx])
 
-    print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
+    if verbose > 1:
+        print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
     faces = np.delete(faces, del_face_idx, 0)
 
     return faces, del_face_idx

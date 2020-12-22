@@ -108,12 +108,15 @@ def _is_overlapping(bbox1, bbox2):
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
+def _classify_shoreline(bbox, polys, h0, minimum_area_mult, verbose):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
     """
+    if verbose > 1:
+        print("Classifying shoreline segments...")
+
     boubox = _create_boubox(bbox)
 
     inner = numpy.empty(shape=(0, 2))
@@ -155,10 +158,12 @@ def _chaikins_corner_cutting(coords, refinements=5):
     return coords
 
 
-def _smooth_shoreline(polys, N):
+def _smooth_shoreline(polys, N, verbose):
     """Smoothes the shoreline segment-by-segment using
     a `N` refinement Chaikins Corner cutting algorithm.
     """
+    if verbose > 1:
+        print("Smoothing shoreline segments...")
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
@@ -168,8 +173,10 @@ def _smooth_shoreline(polys, N):
     return _convert_to_array(out)
 
 
-def _nth_simplify(polys, bbox):
+def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
+    if verbose > 1:
+        print("Collpasing segments outside bbox...")
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
@@ -226,12 +233,13 @@ class Geodata:
             self.__bbox = value
 
 
-def _from_shapefile(filename, bbox):
+def _from_shapefile(filename, bbox, verbose):
     """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
 
     polys = []  # tmp storage for polygons and polylines
 
-    print("Reading in ESRI Shapefile... " + filename)
+    if verbose > 0:
+        print("Reading in ESRI Shapefile... " + filename)
     s = shapefile.Reader(filename)
     re = numpy.array([0, 2, 1, 3], dtype=int)
     for shape in s.shapes():
@@ -254,7 +262,7 @@ class Shoreline(Geodata):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
         super().__init__(bbox)
 
         self.shp = shp
@@ -266,16 +274,16 @@ class Shoreline(Geodata):
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
-        polys = _from_shapefile(self.shp, self.bbox)
+        polys = _from_shapefile(self.shp, self.bbox, verbose)
 
-        polys = _smooth_shoreline(polys, self.refinements)
+        polys = _smooth_shoreline(polys, self.refinements, verbose)
 
-        polys = _densify(polys, self.h0, self.bbox)
+        polys = _densify(polys, self.h0, self.bbox, verbose)
 
-        polys = _nth_simplify(polys, self.bbox)
+        polys = _nth_simplify(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, polys, self.h0 / 2, self.minimum_area_mult
+            self.bbox, polys, self.h0 / 2, self.minimum_area_mult, verbose
         )
 
     @property
@@ -397,10 +405,11 @@ def _extract_bounds(lons, lats, bbox):
     return latli, latui, lonli, lonui
 
 
-def _from_tif(filename, bbox):
+def _from_tif(filename, bbox, verbose):
     """Read in a digitial elevation model from a tif file"""
 
-    print("Reading in tif... " + filename)
+    if verbose > 0:
+        print("Reading in tif... " + filename)
 
     with Image.open(filename) as img:
         meta_dict = {TAGS[key]: img.tag[key] for key in img.tag.keys()}
@@ -429,10 +438,11 @@ def _from_tif(filename, bbox):
     return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 
 
-def _from_netcdf(filename, bbox):
+def _from_netcdf(filename, bbox, verbose):
     """Read in digitial elevation model from a NetCDF file"""
 
-    print("Reading in NetCDF... " + filename)
+    if verbose > 0:
+        print("Reading in NetCDF... " + filename)
     # well-known variable names
     wkv_x = ["x", "Longitude", "longitude", "lon"]
     wkv_y = ["y", "Latitude", "latitude", "lat"]
@@ -462,7 +472,7 @@ def _from_netcdf(filename, bbox):
 class DEM(Geodata):
     """Digitial elevation model read in from a tif or NetCDF file"""
 
-    def __init__(self, dem, bbox):
+    def __init__(self, dem, bbox, verbose=1):
         super().__init__(bbox)
 
         self.dem = dem
@@ -470,9 +480,9 @@ class DEM(Geodata):
         self.Fb = None
         basename, ext = os.path.splitext(self.dem)
         if ext.lower() in [".nc"]:
-            la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
+            la, lo, topobathy = _from_netcdf(self.dem, self.bbox, verbose)
         elif ext.lower() in [".tif"]:
-            la, lo, topobathy = _from_tif(self.dem, self.bbox)
+            la, lo, topobathy = _from_tif(self.dem, self.bbox, verbose)
         else:
             raise ValueError(
                 "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])

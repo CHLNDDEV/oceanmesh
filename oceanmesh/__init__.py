@@ -11,6 +11,7 @@ from oceanmesh.clean import (
 )
 
 from .cpp.delaunay_class import DelaunayTriangulation
+from .cpp.fast_geometry import unique_edges
 from .mesh_generator import generate_mesh
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "get_poly_edges",
     "draw_edges",
     "DelaunayTriangulation",
+    "unique_edges",
     "generate_mesh",
     "fix_mesh",
     "simp_vol",

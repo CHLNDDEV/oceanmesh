@@ -4,6 +4,7 @@ import numpy as np
 import scipy.sparse as spsparse
 
 from .cpp.delaunay_class import DelaunayTriangulation as DT
+from .cpp.fast_geometry import unique_edges
 from .fix_mesh import fix_mesh
 from .grid import Grid
 from .signed_distance_function import Domain
@@ -158,7 +159,8 @@ def generate_mesh(domain, edge_length, **kwargs):
     assert N > 0, "No vertices to mesh with!"
 
     print_msg1(
-        "Commencing mesh generation with %d vertices." % (N),
+        "Commencing mesh generation with %d vertices will perform %i iterations."
+        % (N, max_iter),
     )
 
     for count in range(max_iter):
@@ -177,7 +179,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
             p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
-            print_msg1("Termination reached...maximum number of iterations reached.")
+            print_msg1("Termination reached...maximum number of iterations.")
             return p, t
 
         # Compute the forces on the bars
@@ -232,14 +234,7 @@ def _unpack_domain(domain, opts):
 def _get_bars(t):
     """Describe each bar by a unique pair of nodes"""
     bars = np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]])
-    return _unique_rows(np.ascontiguousarray(bars, dtype=np.uint32))
-
-
-def _unique_rows(ar):
-    ar_row_view = ar.view("|S%d" % (ar.itemsize * ar.shape[1]))
-    _, unique_row_indices = np.unique(ar_row_view, return_index=True)
-    ar_out = ar[unique_row_indices]
-    return ar_out
+    return unique_edges(bars)
 
 
 def _compute_forces(p, t, fh, h0, L0mult):
