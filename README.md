@@ -61,6 +61,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
      distance_sizing_function,
      signed_distance_function,
      generate_mesh,
+     make_mesh_boundaries_traversable,
  )
 
 
@@ -74,9 +75,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
  domain = signed_distance_function(shore)
 
- points, cells = generate_mesh(
-     domain, edge_length,
- )
+ points, cells = generate_mesh(domain, edge_length)
 
  # remove degenerate mesh faces and other common problems in the mesh
  points, cells = make_mesh_boundaries_traversable(points, cells)

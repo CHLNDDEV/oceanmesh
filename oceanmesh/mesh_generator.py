@@ -157,13 +157,11 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     assert N > 0, "No vertices to mesh with!"
 
-    count = 0
     print_msg1(
         "Commencing mesh generation with %d vertices." % (N),
     )
 
-    while True:
-
+    for count in range(max_iter):
         start = time.time()
 
         # (Re)-triangulation by the Delaunay algorithm
@@ -180,7 +178,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         if count == (max_iter - 1):
             p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
             print_msg1("Termination reached...maximum number of iterations reached.")
-            break
+            return p, t
 
         # Compute the forces on the bars
         Ftot = _compute_forces(p, t, fh, h0, L0mult)
@@ -201,12 +199,8 @@ def generate_mesh(domain, edge_length, **kwargs):
             % (count + 1, maxdp, len(p), len(t)),
         )
 
-        count += 1
-
         end = time.time()
         print_msg2("     Elapsed wall-clock time %f : " % (end - start))
-
-    return p, t
 
 
 def _unpack_sizing(edge_length, opts):
