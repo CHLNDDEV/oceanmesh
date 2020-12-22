@@ -50,6 +50,7 @@ def _parse_kwargs(kwargs):
             "edge_length",
             "bbox",
             "verbose",
+            "h0",
         }:
             pass
         else:
