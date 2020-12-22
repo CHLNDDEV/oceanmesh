@@ -28,7 +28,7 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, grid_spacing, hmin, values=None, fill=None):
+    def __init__(self, bbox, grid_spacing, hmin, values=None, fill=-99999):
 
         self.x0y0 = (
             min(bbox[0:2]),
@@ -174,15 +174,13 @@ class Grid:
         """
         # is grid2 even a grid object?
         if not isinstance(grid2, Grid):
-            print("Both objects must be grids")
-            raise ValueError
+            raise ValueError("Both objects must be grids.")
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
         x2min, x2max, y2min, y2max = self.bbox
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         if overlap is False:
-            print("Grid objects do not overlap, nothing to do.")
-            raise ValueError
+            raise ValueError("Grid objects do not overlap.")
         lon1, lat1 = self.create_vecs()
         lon2, lat2 = grid2.create_vecs()
         # take data from grid1 --> grid2
@@ -197,7 +195,12 @@ class Grid:
         new_values = fp((xg, yg))
         # where fill replace with grid2 values
         new_values[new_values == self.fill] = grid2.values[new_values == self.fill]
-        return Grid(bbox=grid2.bbox, grid_spacing=grid2.grid_spacing, values=new_values)
+        return Grid(
+            bbox=grid2.bbox,
+            grid_spacing=grid2.grid_spacing,
+            hmin=numpy.amin(new_values),
+            values=new_values,
+        )
 
     def plot(self, hold=False, vmin=0.0, vmax=0.1):
         """Visualize the values in :obj:`Grid`
@@ -219,7 +222,7 @@ class Grid:
         x, y = self.create_grid()
 
         fig, ax = plt.subplots()
-        c = ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
+        c = ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax)
         ax.axis("equal")
         if hold is False:
             fig.colorbar(c, ax=ax)
