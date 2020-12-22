@@ -178,7 +178,8 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
-            p, t = _termination(p, t, verbose=opts["verbose"])
+            p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
+            print_msg1("Termination reached...maximum number of iterations reached.")
             break
 
         # Compute the forces on the bars
@@ -232,14 +233,6 @@ def _unpack_domain(domain, opts):
     else:
         raise ValueError("`domain` must be a function or a :class:`geometry` object")
     return fd, bbox
-
-
-def _termination(p, t, verbose):
-    """Shut it down when reacing `max_iter`"""
-    if verbose:
-        print("Termination reached...maximum number of iterations reached.", flush=True)
-    p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
-    return p, t
 
 
 def _get_bars(t):

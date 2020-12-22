@@ -64,7 +64,6 @@ def _densify(poly, maxdiff, bbox, radius=0):
     nin[~inside[1:]] = 0  # no need to densify outside of bbox please
     sumnin = numpy.nansum(nin)
     if sumnin == 0:
-        print("No densification is needed")
         return numpy.hstack((lon[:, None], lat[:, None]))
     nout = sumnin + nx
 
@@ -232,7 +231,7 @@ def _from_shapefile(filename, bbox):
 
     polys = []  # tmp storage for polygons and polylines
 
-    print("Reading in shapefile... " + filename)
+    print("Reading in ESRI Shapefile... " + filename)
     s = shapefile.Reader(filename)
     re = numpy.array([0, 2, 1, 3], dtype=int)
     for shape in s.shapes():
