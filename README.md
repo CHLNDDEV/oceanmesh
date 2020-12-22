@@ -70,12 +70,12 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
  shore = Shoreline(fname, bbox, h0)
 
- edge_length = distance_sizing_function(shore, max_size=5e3/ 111e3)
+ edge_length = distance_sizing_function(shore, max_size=5e3)
 
  domain = signed_distance_function(shore)
 
  points, cells = generate_mesh(
-     domain, edge_length, h0=1e3 / 111e3
+     domain, edge_length,
  )
 
  # remove degenerate mesh faces and other common problems in the mesh
