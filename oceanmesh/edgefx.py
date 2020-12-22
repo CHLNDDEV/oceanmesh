@@ -22,7 +22,8 @@ def distance_sizing_function(shoreline, rate=0.15, max_size=99999.0):
         A sizing function that takes a point and returns a value
 
     """
-    grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0)
+    max_size /= 111e3  # assume the value is passed in meters
+    grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()

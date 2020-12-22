@@ -184,9 +184,9 @@ def _nth_simplify(polys, bbox):
                 line = numpy.append(line, [poly[j, :]], axis=0)
             else:  # pt is outside of domain
                 bd = min(
-                    j + 200, len(inside) - 1
+                    j + 50, len(inside) - 1
                 )  # collapses 200 pts to 1 vertex (arbitary)
-                exte = min(200, bd - j)
+                exte = min(50, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
                     line = numpy.append(line, [poly[j + exte, :]], axis=0)

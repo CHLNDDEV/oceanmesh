@@ -58,7 +58,7 @@ def _parse_kwargs(kwargs):
             )
 
 
-def generate_mesh(domain, edge_length, h0, **kwargs):
+def generate_mesh(domain, edge_length, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to a
         sizing function `edge_length` and signed distance function.
 
@@ -68,8 +68,6 @@ def generate_mesh(domain, edge_length, h0, **kwargs):
         A function that takes a point and returns the signed nearest distance to the domain boundary Ω.
     edge_length: A function object.
         A function that can evalulate a point and return a mesh size.
-    h0: `float`
-        The minimum element size in the domain.
     \**kwargs:
         See below
 
@@ -90,6 +88,9 @@ def generate_mesh(domain, edge_length, h0, **kwargs):
             The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
+        * *h0* (``float``) --
+            The minimum element size in the domain. Taken from `domain` normally.
+
 
     Returns
     -------
@@ -106,6 +107,7 @@ def generate_mesh(domain, edge_length, h0, **kwargs):
         "pfix": None,
         "points": None,
         "verbose": 1,
+        "h0": None,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -121,7 +123,7 @@ def generate_mesh(domain, edge_length, h0, **kwargs):
         print(msg, flush=True)
 
     fd, bbox = _unpack_domain(domain, opts)
-    fh = _unpack_sizing(edge_length)
+    fh, h0 = _unpack_sizing(edge_length, opts)
 
     if not isinstance(bbox, tuple):
         raise ValueError("`bbox` must be a tuple")
@@ -205,16 +207,18 @@ def generate_mesh(domain, edge_length, h0, **kwargs):
     return p, t
 
 
-def _unpack_sizing(edge_length):
+def _unpack_sizing(edge_length, opts):
     if isinstance(edge_length, Grid):
         fh = edge_length.eval
+        h0 = edge_length.hmin
     elif callable(edge_length):
         fh = edge_length
+        h0 = opts["h0"]
     else:
         raise ValueError(
             "`edge_length` must either be a function or a `edge_length` object"
         )
-    return fh
+    return fh, h0
 
 
 def _unpack_domain(domain, opts):

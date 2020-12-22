@@ -28,13 +28,14 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, grid_spacing, values=None, fill=None):
+    def __init__(self, bbox, grid_spacing, hmin, values=None, fill=None):
 
         self.x0y0 = (
             min(bbox[0:2]),
             min(bbox[2:]),
         )  # bottom left corner coordinates
         self.grid_spacing = grid_spacing
+        self.hmin = hmin
         ceil, abs = numpy.ceil, numpy.abs
         self.nx = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing)) + 1
         self.ny = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing)) + 1

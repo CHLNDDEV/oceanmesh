@@ -14,9 +14,9 @@ def test_mesh_generator_rectangle():
     def domain(x):
         return drectangle(x, *bbox)
 
-    def cell_size(p):
+    def edge_length(p):
         return np.array([0.1] * len(p))
 
-    points, cells = generate_mesh(domain=domain, cell_size=cell_size, h0=h0, bbox=bbox)
+    points, cells = generate_mesh(domain=domain, edge_length=edge_length, h0=h0, bbox=bbox)
 
     assert np.isclose(np.sum(simp_vol(points, cells)), 1.0, 0.01)
