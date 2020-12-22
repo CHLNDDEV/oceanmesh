@@ -16,7 +16,7 @@ def test_verbose():
     def constant_size(p):
         return np.array([0.1] * len(p))
 
-    for verbosity, correct_size in zip([0, 1, 2], [0, 106, 5928]):
+    for verbosity, correct_size in zip([0, 1, 2], [0, 125, 5947]):
         sys.stdout = open("output.txt", "w")
         points, cells = oceanmesh.generate_mesh(
             domain=square,
