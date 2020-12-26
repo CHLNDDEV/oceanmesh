@@ -67,9 +67,9 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
  fname = "datasets/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
- bbox, h0 = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+ bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
- shore = Shoreline(fname, bbox, h0)
+ shore = Shoreline(fname, bbox, min_edge_length)
 
  edge_length = distance_sizing_function(shore, max_size=5e3)
 
