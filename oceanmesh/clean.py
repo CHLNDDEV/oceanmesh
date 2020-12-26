@@ -98,7 +98,7 @@ def _vertex_to_face(vertices, faces):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05, verbose=1):
+def make_mesh_boundaries_traversable(vertices, faces, min_disconnected_area=0.05, verbose=1):
     """
     A mesh described by vertices and faces is  "cleaned" and returned.
     Alternates between checking "interior" and "exterior" portions
@@ -111,7 +111,7 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05, verbose=1)
         The vertices of the "uncleaned" mesh.
     faces: array-like
         The "uncleaned" mesh connectivity.
-    dj_cutoff: float
+    min_disconnected_area: float
         A decimal percentage (max 1.0) used to decide whether to keep or remove
         disconnected portions of the meshing domain.
 
@@ -140,7 +140,7 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05, verbose=1)
 
     Exterior Check: Finds small disjoint portions of the mesh and removes
     them using a depth-first search. The individual disjoint portions are
-    removed based on `dj_cutoff` which is a decimal representing a fractional
+    removed based on `min_disconnected_area` which is a decimal representing a fractional
     threshold component of the total mesh.
 
     """
@@ -152,7 +152,7 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05, verbose=1)
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        faces = delete_exterior_faces(vertices, faces, dj_cutoff, verbose)
+        faces = delete_exterior_faces(vertices, faces, min_disconnected_area, verbose)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         faces, _ = delete_interior_faces(vertices, faces, verbose)
@@ -170,10 +170,10 @@ def _external_topology(vertices, faces):
     return boundary_edges, boundary_vertices
 
 
-def delete_exterior_faces(vertices, faces, dj_cutoff, verbose):
+def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
-    area less than `dj_cutoff`.
+    area less than `min_disconnected_area`.
     """
     t1 = copy.deepcopy(faces)
     t = np.array([])
@@ -181,7 +181,7 @@ def delete_exterior_faces(vertices, faces, dj_cutoff, verbose):
     A = np.sum(simp_vol(vertices, faces))
     An = A
     # Based on area proportion
-    while (An / A) > dj_cutoff:
+    while (An / A) > min_disconnected_area:
         # Perform the depth-First-Search to get `nflag`
         nflag = _depth_first_search(vertices, t1)
 
@@ -190,7 +190,7 @@ def delete_exterior_faces(vertices, faces, dj_cutoff, verbose):
         An = np.sum(simp_vol(vertices, t2))
 
         # If large enough, retain this component
-        if (An / A) > dj_cutoff:
+        if (An / A) > min_disconnected_area:
             if len(t) == 0:
                 t = t2
             else:
