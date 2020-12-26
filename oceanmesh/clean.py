@@ -98,7 +98,9 @@ def _vertex_to_face(vertices, faces):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(vertices, faces, min_disconnected_area=0.05, verbose=1):
+def make_mesh_boundaries_traversable(
+    vertices, faces, min_disconnected_area=0.05, verbose=1
+):
     """
     A mesh described by vertices and faces is  "cleaned" and returned.
     Alternates between checking "interior" and "exterior" portions

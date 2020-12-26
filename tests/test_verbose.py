@@ -21,7 +21,7 @@ def test_verbose():
         points, cells = oceanmesh.generate_mesh(
             domain=square,
             edge_length=constant_size,
-            h0=0.10,
+            min_edge_length=0.10,
             bbox=(0.0, 1.0, 0.0, 1.0),
             verbose=verbosity,
         )

@@ -28,7 +28,7 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, grid_spacing, hmin, values=None, fill=None):
+    def __init__(self, bbox, grid_spacing, hmin=None, values=None, fill=None):
 
         self.x0y0 = (
             min(bbox[0:2]),

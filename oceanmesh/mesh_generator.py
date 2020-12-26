@@ -51,7 +51,7 @@ def _parse_kwargs(kwargs):
             "edge_length",
             "bbox",
             "verbose",
-            "h0",
+            "min_edge_length",
         }:
             pass
         else:
@@ -90,7 +90,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
-        * *h0* (``float``) --
+        * *min_edge_length* (``float``) --
             The minimum element size in the domain. Taken from `domain` normally.
 
 
@@ -109,7 +109,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "pfix": None,
         "points": None,
         "verbose": 1,
-        "h0": None,
+        "min_edge_length": None,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -125,7 +125,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         print(msg, flush=True)
 
     fd, bbox = _unpack_domain(domain, opts)
-    fh, h0 = _unpack_sizing(edge_length, opts)
+    fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
     if not isinstance(bbox, tuple):
         raise ValueError("`bbox` must be a tuple")
@@ -136,8 +136,8 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     bbox = np.array(bbox).reshape(-1, 2)
 
-    if h0 < 0:
-        raise ValueError("`h0` must be > 0")
+    if min_edge_length < 0:
+        raise ValueError("`min_edge_length` must be > 0")
 
     if opts["max_iter"] < 0:
         raise ValueError("`max_iter` must be > 0")
@@ -147,12 +147,12 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     L0mult = 1 + 0.4 / 2 ** (dim - 1)
     delta_t = 0.1
-    geps = 1e-1 * h0
-    deps = np.sqrt(np.finfo(np.double).eps) * h0
+    geps = 1e-1 * min_edge_length
+    deps = np.sqrt(np.finfo(np.double).eps) * min_edge_length
 
     pfix, nfix = _unpack_pfix(dim, opts)
 
-    p = _generate_initial_points(h0, geps, bbox, fh, fd, pfix)
+    p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
 
     N = p.shape[0]
 
@@ -183,7 +183,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             return p, t
 
         # Compute the forces on the bars
-        Ftot = _compute_forces(p, t, fh, h0, L0mult)
+        Ftot = _compute_forces(p, t, fh, min_edge_length, L0mult)
 
         # Force = 0 at fixed points
         Ftot[:nfix] = 0
@@ -208,15 +208,15 @@ def generate_mesh(domain, edge_length, **kwargs):
 def _unpack_sizing(edge_length, opts):
     if isinstance(edge_length, Grid):
         fh = edge_length.eval
-        h0 = edge_length.hmin
+        min_edge_length = edge_length.hmin
     elif callable(edge_length):
         fh = edge_length
-        h0 = opts["h0"]
+        min_edge_length = opts["min_edge_length"]
     else:
         raise ValueError(
             "`edge_length` must either be a function or a `edge_length` object"
         )
-    return fh, h0
+    return fh, min_edge_length
 
 
 def _unpack_domain(domain, opts):
@@ -237,7 +237,7 @@ def _get_bars(t):
     return unique_edges(bars)
 
 
-def _compute_forces(p, t, fh, h0, L0mult):
+def _compute_forces(p, t, fh, min_edge_length, L0mult):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
     bars = _get_bars(t)
@@ -309,9 +309,11 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _generate_initial_points(h0, geps, bbox, fh, fd, pfix):
+def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
-    p = np.mgrid[tuple(slice(min, max + h0, h0) for min, max in bbox)].astype(float)
+    p = np.mgrid[
+        tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
+    ].astype(float)
     p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
