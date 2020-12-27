@@ -9,6 +9,7 @@ __all__ = [
     "make_mesh_boundaries_traversable",
     "delete_interior_faces",
     "delete_exterior_faces",
+    "delete_faces_connected_to_one_face",
 ]
 
 
@@ -113,7 +114,7 @@ def make_mesh_boundaries_traversable(
         The vertices of the "uncleaned" mesh.
     faces: array-like
         The "uncleaned" mesh connectivity.
-    min_disconnected_area: float
+    min_disconnected_area: float, optional
         A decimal percentage (max 1.0) used to decide whether to keep or remove
         disconnected portions of the meshing domain.
 
@@ -185,7 +186,7 @@ def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
     # Based on area proportion
     while (An / A) > min_disconnected_area:
         # Perform the depth-First-Search to get `nflag`
-        nflag = _depth_first_search(vertices, t1)
+        nflag = _depth_first_search(t1)
 
         # Get new triangulation and its area
         t2 = t1[nflag == 1, :]
@@ -256,7 +257,7 @@ def delete_interior_faces(vertices, faces, verbose):
     return faces, del_face_idx
 
 
-def _depth_first_search(points, faces):
+def _depth_first_search(faces):
     """Depth-First-Search (DFS) across the triangulation"""
 
     # Get graph connectivity.
@@ -286,6 +287,52 @@ def _depth_first_search(points, faces):
             for nei in neis:
                 if nflag[nei] == 0:
                     nflag[nei] = 1
+                    # Append visited cells to a list
                     visited.append(nei)
                     searching = True
     return nflag
+
+
+def delete_faces_connected_to_one_face(vertices, faces, max_iter=1, verbose=1):
+    """Iteratively deletes faces connected to one face.
+
+    Parameters
+    ----------
+    vertices: array-like
+        The vertices of the "uncleaned" mesh.
+    faces: array-like
+        The "uncleaned" mesh connectivity.
+    max_iter: float, optional
+        The number of iterations to repeatedly delete faces connected to one face
+
+
+    Returns
+    -------
+    vertices: array-like
+        The vertices of the "cleaned" mesh.
+
+    faces: array-like
+        The "cleaned" mesh connectivity.
+
+    """
+    assert max_iter > 0, "max_iter set too low"
+
+    count = 0
+    start_len = len(faces)
+    while count < max_iter:
+        _, idx = _vertex_to_face(vertices, faces)
+        nn = np.diff(idx, 1)
+        delete = np.argwhere(nn == 1)
+        if len(delete) > 0:
+            if verbose > 1:
+                print(f"ACCEPTED: Deleting {int(len(delete))} faces")
+            faces = np.delete(faces, delete, axis=0)
+            vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
+            count += 1
+        else:
+            break
+    if verbose > 0:
+        print(
+            f"Deleted {int(start_len - len(faces))} faces after {int(count)} iterations"
+        )
+    return vertices, faces

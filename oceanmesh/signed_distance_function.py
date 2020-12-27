@@ -38,7 +38,7 @@ def signed_distance_function(shoreline, verbose=1):
     if verbose > 0:
         print("Building a signed distance function...")
     poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
-    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :])
+    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
 
     boubox = _create_boubox(shoreline.bbox)

@@ -146,7 +146,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (dim - 1)
-    delta_t = 0.1
+    delta_t = 0.20
     geps = 1e-1 * min_edge_length
     deps = np.sqrt(np.finfo(np.double).eps) * min_edge_length
 
