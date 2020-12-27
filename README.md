@@ -53,7 +53,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 ![NewYorkMesh](https://user-images.githubusercontent.com/18619644/102819581-7587b600-43b2-11eb-9410-fbf3cadf95b9.png)
 
 
-```
+```python
  import meshio
 
  from oceanmesh import (
@@ -65,7 +65,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
  )
 
 
- fname = "datasets/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
  bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
