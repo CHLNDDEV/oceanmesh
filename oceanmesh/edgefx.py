@@ -6,7 +6,7 @@ from .grid import Grid
 __all__ = ["distance_sizing_function", "wavelength_sizing_function"]
 
 
-def distance_sizing_function(shoreline, rate=0.15, max_edgelength=None):
+def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
 
     Parameters
@@ -22,8 +22,8 @@ def distance_sizing_function(shoreline, rate=0.15, max_edgelength=None):
         A sizing function that takes a point and returns a value
 
     """
-    if max_edgelength is not None:
-        max_edgelength /= 111e3  # assume the value is passed in meters
+    if max_edge_length is not None:
+        max_edge_length /= 111e3  # assume the value is passed in meters
     grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
@@ -33,12 +33,13 @@ def distance_sizing_function(shoreline, rate=0.15, max_edgelength=None):
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, grid.grid_spacing))
     grid.values = shoreline.h0 + dis * rate
-    grid.values[grid.values > max_edgelength] = max_edgelength
+    if max_edge_length is not None:
+        grid.values[grid.values > max_edge_length] = max_edge_length
     grid.build_interpolant()
     return grid
 
 
-def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edgelength=None):
+def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edge_length=None):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
 
@@ -51,7 +52,7 @@ def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edgelength=N
     min_edgelength: float, optional
         The minimum edge length in meters in the domain. If None, the min
         of the edgelength function is used.
-    max_edgelength: float, optional
+    max_edge_length: float, optional
         The maximum edge length in meters in the domain.
 
     Returns
@@ -70,7 +71,7 @@ def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edgelength=N
     if min_edgelength is not None:
         min_edgelength = numpy.amin(grid.values)
     grid.hmin = min_edgelength
-    if max_edgelength is not None:
-        max_edgelength /= 111e3
-        grid.values[grid.values > max_edgelength] = max_edgelength
+    if max_edge_length is not None:
+        max_edge_length /= 111e3
+        grid.values[grid.values > max_edge_length] = max_edge_length
     return grid

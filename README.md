@@ -71,7 +71,7 @@ bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
 shore = Shoreline(fname, bbox, min_edge_length)
 
-edge_length = distance_sizing_function(shore, max_size=5e3)
+edge_length = distance_sizing_function(shore, max_edge_length=5e3)
 
 domain = signed_distance_function(shore)
 

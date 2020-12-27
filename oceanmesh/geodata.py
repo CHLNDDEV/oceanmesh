@@ -516,7 +516,7 @@ class DEM(Geodata):
 
     def get_grid(self, coarsen=1):
         """Get Cartesian grid the DEM is defined on"""
-        x, y = self.get_vectors(self, coarsen)
+        x, y = self.get_vectors(coarsen)
         xg, yg = numpy.meshgrid(y, x, indexing="ij")
         return xg, yg
 
@@ -524,7 +524,7 @@ class DEM(Geodata):
         """Visualize content of DEM"""
         import matplotlib.pyplot as plt
 
-        x, y = self.get_vectors(coarsen=10)
+        x, y = self.get_vectors(coarsen=25)
         xg, yg = self.get_grid()
         TB = self.Fb((xg, yg))
 

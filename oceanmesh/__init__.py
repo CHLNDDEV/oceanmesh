@@ -1,5 +1,5 @@
 from .fix_mesh import fix_mesh, simp_vol
-from oceanmesh.edgefx import distance_sizing_function
+from oceanmesh.edgefx import distance_sizing_function, wavelength_sizing_function
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
 from oceanmesh.grid import Grid
@@ -27,6 +27,7 @@ __all__ = [
     "Domain",
     "Shoreline",
     "distance_sizing_function",
+    "wavelength_sizing_function",
     "signed_distance_function",
     "get_poly_edges",
     "draw_edges",
