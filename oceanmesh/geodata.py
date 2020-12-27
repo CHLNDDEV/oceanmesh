@@ -507,15 +507,25 @@ class DEM(Geodata):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
         self.__dem = fname
 
+    def get_vectors(self, coarsen=1):
+        """Get Cartesian grid vectors"""
+        xmin, xmax, ymin, ymax = self.bbox
+        x = numpy.arange(xmin, xmax, self.grid_spacing * coarsen)
+        y = numpy.arange(ymin, ymax, self.grid_spacing * coarsen)
+        return x, y
+
+    def get_grid(self, coarsen=1):
+        """Get Cartesian grid the DEM is defined on"""
+        x, y = self.get_vectors(self, coarsen)
+        xg, yg = numpy.meshgrid(y, x, indexing="ij")
+        return xg, yg
+
     def plot(self, hold=False):
         """Visualize content of DEM"""
         import matplotlib.pyplot as plt
 
-        xmin, xmax, ymin, ymax = self.bbox
-        # for memory savings when plotting big dems
-        x = numpy.arange(xmin, xmax, self.grid_spacing * 10)
-        y = numpy.arange(ymin, ymax, self.grid_spacing * 10)
-        xg, yg = numpy.meshgrid(y, x, indexing="ij")
+        x, y = self.get_vectors(coarsen=10)
+        xg, yg = self.get_grid()
         TB = self.Fb((xg, yg))
 
         fig, ax = plt.subplots()
