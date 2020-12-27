@@ -1,6 +1,5 @@
-import gzip
+import zipfile
 import pathlib
-import shutil
 
 import exdown
 import pytest
@@ -25,10 +24,8 @@ def test_readme(string, lineno):
         f.write(r.content)
 
     # un-compress
-    with gzip.open("gshhg-shp-2.3.7.zip", "r") as f_in, open(
-        "gshhg-shp-2.3.7", "wb"
-    ) as f_out:
-        shutil.copyfileobj(f_in, f_out)
+    with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
+        zip_ref.extractall("gshhg-shp-2.3.7")
 
     try:
         # https://stackoverflow.com/a/62851176/353337
