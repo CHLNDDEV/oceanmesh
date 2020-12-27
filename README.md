@@ -54,38 +54,38 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
 
 ```python
- import meshio
+import meshio
 
- from oceanmesh import (
-     Shoreline,
-     distance_sizing_function,
-     signed_distance_function,
-     generate_mesh,
-     make_mesh_boundaries_traversable,
- )
+from oceanmesh import (
+    Shoreline,
+    distance_sizing_function,
+    signed_distance_function,
+    generate_mesh,
+    make_mesh_boundaries_traversable,
+)
 
 
- fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
- bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
- shore = Shoreline(fname, bbox, min_edge_length)
+shore = Shoreline(fname, bbox, min_edge_length)
 
- edge_length = distance_sizing_function(shore, max_size=5e3)
+edge_length = distance_sizing_function(shore, max_size=5e3)
 
- domain = signed_distance_function(shore)
+domain = signed_distance_function(shore)
 
- points, cells = generate_mesh(domain, edge_length)
+points, cells = generate_mesh(domain, edge_length)
 
- # remove degenerate mesh faces and other common problems in the mesh
- points, cells = make_mesh_boundaries_traversable(points, cells)
+# remove degenerate mesh faces and other common problems in the mesh
+points, cells = make_mesh_boundaries_traversable(points, cells)
 
- meshio.write_points_cells(
-     "simple_new_york.vtk",
-     points,
-     [("triangle", cells)],
-     file_format="vtk",
- )
+meshio.write_points_cells(
+    "simple_new_york.vtk",
+    points,
+    [("triangle", cells)],
+    file_format="vtk",
+)
 ```
 
 Testing
