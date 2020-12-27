@@ -176,7 +176,7 @@ def _smooth_shoreline(polys, N, verbose):
 def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
     if verbose > 1:
-        print("Collpasing segments outside bbox...")
+        print("Collapsing segments outside bbox...")
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
