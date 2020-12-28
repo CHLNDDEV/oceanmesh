@@ -526,7 +526,7 @@ class DEM(Geodata):
 
         x, y = self.get_vectors(coarsen=25)
         xg, yg = self.get_grid()
-        TB = self.Fb((xg, yg))
+        TB = self.Fb(xg, yg)
 
         fig, ax = plt.subplots()
         cs = ax.pcolorfast(x, y, TB)

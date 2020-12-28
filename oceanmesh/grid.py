@@ -37,8 +37,8 @@ class Grid:
         self.grid_spacing = grid_spacing
         self.hmin = hmin
         ceil, abs = numpy.ceil, numpy.abs
-        self.nx = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing)) + 1
-        self.ny = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing)) + 1
+        self.ny = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing))
+        self.nx = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing))
         self.bbox = bbox
         self.values = values
         self.eval = None

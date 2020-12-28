@@ -67,11 +67,14 @@ def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edge_length=
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
     grid = Grid(bbox=dem.bbox, grid_spacing=dem.grid_spacing)
-    grid.values = period * numpy.sqrt(grav * max(abs(tmpz), 1)) / wl
-    if min_edgelength is not None:
+    tmpz[tmpz < 1] = 1
+    grid.values = period * numpy.sqrt(grav * tmpz) / wl
+    grid.values /= 111e3  # transform to degrees
+    if min_edgelength is None:
         min_edgelength = numpy.amin(grid.values)
     grid.hmin = min_edgelength
     if max_edge_length is not None:
         max_edge_length /= 111e3
         grid.values[grid.values > max_edge_length] = max_edge_length
+    grid.build_interpolant()
     return grid
