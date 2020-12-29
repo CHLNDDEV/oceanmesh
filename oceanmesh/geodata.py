@@ -332,7 +332,7 @@ class Shoreline(Geodata):
         value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
 
-    def plot(self, ax=None):
+    def plot(self, ax=None, xlabel=None, ylabel=None, title=None):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
@@ -369,6 +369,13 @@ class Shoreline(Geodata):
             ax.legend((line1), ("mainland"))
         elif flg2 and not flg1:
             ax.legend((line2), ("inner"))
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        if title is not None:
+            ax.set_title(title)
 
         ax.set_aspect("equal", adjustable="box")
 
