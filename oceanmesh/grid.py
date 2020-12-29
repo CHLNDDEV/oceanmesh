@@ -249,6 +249,7 @@ class Grid:
         xlabel=None,
         ylabel=None,
         title=None,
+        cbarlabel=None,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -268,13 +269,16 @@ class Grid:
 
         fig, ax = plt.subplots()
         c = ax.pcolormesh(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
+        cbar = plt.colorbar(c)
+        if cbar is not None:
+            cbar.set_label(cbarlabel)
         ax.axis("equal")
         if xlabel is not None:
-            ax.xlabel(xlabel)
+            ax.set_xlabel(xlabel)
         if ylabel is not None:
-            ax.ylabel(ylabel)
+            ax.set_ylabel(ylabel)
         if title is not None:
-            ax.title(title)
+            ax.set_title(title)
         if hold is False:
             fig.colorbar(c, ax=ax)
             plt.show()
