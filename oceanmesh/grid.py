@@ -59,8 +59,8 @@ class Grid:
         self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
         self.grid_spacing = grid_spacing
         self.hmin = hmin
-        self.nx = int(floor((self.bbox[1] - self.x0y0[0]) / self.grid_spacing))
-        self.ny = int(floor((self.bbox[3] - self.x0y0[1]) / self.grid_spacing))
+        self.nx = int(floor((self.bbox[1] - self.bbox[0]) / self.grid_spacing))
+        self.ny = int(floor((self.bbox[3] - self.bbox[2]) / self.grid_spacing))
         self.values = values
         self.eval = None
         self.fill = fill
@@ -104,7 +104,7 @@ class Grid:
             pass
         elif data.shape != (self.nx, self.ny):
             raise ValueError(
-                f"Shape of values {self.nx, self.ny} does not match grid size {data.shape}"
+                f"Shape of values {data.shape} does not match grid size {self.nx, self.ny}"
             )
         self.__values = data
 

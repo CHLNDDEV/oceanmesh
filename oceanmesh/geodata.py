@@ -493,6 +493,9 @@ class DEM(Grid):
         # lons = lo[0]
         # TODO support x and y grid spacings
         grid_spacing = numpy.abs(lats[1] - lats[0])
+        print(grid_spacing)
+        print(bbox)
+        print(topobathy.shape)
         super().__init__(
             bbox=bbox,
             grid_spacing=grid_spacing,
