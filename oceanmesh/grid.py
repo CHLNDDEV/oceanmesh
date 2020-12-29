@@ -1,7 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
-import matplotlib.pyplot as plt
 
 
 def compute_minimum(edge_lengths):
@@ -19,7 +19,8 @@ def compute_minimum(edge_lengths):
     # construct a new grid object with these values
     grid = Grid(
         bbox=base_edge_length.bbox,
-        grid_spacing=base_edge_length.grid_spacing,
+        dx=base_edge_length.dx,
+        dy=base_edge_length.dy,
         hmin=min_edgelength,
         values=minimum_values,
     )
@@ -36,7 +37,7 @@ class Grid:
     ----------
     bbox: tuple
         domain extents
-    grid_spacing: float
+    dx: float
         spacing between grid points
     values: scalar or array-like
         values at grid points
@@ -52,28 +53,41 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, grid_spacing, hmin=None, values=None, fill=None):
+    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, fill=None):
         floor = numpy.floor
 
+        if dy is None:
+            dy = dx
         self.bbox = bbox
         self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
-        self.grid_spacing = grid_spacing
+        self.dx = dx
+        self.dy = dy
         self.hmin = hmin
-        self.nx = int(floor((self.bbox[1] - self.bbox[0]) / self.grid_spacing))
-        self.ny = int(floor((self.bbox[3] - self.bbox[2]) / self.grid_spacing))
+        self.nx = int(floor((self.bbox[1] - self.bbox[0]) / self.dx))
+        self.ny = int(floor((self.bbox[3] - self.bbox[2]) / self.dy))
         self.values = values
         self.eval = None
         self.fill = fill
 
     @property
-    def grid_spacing(self):
-        return self.__grid_spacing
+    def dx(self):
+        return self.__dx
 
-    @grid_spacing.setter
-    def grid_spacing(self, value):
+    @dx.setter
+    def dx(self, value):
         if value < 0:
-            raise ValueError("Grid spacing must be > 0.0")
-        self.__grid_spacing = value
+            raise ValueError("Grid spacing (dx) must be > 0.0")
+        self.__dx = value
+
+    @property
+    def dy(self):
+        return self.__dy
+
+    @dy.setter
+    def dy(self, value):
+        if value < 0:
+            raise ValueError("Grid spacing (dy) must be > 0.0")
+        self.__dy = value
 
     @property
     def bbox(self):
@@ -123,8 +137,8 @@ class Grid:
             1D array contain data with `float` type of y-coordinates.
 
         """
-        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.grid_spacing * coarsen
-        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.grid_spacing * coarsen
+        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.dx * coarsen
+        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.dy * coarsen
         return x, y
 
     def create_grid(self, coarsen=1):
@@ -182,7 +196,7 @@ class Grid:
         ----
         In other words, in areas of overlap, grid1 values
         take precedence elsewhere grid2 values are retained. Grid3 has
-        grid_spacing and resolution of grid2.
+        dx and resolution of grid2.
 
         Parameters
         ----------
@@ -220,7 +234,8 @@ class Grid:
         new_values[new_values == self.fill] = grid2.values[new_values == self.fill]
         return Grid(
             bbox=grid2.bbox,
-            grid_spacing=grid2.grid_spacing,
+            dx=grid2.dx,
+            dy=grid2.dy,
             hmin=numpy.amin(new_values),
             values=new_values,
         )

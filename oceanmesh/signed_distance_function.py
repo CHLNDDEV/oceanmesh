@@ -4,7 +4,6 @@ from inpoly import inpoly2
 
 from . import edges
 
-
 __all__ = ["signed_distance_function", "Domain"]
 
 nan = numpy.nan

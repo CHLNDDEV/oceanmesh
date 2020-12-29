@@ -490,15 +490,13 @@ class DEM(Grid):
         self.dem = dem
         # determine grid spacing in degrees
         lats = la[0]
-        # lons = lo[0]
-        # TODO support x and y grid spacings
-        grid_spacing = numpy.abs(lats[1] - lats[0])
-        print(grid_spacing)
-        print(bbox)
-        print(topobathy.shape)
+        lons = lo[0]
+        dy = numpy.abs(lats[1] - lats[0])
+        dx = numpy.abs(lons[1] - lons[0])
         super().__init__(
             bbox=bbox,
-            grid_spacing=grid_spacing,
+            dx=dx,
+            dy=dy,
             values=topobathy.T,
         )
         super().build_interpolant()

@@ -1,5 +1,5 @@
-import zipfile
 import pathlib
+import zipfile
 
 import exdown
 import pytest

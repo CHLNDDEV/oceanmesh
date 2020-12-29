@@ -2,8 +2,8 @@ import copy
 
 import numpy as np
 
-from .fix_mesh import fix_mesh, simp_vol, simp_qual
 from . import edges
+from .fix_mesh import fix_mesh, simp_qual, simp_vol
 
 __all__ = [
     "make_mesh_boundaries_traversable",

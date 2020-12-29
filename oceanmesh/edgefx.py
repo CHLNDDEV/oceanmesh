@@ -1,7 +1,6 @@
 import numpy
 import skfmm
 
-
 from .grid import Grid
 
 __all__ = ["distance_sizing_function", "wavelength_sizing_function"]
