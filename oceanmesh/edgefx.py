@@ -1,12 +1,13 @@
 import numpy
 import skfmm
 
+
 from .grid import Grid
 
 __all__ = ["distance_sizing_function", "wavelength_sizing_function"]
 
 
-def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None):
+def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose=1):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
 
     Parameters
@@ -22,8 +23,8 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None):
         A sizing function that takes a point and returns a value
 
     """
-    if max_edge_length is not None:
-        max_edge_length /= 111e3  # assume the value is passed in meters
+    if verbose > 0:
+        print("Building a distance sizing function...")
     grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
@@ -33,13 +34,18 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None):
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, grid.grid_spacing))
     grid.values = shoreline.h0 + dis * rate
+
     if max_edge_length is not None:
+        max_edge_length /= 111e3  # assume the value is passed in meters
         grid.values[grid.values > max_edge_length] = max_edge_length
+
     grid.build_interpolant()
     return grid
 
 
-def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edge_length=None):
+def wavelength_sizing_function(
+    dem, wl=10, min_edgelength=None, max_edge_length=None, verbose=1
+):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
 
@@ -61,14 +67,16 @@ def wavelength_sizing_function(dem, wl=10, min_edgelength=None, max_edge_length=
         A sizing function that takes a point and returns a value
 
     """
-    xg, yg = dem.get_grid()
-    tmpz = dem.Fb((xg, yg))
+    if verbose > 0:
+        print("Building a wavelength sizing function...")
+    lon, lat = dem.create_grid()
+    tmpz = dem.eval((lon, lat))
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
     grid = Grid(bbox=dem.bbox, grid_spacing=dem.grid_spacing)
-    tmpz[tmpz < 1] = 1
-    grid.values = period * numpy.sqrt(grav * tmpz) / wl
+    tmpz[numpy.abs(tmpz) < 1] = 1
+    grid.values = period * numpy.sqrt(grav * numpy.abs(tmpz)) / wl
     grid.values /= 111e3  # transform to degrees
     if min_edgelength is None:
         min_edgelength = numpy.amin(grid.values)

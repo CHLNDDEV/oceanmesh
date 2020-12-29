@@ -2,7 +2,7 @@ from .fix_mesh import fix_mesh, simp_vol
 from oceanmesh.edgefx import distance_sizing_function, wavelength_sizing_function
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
-from oceanmesh.grid import Grid
+from oceanmesh.grid import Grid, compute_minimum
 from oceanmesh.signed_distance_function import signed_distance_function, Domain
 from oceanmesh.clean import (
     delete_interior_faces,
@@ -16,6 +16,7 @@ from .cpp.fast_geometry import unique_edges
 from .mesh_generator import generate_mesh
 
 __all__ = [
+    "compute_minimum",
     "delete_faces_connected_to_one_face",
     "make_mesh_boundaries_traversable",
     "delete_interior_faces",

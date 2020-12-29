@@ -7,7 +7,8 @@ import shapefile
 from netCDF4 import Dataset
 from PIL import Image
 from PIL.TiffTags import TAGS
-from scipy.interpolate import RegularGridInterpolator
+
+from .grid import Grid
 
 nan = numpy.nan
 
@@ -205,6 +206,7 @@ def _nth_simplify(polys, bbox, verbose):
     return _convert_to_array(out)
 
 
+# TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
     """
     Geographical data class that handles geographical data describing
@@ -266,7 +268,7 @@ class Shoreline(Geodata):
         super().__init__(bbox)
 
         self.shp = shp
-        self.h0 = h0
+        self.h0 = h0  # this converts meters -> wgs84 degees
         self.inner = []
         self.outer = []
         self.mainland = []
@@ -469,73 +471,31 @@ def _from_netcdf(filename, bbox, verbose):
         quit()
 
 
-class DEM(Geodata):
-    """Digitial elevation model read in from a tif or NetCDF file"""
+class DEM(Grid):
+    """Digitial elevation model read in from a tif or NetCDF file
+    parent class is a :class:`Grid`
+    """
 
     def __init__(self, dem, bbox, verbose=1):
-        super().__init__(bbox)
 
-        self.dem = dem
-        self.grid_spacing = None
-        self.Fb = None
-        basename, ext = os.path.splitext(self.dem)
+        basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"]:
-            la, lo, topobathy = _from_netcdf(self.dem, self.bbox, verbose)
+            la, lo, topobathy = _from_netcdf(dem, bbox, verbose)
         elif ext.lower() in [".tif"]:
-            la, lo, topobathy = _from_tif(self.dem, self.bbox, verbose)
+            la, lo, topobathy = _from_tif(dem, bbox, verbose)
         else:
             raise ValueError(
                 "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])
             )
-
-        lats, lons = la[0], lo[0]
-        self.grid_spacing = numpy.abs(lats[1] - lats[0])
-        self.Fb = RegularGridInterpolator(
-            (lats[la[1]], lons[lo[1]]),
-            topobathy,
-            bounds_error=False,
-            fill_value=None,
+        self.dem = dem
+        # determine grid spacing in degrees
+        lats = la[0]
+        # lons = lo[0]
+        # TODO support x and y grid spacings
+        grid_spacing = numpy.abs(lats[1] - lats[0])
+        super().__init__(
+            bbox=bbox,
+            grid_spacing=grid_spacing,
+            values=topobathy.T,
         )
-
-    @property
-    def dem(self):
-        return self.__dem
-
-    @dem.setter
-    def dem(self, fname):
-        if not os.path.isfile(fname):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-        self.__dem = fname
-
-    def get_vectors(self, coarsen=1):
-        """Get Cartesian grid vectors"""
-        xmin, xmax, ymin, ymax = self.bbox
-        x = numpy.arange(xmin, xmax, self.grid_spacing * coarsen)
-        y = numpy.arange(ymin, ymax, self.grid_spacing * coarsen)
-        return x, y
-
-    def get_grid(self, coarsen=1):
-        """Get Cartesian grid the DEM is defined on"""
-        x, y = self.get_vectors(coarsen)
-        xg, yg = numpy.meshgrid(y, x, indexing="ij")
-        return xg, yg
-
-    def plot(self, hold=False):
-        """Visualize content of DEM"""
-        import matplotlib.pyplot as plt
-
-        x, y = self.get_vectors(coarsen=25)
-        xg, yg = self.get_grid()
-        TB = self.Fb(xg, yg)
-
-        fig, ax = plt.subplots()
-        cs = ax.pcolorfast(x, y, TB)
-        ax.axis("equal")
-        cbar = fig.colorbar(cs)
-        cbar.set_label("meters above datum")
-        ax.set_xlabel("Longitude (WGS84)")
-        ax.set_ylabel("Latitude (WGS84)")
-        ax.set_title("Topobathy from: " + str(self.dem))
-        if hold is False:
-            plt.show()
-        return ax
+        super().build_interpolant()

@@ -1,6 +1,30 @@
 import numpy
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
+import matplotlib.pyplot as plt
+
+
+def compute_minimum(edge_lengths):
+    """Determine the minimum of all edge lengths in the domain"""
+    # project all edge_lengths onto the grid of the first one
+    base_edge_length = edge_lengths[0]
+    edge_lengths = [
+        edge_length.project(base_edge_length) for edge_length in edge_lengths[1::]
+    ]
+    edge_lengths.insert(0, base_edge_length)
+    minimum_values = numpy.minimum.reduce(
+        [edge_length.values for edge_length in edge_lengths]
+    )
+    min_edgelength = numpy.amin(minimum_values)
+    # construct a new grid object with these values
+    grid = Grid(
+        bbox=base_edge_length.bbox,
+        grid_spacing=base_edge_length.grid_spacing,
+        hmin=min_edgelength,
+        values=minimum_values,
+    )
+    grid.build_interpolant()
+    return grid
 
 
 class Grid:
@@ -29,17 +53,14 @@ class Grid:
     """
 
     def __init__(self, bbox, grid_spacing, hmin=None, values=None, fill=None):
+        floor = numpy.floor
 
-        self.x0y0 = (
-            min(bbox[0:2]),
-            min(bbox[2:]),
-        )  # bottom left corner coordinates
+        self.bbox = bbox
+        self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
         self.grid_spacing = grid_spacing
         self.hmin = hmin
-        ceil, abs = numpy.ceil, numpy.abs
-        self.ny = int(ceil(abs(self.x0y0[0] - bbox[1]) / self.grid_spacing))
-        self.nx = int(ceil(abs(self.x0y0[1] - bbox[3]) / self.grid_spacing))
-        self.bbox = bbox
+        self.nx = int(floor((self.bbox[1] - self.x0y0[0]) / self.grid_spacing))
+        self.ny = int(floor((self.bbox[3] - self.x0y0[1]) / self.grid_spacing))
         self.values = values
         self.eval = None
         self.fill = fill
@@ -82,10 +103,12 @@ class Grid:
         elif data is None:
             pass
         elif data.shape != (self.nx, self.ny):
-            raise ValueError("Shape of values does not match grid size")
+            raise ValueError(
+                f"Shape of values {self.nx, self.ny} does not match grid size {data.shape}"
+            )
         self.__values = data
 
-    def create_vecs(self):
+    def create_vectors(self, coarsen=1):
         """Build coordinate vectors
 
         Parameters
@@ -100,11 +123,11 @@ class Grid:
             1D array contain data with `float` type of y-coordinates.
 
         """
-        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.grid_spacing
-        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.grid_spacing
+        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.grid_spacing * coarsen
+        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.grid_spacing * coarsen
         return x, y
 
-    def create_grid(self):
+    def create_grid(self, coarsen=1):
         """Build a structured grid
 
         Parameters
@@ -119,7 +142,7 @@ class Grid:
             2D array contain data with `float` type.
 
         """
-        x, y = self.create_vecs()
+        x, y = self.create_vectors(coarsen)
         return numpy.meshgrid(x, y, sparse=False, indexing="ij")
 
     def find_indices(self, points, lon, lat, tree=None):
@@ -181,8 +204,8 @@ class Grid:
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         if overlap is False:
             raise ValueError("Grid objects do not overlap.")
-        lon1, lat1 = self.create_vecs()
-        lon2, lat2 = grid2.create_vecs()
+        lon1, lat1 = self.create_vectors()
+        lon2, lat2 = grid2.create_vectors()
         # take data from grid1 --> grid2
         fp = RegularGridInterpolator(
             (lon1, lat1),
@@ -202,7 +225,7 @@ class Grid:
             values=new_values,
         )
 
-    def plot(self, hold=False, vmin=0.0, vmax=0.1):
+    def plot(self, hold=False, vmin=None, vmax=None, coarsen=1):
         """Visualize the values in :obj:`Grid`
 
         Parameters
@@ -217,12 +240,10 @@ class Grid:
 
         """
 
-        import matplotlib.pyplot as plt
-
-        x, y = self.create_grid()
+        x, y = self.create_grid(coarsen)
 
         fig, ax = plt.subplots()
-        c = ax.pcolor(x, y, self.values, vmin=vmin, vmax=vmax)
+        c = ax.pcolormesh(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
         ax.axis("equal")
         if hold is False:
             fig.colorbar(c, ax=ax)
@@ -239,7 +260,7 @@ class Grid:
             An an array of values that form the gridded interpolant:w
 
         """
-        lon1, lat1 = self.create_vecs()
+        lon1, lat1 = self.create_vectors()
         fp = RegularGridInterpolator(
             (lon1, lat1),
             self.values,
