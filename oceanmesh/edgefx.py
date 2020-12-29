@@ -24,14 +24,14 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose
     """
     if verbose > 0:
         print("Building a distance sizing function...")
-    grid = Grid(bbox=shoreline.bbox, grid_spacing=shoreline.h0, hmin=shoreline.h0)
+    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
     points = numpy.vstack((shoreline.inner, shoreline.mainland))
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
-    dis = numpy.abs(skfmm.distance(phi, grid.grid_spacing))
+    dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     grid.values = shoreline.h0 + dis * rate
 
     if max_edge_length is not None:
@@ -73,7 +73,7 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, grid_spacing=dem.grid_spacing)
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy)
     tmpz[numpy.abs(tmpz) < 1] = 1
     grid.values = period * numpy.sqrt(grav * numpy.abs(tmpz)) / wl
     grid.values /= 111e3  # transform to degrees

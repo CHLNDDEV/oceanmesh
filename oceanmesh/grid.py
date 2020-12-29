@@ -240,7 +240,16 @@ class Grid:
             values=new_values,
         )
 
-    def plot(self, hold=False, vmin=None, vmax=None, coarsen=1):
+    def plot(
+        self,
+        hold=False,
+        vmin=None,
+        vmax=None,
+        coarsen=1,
+        xlabel=None,
+        ylabel=None,
+        title=None,
+    ):
         """Visualize the values in :obj:`Grid`
 
         Parameters
@@ -260,6 +269,12 @@ class Grid:
         fig, ax = plt.subplots()
         c = ax.pcolormesh(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
         ax.axis("equal")
+        if xlabel is not None:
+            ax.xlabel(xlabel)
+        if ylabel is not None:
+            ax.ylabel(ylabel)
+        if title is not None:
+            ax.title(title)
         if hold is False:
             fig.colorbar(c, ax=ax)
             plt.show()
