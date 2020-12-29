@@ -62,6 +62,7 @@ from oceanmesh import (
     signed_distance_function,
     generate_mesh,
     make_mesh_boundaries_traversable,
+    delete_faces_connected_to_one_face,
 )
 
 
@@ -79,6 +80,8 @@ points, cells = generate_mesh(domain, edge_length)
 
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = make_mesh_boundaries_traversable(points, cells)
+
+points, cells = delete_faces_connected_to_one_face(points, cells)
 
 meshio.write_points_cells(
     "simple_new_york.vtk",

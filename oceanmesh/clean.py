@@ -293,7 +293,7 @@ def _depth_first_search(faces):
     return nflag
 
 
-def delete_faces_connected_to_one_face(vertices, faces, max_iter=1, verbose=1):
+def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
     """Iteratively deletes faces connected to one face.
 
     Parameters
@@ -320,9 +320,9 @@ def delete_faces_connected_to_one_face(vertices, faces, max_iter=1, verbose=1):
     count = 0
     start_len = len(faces)
     while count < max_iter:
-        _, idx = _vertex_to_face(vertices, faces)
+        _, idx = _face_to_face(faces)
         nn = np.diff(idx, 1)
-        delete = np.argwhere(nn == 1)
+        delete = np.argwhere(nn == 2)
         if len(delete) > 0:
             if verbose > 1:
                 print(f"ACCEPTED: Deleting {int(len(delete))} faces")
