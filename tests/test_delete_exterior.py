@@ -106,6 +106,6 @@ def test_del_exterior():
         dtype=int,
     )
     A1 = np.sum(oceanmesh.simp_vol(p, t))
-    t2 = oceanmesh.delete_exterior_faces(p, t, 0.20)
+    t2 = oceanmesh.delete_exterior_faces(p, t, 0.20, verbose=0)
     A2 = np.sum(oceanmesh.simp_vol(p, t2))
     assert (A1 - A2) == 0.25

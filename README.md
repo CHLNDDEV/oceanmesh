@@ -18,7 +18,7 @@ Functionality
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
-    
+
 Questions?
 ============
 
@@ -53,40 +53,42 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 ![NewYorkMesh](https://user-images.githubusercontent.com/18619644/102819581-7587b600-43b2-11eb-9410-fbf3cadf95b9.png)
 
 
-```
- import meshio
- 
- from oceanmesh import (
-     Shoreline,
-     distance_sizing_function,
-     signed_distance_function,
-     generate_mesh,
- )
- 
- 
- fname = "datasets/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
- 
- bbox, h0 = (-75.000, -70.001, 40.0001, 41.9000), 1e3
- 
- shore = Shoreline(fname, bbox, h0)
- 
- cell_size = distance_sizing_function(shore, max_size=5e3/ 111e3)
- 
- domain = signed_distance_function(shore)
- 
- points, cells = generate_mesh(
-     domain=domain, cell_size=cell_size, h0=1e3 / 111e3
- )
- 
- # remove degenerate mesh faces and other common problems in the mesh 
- points, cells = make_mesh_boundaries_traversable(points, cells)
- 
- meshio.write_points_cells(
-     "simple_new_york.vtk",
-     points,
-     [("triangle", cells)],
-     file_format="vtk",
- )           
+```python
+import meshio
+
+from oceanmesh import (
+    Shoreline,
+    distance_sizing_function,
+    signed_distance_function,
+    generate_mesh,
+    make_mesh_boundaries_traversable,
+    delete_faces_connected_to_one_face,
+)
+
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+
+shore = Shoreline(fname, bbox, min_edge_length)
+
+edge_length = distance_sizing_function(shore, max_edge_length=5e3)
+
+domain = signed_distance_function(shore)
+
+points, cells = generate_mesh(domain, edge_length)
+
+# remove degenerate mesh faces and other common problems in the mesh
+points, cells = make_mesh_boundaries_traversable(points, cells)
+
+points, cells = delete_faces_connected_to_one_face(points, cells)
+
+meshio.write_points_cells(
+    "simple_new_york.vtk",
+    points,
+    [("triangle", cells)],
+    file_format="vtk",
+)
 ```
 
 Testing

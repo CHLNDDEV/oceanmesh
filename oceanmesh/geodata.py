@@ -7,7 +7,8 @@ import shapefile
 from netCDF4 import Dataset
 from PIL import Image
 from PIL.TiffTags import TAGS
-from scipy.interpolate import RegularGridInterpolator
+
+from .grid import Grid
 
 nan = numpy.nan
 
@@ -64,7 +65,6 @@ def _densify(poly, maxdiff, bbox, radius=0):
     nin[~inside[1:]] = 0  # no need to densify outside of bbox please
     sumnin = numpy.nansum(nin)
     if sumnin == 0:
-        print("No densification is needed")
         return numpy.hstack((lon[:, None], lat[:, None]))
     nout = sumnin + nx
 
@@ -109,12 +109,15 @@ def _is_overlapping(bbox1, bbox2):
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def _classify_shoreline(bbox, polys, h0, minimum_area_mult):
+def _classify_shoreline(bbox, polys, h0, minimum_area_mult, verbose):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
     """
+    if verbose > 1:
+        print("Classifying shoreline segments...")
+
     boubox = _create_boubox(bbox)
 
     inner = numpy.empty(shape=(0, 2))
@@ -156,10 +159,12 @@ def _chaikins_corner_cutting(coords, refinements=5):
     return coords
 
 
-def _smooth_shoreline(polys, N):
+def _smooth_shoreline(polys, N, verbose):
     """Smoothes the shoreline segment-by-segment using
     a `N` refinement Chaikins Corner cutting algorithm.
     """
+    if verbose > 1:
+        print("Smoothing shoreline segments...")
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
@@ -169,8 +174,10 @@ def _smooth_shoreline(polys, N):
     return _convert_to_array(out)
 
 
-def _nth_simplify(polys, bbox):
+def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
+    if verbose > 1:
+        print("Collapsing segments outside bbox...")
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
@@ -184,9 +191,9 @@ def _nth_simplify(polys, bbox):
                 line = numpy.append(line, [poly[j, :]], axis=0)
             else:  # pt is outside of domain
                 bd = min(
-                    j + 200, len(inside) - 1
+                    j + 50, len(inside) - 1
                 )  # collapses 200 pts to 1 vertex (arbitary)
-                exte = min(200, bd - j)
+                exte = min(50, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
                     line = numpy.append(line, [poly[j + exte, :]], axis=0)
@@ -199,6 +206,7 @@ def _nth_simplify(polys, bbox):
     return _convert_to_array(out)
 
 
+# TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
     """
     Geographical data class that handles geographical data describing
@@ -227,12 +235,13 @@ class Geodata:
             self.__bbox = value
 
 
-def _from_shapefile(filename, bbox):
+def _from_shapefile(filename, bbox, verbose):
     """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
 
     polys = []  # tmp storage for polygons and polylines
 
-    print("Reading in shapefile... " + filename)
+    if verbose > 0:
+        print("Reading in ESRI Shapefile... " + filename)
     s = shapefile.Reader(filename)
     re = numpy.array([0, 2, 1, 3], dtype=int)
     for shape in s.shapes():
@@ -255,11 +264,11 @@ class Shoreline(Geodata):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
         super().__init__(bbox)
 
         self.shp = shp
-        self.h0 = h0
+        self.h0 = h0  # this converts meters -> wgs84 degees
         self.inner = []
         self.outer = []
         self.mainland = []
@@ -267,16 +276,16 @@ class Shoreline(Geodata):
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
-        polys = _from_shapefile(self.shp, self.bbox)
+        polys = _from_shapefile(self.shp, self.bbox, verbose)
 
-        polys = _smooth_shoreline(polys, self.refinements)
+        polys = _smooth_shoreline(polys, self.refinements, verbose)
 
-        polys = _densify(polys, self.h0, self.bbox)
+        polys = _densify(polys, self.h0, self.bbox, verbose)
 
-        polys = _nth_simplify(polys, self.bbox)
+        polys = _nth_simplify(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, polys, self.h0 / 2, self.minimum_area_mult
+            self.bbox, polys, self.h0 / 2, self.minimum_area_mult, verbose
         )
 
     @property
@@ -323,7 +332,7 @@ class Shoreline(Geodata):
         value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
 
-    def plot(self, ax=None):
+    def plot(self, ax=None, xlabel=None, ylabel=None, title=None):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
@@ -360,6 +369,13 @@ class Shoreline(Geodata):
             ax.legend((line1), ("mainland"))
         elif flg2 and not flg1:
             ax.legend((line2), ("inner"))
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        if title is not None:
+            ax.set_title(title)
 
         ax.set_aspect("equal", adjustable="box")
 
@@ -398,10 +414,11 @@ def _extract_bounds(lons, lats, bbox):
     return latli, latui, lonli, lonui
 
 
-def _from_tif(filename, bbox):
+def _from_tif(filename, bbox, verbose):
     """Read in a digitial elevation model from a tif file"""
 
-    print("Reading in tif... " + filename)
+    if verbose > 0:
+        print("Reading in tif... " + filename)
 
     with Image.open(filename) as img:
         meta_dict = {TAGS[key]: img.tag[key] for key in img.tag.keys()}
@@ -430,10 +447,11 @@ def _from_tif(filename, bbox):
     return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
 
 
-def _from_netcdf(filename, bbox):
+def _from_netcdf(filename, bbox, verbose):
     """Read in digitial elevation model from a NetCDF file"""
 
-    print("Reading in NetCDF... " + filename)
+    if verbose > 0:
+        print("Reading in NetCDF... " + filename)
     # well-known variable names
     wkv_x = ["x", "Longitude", "longitude", "lon"]
     wkv_y = ["y", "Latitude", "latitude", "lat"]
@@ -460,63 +478,32 @@ def _from_netcdf(filename, bbox):
         quit()
 
 
-class DEM(Geodata):
-    """Digitial elevation model read in from a tif or NetCDF file"""
+class DEM(Grid):
+    """Digitial elevation model read in from a tif or NetCDF file
+    parent class is a :class:`Grid`
+    """
 
-    def __init__(self, dem, bbox):
-        super().__init__(bbox)
+    def __init__(self, dem, bbox, verbose=1):
 
-        self.dem = dem
-        self.grid_spacing = None
-        self.Fb = None
-        basename, ext = os.path.splitext(self.dem)
+        basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"]:
-            la, lo, topobathy = _from_netcdf(self.dem, self.bbox)
+            la, lo, topobathy = _from_netcdf(dem, bbox, verbose)
         elif ext.lower() in [".tif"]:
-            la, lo, topobathy = _from_tif(self.dem, self.bbox)
+            la, lo, topobathy = _from_tif(dem, bbox, verbose)
         else:
             raise ValueError(
                 "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])
             )
-
-        lats, lons = la[0], lo[0]
-        self.grid_spacing = numpy.abs(lats[1] - lats[0])
-        self.Fb = RegularGridInterpolator(
-            (lats[la[1]], lons[lo[1]]),
-            topobathy,
-            bounds_error=False,
-            fill_value=None,
+        self.dem = dem
+        # determine grid spacing in degrees
+        lats = la[0]
+        lons = lo[0]
+        dy = numpy.abs(lats[1] - lats[0])
+        dx = numpy.abs(lons[1] - lons[0])
+        super().__init__(
+            bbox=bbox,
+            dx=dx,
+            dy=dy,
+            values=topobathy.T,
         )
-
-    @property
-    def dem(self):
-        return self.__dem
-
-    @dem.setter
-    def dem(self, fname):
-        if not os.path.isfile(fname):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), fname)
-        self.__dem = fname
-
-    def plot(self, hold=False):
-        """Visualize content of DEM"""
-        import matplotlib.pyplot as plt
-
-        xmin, xmax, ymin, ymax = self.bbox
-        # for memory savings when plotting big dems
-        x = numpy.arange(xmin, xmax, self.grid_spacing * 10)
-        y = numpy.arange(ymin, ymax, self.grid_spacing * 10)
-        xg, yg = numpy.meshgrid(y, x, indexing="ij")
-        TB = self.Fb((xg, yg))
-
-        fig, ax = plt.subplots()
-        cs = ax.pcolorfast(x, y, TB)
-        ax.axis("equal")
-        cbar = fig.colorbar(cs)
-        cbar.set_label("meters above datum")
-        ax.set_xlabel("Longitude (WGS84)")
-        ax.set_ylabel("Latitude (WGS84)")
-        ax.set_title("Topobathy from: " + str(self.dem))
-        if hold is False:
-            plt.show()
-        return ax
+        super().build_interpolant()

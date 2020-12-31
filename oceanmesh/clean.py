@@ -2,13 +2,14 @@ import copy
 
 import numpy as np
 
-from .fix_mesh import fix_mesh, simp_vol, simp_qual
 from . import edges
+from .fix_mesh import fix_mesh, simp_qual, simp_vol
 
 __all__ = [
     "make_mesh_boundaries_traversable",
     "delete_interior_faces",
     "delete_exterior_faces",
+    "delete_faces_connected_to_one_face",
 ]
 
 
@@ -98,7 +99,9 @@ def _vertex_to_face(vertices, faces):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
+def make_mesh_boundaries_traversable(
+    vertices, faces, min_disconnected_area=0.05, verbose=1
+):
     """
     A mesh described by vertices and faces is  "cleaned" and returned.
     Alternates between checking "interior" and "exterior" portions
@@ -111,7 +114,7 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
         The vertices of the "uncleaned" mesh.
     faces: array-like
         The "uncleaned" mesh connectivity.
-    dj_cutoff: float
+    min_disconnected_area: float, optional
         A decimal percentage (max 1.0) used to decide whether to keep or remove
         disconnected portions of the meshing domain.
 
@@ -140,20 +143,22 @@ def make_mesh_boundaries_traversable(vertices, faces, dj_cutoff=0.05):
 
     Exterior Check: Finds small disjoint portions of the mesh and removes
     them using a depth-first search. The individual disjoint portions are
-    removed based on `dj_cutoff` which is a decimal representing a fractional
+    removed based on `min_disconnected_area` which is a decimal representing a fractional
     threshold component of the total mesh.
 
     """
 
     boundary_edges, boundary_vertices = _external_topology(vertices, faces)
 
+    if verbose > 0:
+        print("Performing mesh cleaning operations...")
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        faces = delete_exterior_faces(vertices, faces, dj_cutoff)
+        faces = delete_exterior_faces(vertices, faces, min_disconnected_area, verbose)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
-        faces, _ = delete_interior_faces(vertices, faces)
+        faces, _ = delete_interior_faces(vertices, faces, verbose)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, faces)
@@ -168,10 +173,10 @@ def _external_topology(vertices, faces):
     return boundary_edges, boundary_vertices
 
 
-def delete_exterior_faces(vertices, faces, dj_cutoff):
+def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
-    area less than `dj_cutoff`.
+    area less than `min_disconnected_area`.
     """
     t1 = copy.deepcopy(faces)
     t = np.array([])
@@ -179,16 +184,16 @@ def delete_exterior_faces(vertices, faces, dj_cutoff):
     A = np.sum(simp_vol(vertices, faces))
     An = A
     # Based on area proportion
-    while (An / A) > dj_cutoff:
+    while (An / A) > min_disconnected_area:
         # Perform the depth-First-Search to get `nflag`
-        nflag = _depth_first_search(vertices, t1)
+        nflag = _depth_first_search(t1)
 
         # Get new triangulation and its area
         t2 = t1[nflag == 1, :]
         An = np.sum(simp_vol(vertices, t2))
 
         # If large enough, retain this component
-        if (An / A) > dj_cutoff:
+        if (An / A) > min_disconnected_area:
             if len(t) == 0:
                 t = t2
             else:
@@ -196,7 +201,10 @@ def delete_exterior_faces(vertices, faces, dj_cutoff):
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
-        print(f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh")
+        if verbose > 1:
+            print(
+                f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh"
+            )
 
         # Calculate the remaining area
         An = np.sum(simp_vol(vertices, t1))
@@ -204,7 +212,7 @@ def delete_exterior_faces(vertices, faces, dj_cutoff):
     return t
 
 
-def delete_interior_faces(vertices, faces):
+def delete_interior_faces(vertices, faces, verbose):
     """Delete interior faces that have vertices with more than
     two vertices declared as boundary vertices
     """
@@ -242,13 +250,14 @@ def delete_interior_faces(vertices, faces):
             idx = np.argmin(qual)
             del_face_idx.append(conn_faces[idx])
 
-    print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
+    if verbose > 1:
+        print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
     faces = np.delete(faces, del_face_idx, 0)
 
     return faces, del_face_idx
 
 
-def _depth_first_search(points, faces):
+def _depth_first_search(faces):
     """Depth-First-Search (DFS) across the triangulation"""
 
     # Get graph connectivity.
@@ -278,6 +287,52 @@ def _depth_first_search(points, faces):
             for nei in neis:
                 if nflag[nei] == 0:
                     nflag[nei] = 1
+                    # Append visited cells to a list
                     visited.append(nei)
                     searching = True
     return nflag
+
+
+def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
+    """Iteratively deletes faces connected to one face.
+
+    Parameters
+    ----------
+    vertices: array-like
+        The vertices of the "uncleaned" mesh.
+    faces: array-like
+        The "uncleaned" mesh connectivity.
+    max_iter: float, optional
+        The number of iterations to repeatedly delete faces connected to one face
+
+
+    Returns
+    -------
+    vertices: array-like
+        The vertices of the "cleaned" mesh.
+
+    faces: array-like
+        The "cleaned" mesh connectivity.
+
+    """
+    assert max_iter > 0, "max_iter set too low"
+
+    count = 0
+    start_len = len(faces)
+    while count < max_iter:
+        _, idx = _face_to_face(faces)
+        nn = np.diff(idx, 1)
+        delete = np.argwhere(nn == 2)
+        if len(delete) > 0:
+            if verbose > 1:
+                print(f"ACCEPTED: Deleting {int(len(delete))} faces")
+            faces = np.delete(faces, delete, axis=0)
+            vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
+            count += 1
+        else:
+            break
+    if verbose > 0:
+        print(
+            f"Deleted {int(start_len - len(faces))} faces after {int(count)} iterations"
+        )
+    return vertices, faces

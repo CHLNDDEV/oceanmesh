@@ -4,7 +4,6 @@ from inpoly import inpoly2
 
 from . import edges
 
-
 __all__ = ["signed_distance_function", "Domain"]
 
 nan = numpy.nan
@@ -19,7 +18,7 @@ class Domain:
         return self.domain(x)
 
 
-def signed_distance_function(shoreline):
+def signed_distance_function(shoreline, verbose=1):
     """Takes a `shoreline` object containing segments representing islands and mainland boundaries
     and calculates a signed distance function with it (assuming the polygons are all closed).
     This function is queried every meshing iteration.
@@ -35,9 +34,10 @@ def signed_distance_function(shoreline):
         Contains a signed distance function with a bbox
 
     """
-    print("Building a signed distance function...")
+    if verbose > 0:
+        print("Building a signed distance function...")
     poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
-    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :])
+    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
 
     boubox = _create_boubox(shoreline.bbox)

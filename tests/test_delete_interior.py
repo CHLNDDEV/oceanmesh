@@ -39,5 +39,5 @@ def test_del_interior():
 
     t -= 1
 
-    cells, deleted = oceanmesh.delete_interior_faces(p, t)
+    cells, deleted = oceanmesh.delete_interior_faces(p, t, verbose=0)
     assert np.allclose(deleted, [6, 7])

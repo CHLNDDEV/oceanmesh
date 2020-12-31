@@ -1,6 +1,6 @@
 import os
 
-from oceanmesh import Shoreline, signed_distance_function, Domain
+from oceanmesh import Domain, Shoreline, signed_distance_function
 
 
 def test_signed_distance_function():

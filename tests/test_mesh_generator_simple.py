@@ -4,7 +4,7 @@ from oceanmesh import generate_mesh, simp_vol
 
 
 def test_mesh_generator_rectangle():
-    h0 = 0.1
+    min_edge_length = 0.1
     bbox = (0.0, 1.0, 0.0, 1.0)
 
     def drectangle(p, x1, x2, y1, y2):
@@ -14,9 +14,14 @@ def test_mesh_generator_rectangle():
     def domain(x):
         return drectangle(x, *bbox)
 
-    def cell_size(p):
+    def edge_length(p):
         return np.array([0.1] * len(p))
 
-    points, cells = generate_mesh(domain=domain, cell_size=cell_size, h0=h0, bbox=bbox)
+    points, cells = generate_mesh(
+        domain=domain,
+        edge_length=edge_length,
+        min_edge_length=min_edge_length,
+        bbox=bbox,
+    )
 
     assert np.isclose(np.sum(simp_vol(points, cells)), 1.0, 0.01)

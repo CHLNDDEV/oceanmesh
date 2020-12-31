@@ -21,8 +21,6 @@ def test_shoreline(boxes_h0):
     assert len(shp.inner) > 0
     assert len(shp.mainland) > 0
     e = edges.get_poly_edges(shp.inner)
-    print(e)
-    print(shp.inner)
     edges.draw_edges(shp.inner, e)
 
 
@@ -31,11 +29,11 @@ def test_shoreline(boxes_h0):
     [
         (
             dfname,
-            (-95.25, -95.2000000014, 28.9000000112, 29.099907413009998),
+            (-95.24, -95.21, 28.95, 29.00),
         ),
         (
             tfname,
-            (-95.24, -95.20, 29.56252314079749, 29.80004628229499),
+            (-95.24, -95.00, 29.57, 29.79),
         ),
     ],
 )

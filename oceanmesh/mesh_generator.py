@@ -3,21 +3,39 @@ import time
 import numpy as np
 import scipy.sparse as spsparse
 
-from .cpp.delaunay_class import DelaunayTriangulation as DT2
+from .cpp.delaunay_class import DelaunayTriangulation as DT
+from .cpp.fast_geometry import unique_edges
 from .fix_mesh import fix_mesh
 from .grid import Grid
 from .signed_distance_function import Domain
 
 __all__ = ["generate_mesh"]
 
-opts = {
-    "nscreen": 1,
-    "max_iter": 50,
-    "seed": 0,
-    "perform_checks": False,
-    "pfix": None,
-    "points": None,
-}
+
+def silence(func):
+    def wrapper(*args, **kwargs):
+        None
+
+    return wrapper
+
+
+def talk(func):
+    def wrapper(*args, **kwargs):
+        func(*args, **kwargs)
+
+    return wrapper
+
+
+def _select_verbosity(opts):
+    if opts["verbose"] == 0:
+        return silence, silence
+    elif opts["verbose"] == 1:
+        return talk, silence
+    elif opts["verbose"] > 1:
+        return talk, talk
+
+    else:
+        raise ValueError("Unknown verbosity level")
 
 
 def _parse_kwargs(kwargs):
@@ -30,8 +48,10 @@ def _parse_kwargs(kwargs):
             "pfix",
             "points",
             "domain",
-            "cell_size",
+            "edge_length",
             "bbox",
+            "verbose",
+            "min_edge_length",
         }:
             pass
         else:
@@ -40,24 +60,22 @@ def _parse_kwargs(kwargs):
             )
 
 
-def generate_mesh(domain, cell_size, h0, **kwargs):
+def generate_mesh(domain, edge_length, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to a
-        sizing function `cell_size` and signed distance function.
+        sizing function `edge_length` and signed distance function.
 
     Parameters
     ----------
     domain: A function object.
         A function that takes a point and returns the signed nearest distance to the domain boundary Ω.
-    cell_size: A function object.
+    edge_length: A function object.
         A function that can evalulate a point and return a mesh size.
-    h0: `float`
-        The minimum element size in the domain.
     \**kwargs:
         See below
 
     :Keyword Arguments:
         * *bbox* (``tuple``) --
-            Bounding box containing domain extents. REQUIRED IF NOT USING :class:`cell_size`
+            Bounding box containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
         * *nscreen* (``float``) --
             Output to the screen `nscreen` timestep. (default==1)
         * *max_iter* (``float``) --
@@ -70,6 +88,11 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
             An array of points to constrain in the mesh. (default==None)
         * *axis* (`int`) --
             The axis to decompose the mesh (1,2, or 3). (default==1)
+        * *verbose* (``int``) --
+            Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
+        * *min_edge_length* (``float``) --
+            The minimum element size in the domain. Taken from `domain` normally.
+
 
     Returns
     -------
@@ -79,11 +102,30 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
         mesh connectivity table.
 
     """
+    opts = {
+        "max_iter": 50,
+        "seed": 0,
+        "perform_checks": False,
+        "pfix": None,
+        "points": None,
+        "verbose": 1,
+        "min_edge_length": None,
+    }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
-    fd, bbox = _unpack_domain(domain)
-    fh = _unpack_sizing(cell_size)
+    verbosity1, verbosity2 = _select_verbosity(opts)
+
+    @verbosity1
+    def print_msg1(msg):
+        print(msg, flush=True)
+
+    @verbosity2
+    def print_msg2(msg):
+        print(msg, flush=True)
+
+    fd, bbox = _unpack_domain(domain, opts)
+    fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
     if not isinstance(bbox, tuple):
         raise ValueError("`bbox` must be a tuple")
@@ -94,8 +136,8 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
 
     bbox = np.array(bbox).reshape(-1, 2)
 
-    if h0 < 0:
-        raise ValueError("`h0` must be > 0")
+    if min_edge_length < 0:
+        raise ValueError("`min_edge_length` must be > 0")
 
     if opts["max_iter"] < 0:
         raise ValueError("`max_iter` must be > 0")
@@ -104,34 +146,29 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (dim - 1)
-    delta_t = 0.1
-    geps = 1e-1 * h0
-    deps = np.sqrt(np.finfo(np.double).eps) * h0
-
-    DT = _select_cgal_dim()
+    delta_t = 0.20
+    geps = 1e-1 * min_edge_length
+    deps = np.sqrt(np.finfo(np.double).eps) * min_edge_length
 
     pfix, nfix = _unpack_pfix(dim, opts)
 
-    p = _generate_initial_points(h0, geps, bbox, fh, fd, pfix)
+    p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
 
     N = p.shape[0]
 
     assert N > 0, "No vertices to mesh with!"
 
-    count = 0
-    print(
-        "Commencing mesh generation with %d vertices." % (N),
-        flush=True,
+    print_msg1(
+        "Commencing mesh generation with %d vertices will perform %i iterations."
+        % (N, max_iter),
     )
 
-    nscreen = opts["nscreen"]
-    while True:
-
+    for count in range(max_iter):
         start = time.time()
 
         # (Re)-triangulation by the Delaunay algorithm
         dt = DT()
-        dt.insert(p.flatten().tolist())
+        dt.insert(p.ravel().tolist())
 
         # Get the current topology of the triangulation
         p, t = _get_topology(dt)
@@ -141,11 +178,12 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
-            p, t = _termination(p, t)
-            break
+            p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
+            print_msg1("Termination reached...maximum number of iterations.")
+            return p, t
 
         # Compute the forces on the bars
-        Ftot = _compute_forces(p, t, fh, h0, L0mult)
+        Ftot = _compute_forces(p, t, fh, min_edge_length, L0mult)
 
         # Force = 0 at fixed points
         Ftot[:nfix] = 0
@@ -157,32 +195,31 @@ def generate_mesh(domain, cell_size, h0, **kwargs):
         p = _project_points_back(p, fd, deps)
 
         # Show the user some progress so they know something is happening
-        if count % nscreen == 0:
-            maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
-            _display_progress(p, t, count, nscreen, maxdp)
-
-        count += 1
+        maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
+        print_msg2(
+            "Iteration #%d, max movement is %f, there are %d vertices and %d cells"
+            % (count + 1, maxdp, len(p), len(t)),
+        )
 
         end = time.time()
-        if count % nscreen == 0:
-            print("     Elapsed wall-clock time %f : " % (end - start), flush=True)
-
-    return p, t
+        print_msg2("     Elapsed wall-clock time %f : " % (end - start))
 
 
-def _unpack_sizing(cell_size):
-    if isinstance(cell_size, Grid):
-        fh = cell_size.eval
-    elif callable(cell_size):
-        fh = cell_size
+def _unpack_sizing(edge_length, opts):
+    if isinstance(edge_length, Grid):
+        fh = edge_length.eval
+        min_edge_length = edge_length.hmin
+    elif callable(edge_length):
+        fh = edge_length
+        min_edge_length = opts["min_edge_length"]
     else:
         raise ValueError(
-            "`cell_size` must either be a function or a `cell_size` object"
+            "`edge_length` must either be a function or a `edge_length` object"
         )
-    return fh
+    return fh, min_edge_length
 
 
-def _unpack_domain(domain):
+def _unpack_domain(domain, opts):
     if isinstance(domain, Domain):
         bbox = domain.bbox
         fd = domain.eval
@@ -194,36 +231,13 @@ def _unpack_domain(domain):
     return fd, bbox
 
 
-def _display_progress(p, t, count, nscreen, maxdp):
-    """print progress"""
-    print(
-        "Iteration #%d, max movement is %f, there are %d vertices and %d cells"
-        % (count + 1, maxdp, len(p), len(t)),
-        flush=True,
-    )
-
-
-def _termination(p, t):
-    """Shut it down when reacing `max_iter`"""
-    print("Termination reached...maximum number of iterations reached.", flush=True)
-    p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
-    return p, t
-
-
 def _get_bars(t):
     """Describe each bar by a unique pair of nodes"""
     bars = np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]])
-    return _unique_rows(np.ascontiguousarray(bars, dtype=np.uint32))
+    return unique_edges(bars)
 
 
-def _unique_rows(ar):
-    ar_row_view = ar.view("|S%d" % (ar.itemsize * ar.shape[1]))
-    _, unique_row_indices = np.unique(ar_row_view, return_index=True)
-    ar_out = ar[unique_row_indices]
-    return ar_out
-
-
-def _compute_forces(p, t, fh, h0, L0mult):
+def _compute_forces(p, t, fh, min_edge_length, L0mult):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
     bars = _get_bars(t)
@@ -295,9 +309,11 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _generate_initial_points(h0, geps, bbox, fh, fd, pfix):
+def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
-    p = np.mgrid[tuple(slice(min, max + h0, h0) for min, max in bbox)].astype(float)
+    p = np.mgrid[
+        tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
+    ].astype(float)
     p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
@@ -327,11 +343,6 @@ def _unpack_pfix(dim, opts):
             flush=True,
         )
     return pfix, nfix
-
-
-def _select_cgal_dim():
-    """Select back-end CGAL Delaunay call"""
-    return DT2
 
 
 def _get_topology(dt):
