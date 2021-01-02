@@ -112,35 +112,44 @@ def get_boundary_edges(entities, dim=2):
 
 
 def get_winded_boundary_edges(entities):
-    """Order the boundary edges of the mesh in a winding fashiono
+    """Order the boundary edges of the mesh in a winding fashion
 
     :param entities: the mesh connectivity
     :type entities: numpy.ndarray[`int` x (dim+1)]
 
-    :return: boundary_edges: the edges that make up the boundary of the mesh in a winding order
-    :rtype: numpy.ndarray[`int` x 2]
+    :return: ordered_boundary_edges: the edges that make up the boundary of the mesh in a winding order
+    :rtype: numpy.ndarray[`int` x 2] with nan's seperating vector features
     """
 
+    ordered_boundary_edges = []
     boundary_edges = get_boundary_edges(entities)
     _bedges = boundary_edges.copy()
 
     choice = 0
-    isVisited = np.zeros((len(_bedges)))
+    is_visited = np.zeros((len(_bedges)))
     ordering = np.array([choice])
-    isVisited[choice] = 1
 
-    vStart, vNext = _bedges[choice, :]
-    while True:
-        locs = np.column_stack(np.where(_bedges == vNext))
-        rows = locs[:, 0]
-        choices = [row for row in rows if isVisited[row] == 0]
-        if len(choices) == 0:
-            break
-        choice = choices[0]
-        ordering = np.append(ordering, [choice])
-        isVisited[choice] = 1
-        nextEdge = _bedges[choice, :]
-        tmp = [v for v in nextEdge if v != vNext]
-        vNext = tmp[0]
-    boundary_edges = boundary_edges[ordering, :]
-    return boundary_edges
+    while np.any(is_visited == 0):
+        is_visited[choice] = 1
+        vStart, vNext = _bedges[choice, :]
+        while True:
+            locs = np.column_stack(np.where(_bedges == vNext))
+            rows = locs[:, 0]
+            choices = [row for row in rows if is_visited[row] == 0]
+            if len(choices) == 0:
+                break
+            choice = choices[0]
+            ordering = np.append(ordering, [choice])
+            is_visited[choice] = 1
+            nextEdge = _bedges[choice, :]
+            tmp = [v for v in nextEdge if v != vNext]
+            vNext = tmp[0]
+        tmp2 = boundary_edges[ordering, :]
+        tmp2 = np.append(tmp2, [[nan, nan]], axis=0)
+        ordered_boundary_edges.append(tmp2)
+        # get a new choice
+        idx = np.where(is_visited == 0)
+        if len(idx[0]) > 0:
+            choice = idx[0][0]
+
+    return np.concatenate(ordered_boundary_edges, axis=0)
