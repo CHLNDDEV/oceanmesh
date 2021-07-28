@@ -18,14 +18,14 @@ class Domain:
         return self.domain(x)
 
 
-def signed_distance_function(shoreline, verbose=1):
-    """Takes a `shoreline` object containing segments representing islands and mainland boundaries
+def signed_distance_function(vector, verbose=1):
+    """Takes a `vector` object containing segments representing islands and mainland boundaries
     and calculates a signed distance function with it (assuming the polygons are all closed).
     This function is queried every meshing iteration.
 
     Parameters
     ----------
-    shoreline: a :class:`Shoreline` object
+    vector: a :class:`vector` object
         The processed shapefile data from :class:`geodata`
 
     Returns
@@ -36,11 +36,11 @@ def signed_distance_function(shoreline, verbose=1):
     """
     if verbose > 0:
         print("Building a signed distance function...")
-    poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
+    poly = numpy.vstack((vector.inner, vector.mainland, vector.boubox))
     tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
 
-    boubox = _create_boubox(shoreline.bbox)
+    boubox = _create_boubox(vector.bbox)
     e_box = edges.get_poly_edges(boubox)
 
     def func(x):
@@ -48,17 +48,17 @@ def signed_distance_function(shoreline, verbose=1):
         dist = numpy.zeros(len(x)) + 1.0
         # are points inside the boubox?
         in_boubox, _ = inpoly2(x, boubox, e_box)
-        # are points inside the shoreline?
-        in_shoreline, _ = inpoly2(x, poly, e)
-        # compute dist to shoreline
+        # are points inside the vector?
+        in_vector, _ = inpoly2(x, poly, e)
+        # compute dist to vector
         d, _ = tree.query(x, k=1)
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
-        cond = numpy.logical_and(in_shoreline, in_boubox)
+        cond = numpy.logical_and(in_vector, in_boubox)
         dist = (-1) ** (cond) * d
         return dist
 
-    return Domain(shoreline.bbox, func)
+    return Domain(vector.bbox, func)
 
 
 def _create_boubox(bbox):

@@ -49,52 +49,6 @@ def _create_ranges(start, stop, N, endpoint=True):
     return steps[:, None] * numpy.arange(N) + start[:, None]
 
 
-def _densify(poly, maxdiff, bbox, radius=0):
-    """Fills in any gaps in latitude or longitude arrays
-    that are greater than a `maxdiff` (degrees) apart
-    """
-    boubox = _create_boubox(bbox)
-    path = mpltPath.Path(boubox)
-    inside = path.contains_points(poly, radius=radius)
-
-    lon, lat = poly[:, 0], poly[:, 1]
-    nx = len(lon)
-    dlat = numpy.abs(lat[1:] - lat[:-1])
-    dlon = numpy.abs(lon[1:] - lon[:-1])
-    nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
-    nin[~inside[1:]] = 0  # no need to densify outside of bbox please
-    sumnin = numpy.nansum(nin)
-    if sumnin == 0:
-        return numpy.hstack((lon[:, None], lat[:, None]))
-    nout = sumnin + nx
-
-    lonout = numpy.full((int(nout)), nan, dtype=float)
-    latout = numpy.full((int(nout)), nan, dtype=float)
-
-    n = 0
-    for i in range(nx - 1):
-        ni = nin[i]
-        if ni == 0 or numpy.isnan(ni):
-            latout[n] = lat[i]
-            lonout[n] = lon[i]
-            nstep = 1
-        else:
-            ni = int(ni)
-            icoords = _create_ranges(
-                numpy.array([lat[i], lon[i]]),
-                numpy.array([lat[i + 1], lon[i + 1]]),
-                ni + 2,
-            )
-            latout[n : n + ni + 1] = icoords[0, : ni + 1]
-            lonout[n : n + ni + 1] = icoords[1, : ni + 1]
-            nstep = ni + 1
-        n += nstep
-
-    latout[-1] = lat[-1]
-    lonout[-1] = lon[-1]
-    return numpy.hstack((lonout[:, None], latout[:, None]))
-
-
 def _poly_area(x, y):
     """Calculates area of a polygon"""
     return 0.5 * numpy.abs(
@@ -174,47 +128,25 @@ def _smooth_shoreline(polys, N, verbose):
     return _convert_to_array(out)
 
 
-def _nth_simplify(polys, bbox, verbose):
-    """Collapse segments in `polys` outside of `bbox`"""
-    if verbose > 1:
-        print("Collapsing segments outside bbox...")
-    boubox = _create_boubox(bbox)
-    path = mpltPath.Path(boubox)
-    polys = _convert_to_list(polys)
-    out = []
-    for poly in polys:
-        j = 0
-        inside = path.contains_points(poly[:-2, :])
-        line = numpy.empty(shape=(0, 2))
-        while j < len(poly[:-2]):
-            if inside[j]:  # keep point (in domain)
-                line = numpy.append(line, [poly[j, :]], axis=0)
-            else:  # pt is outside of domain
-                bd = min(
-                    j + 50, len(inside) - 1
-                )  # collapses 200 pts to 1 vertex (arbitary)
-                exte = min(50, bd - j)
-                if sum(inside[j:bd]) == 0:  # next points are all outside
-                    line = numpy.append(line, [poly[j, :]], axis=0)
-                    line = numpy.append(line, [poly[j + exte, :]], axis=0)
-                    j += exte
-                else:  # otherwise keep
-                    line = numpy.append(line, [poly[j, :]], axis=0)
-            j += 1
-        line = numpy.append(line, [[nan, nan]], axis=0)
-        out.append(line)
-    return _convert_to_array(out)
-
-
 class Vector:
     """
     Geographical data class that handles geographical data describing
     shorelines in the form of a vector shapefile
     """
 
-    def __init__(self, bbox, spacing):
+    def __init__(self, vectors, bbox, spacing, refinements):
         self.bbox = bbox
         self.spacing = spacing
+        self.refinements = refinements
+        self.vectors = vectors
+
+    @property
+    def vectors(self):
+        return self.__vectors
+
+    @vectors.setter
+    def vectors(self, value):
+        self.__vectors = value
 
     @property
     def bbox(self):
@@ -241,6 +173,92 @@ class Vector:
     def spacing(self, value):
         assert value > 0, "spacing must be positive and g.t. 0"
         self.__spacing = value
+
+    @property
+    def refinements(self):
+        return self.__refinements
+
+    @refinements.setter
+    def refinements(self, value):
+        if value < 0:
+            raise ValueError("Refinements must be > 0")
+        self.__refinements = value
+
+    def _densify(self, poly, maxdiff, radius=0):
+        """Fills in any gaps in latitude or longitude arrays
+        that are greater than a `maxdiff` (degrees) apart
+        """
+        boubox = _create_boubox(self.bbox)
+        path = mpltPath.Path(boubox)
+        inside = path.contains_points(poly, radius=radius)
+
+        lon, lat = poly[:, 0], poly[:, 1]
+        nx = len(lon)
+        dlat = numpy.abs(lat[1:] - lat[:-1])
+        dlon = numpy.abs(lon[1:] - lon[:-1])
+        nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
+        nin[~inside[1:]] = 0  # no need to densify outside of bbox please
+        sumnin = numpy.nansum(nin)
+        if sumnin == 0:
+            return numpy.hstack((lon[:, None], lat[:, None]))
+        nout = sumnin + nx
+
+        lonout = numpy.full((int(nout)), nan, dtype=float)
+        latout = numpy.full((int(nout)), nan, dtype=float)
+
+        n = 0
+        for i in range(nx - 1):
+            ni = nin[i]
+            if ni == 0 or numpy.isnan(ni):
+                latout[n] = lat[i]
+                lonout[n] = lon[i]
+                nstep = 1
+            else:
+                ni = int(ni)
+                icoords = _create_ranges(
+                    numpy.array([lat[i], lon[i]]),
+                    numpy.array([lat[i + 1], lon[i + 1]]),
+                    ni + 2,
+                )
+                latout[n : n + ni + 1] = icoords[0, : ni + 1]
+                lonout[n : n + ni + 1] = icoords[1, : ni + 1]
+                nstep = ni + 1
+            n += nstep
+
+        latout[-1] = lat[-1]
+        lonout[-1] = lon[-1]
+        return numpy.hstack((lonout[:, None], latout[:, None]))
+
+    def _nth_simplify(self, polys, verbose):
+        """Collapse segments in `polys` outside of `bbox`"""
+        if verbose > 1:
+            print("Collapsing segments outside bbox...")
+        boubox = _create_boubox(self.bbox)
+        path = mpltPath.Path(boubox)
+        polys = _convert_to_list(polys)
+        out = []
+        for poly in polys:
+            j = 0
+            inside = path.contains_points(poly[:-2, :])
+            line = numpy.empty(shape=(0, 2))
+            while j < len(poly[:-2]):
+                if inside[j]:  # keep point (in domain)
+                    line = numpy.append(line, [poly[j, :]], axis=0)
+                else:  # pt is outside of domain
+                    bd = min(
+                        j + 50, len(inside) - 1
+                    )  # collapses 200 pts to 1 vertex (arbitary)
+                    exte = min(50, bd - j)
+                    if sum(inside[j:bd]) == 0:  # next points are all outside
+                        line = numpy.append(line, [poly[j, :]], axis=0)
+                        line = numpy.append(line, [poly[j + exte, :]], axis=0)
+                        j += exte
+                    else:  # otherwise keep
+                        line = numpy.append(line, [poly[j, :]], axis=0)
+                j += 1
+            line = numpy.append(line, [[nan, nan]], axis=0)
+            out.append(line)
+        return _convert_to_array(out)
 
 
 def _from_shapefile(filename, bbox, verbose):
@@ -273,50 +291,58 @@ class Shoreline(Vector):
     """
 
     def __init__(
-        self, shp, bbox, spacing, refinements=1, minimum_area_mult=4.0, verbose=1
+        self, vectors, bbox, spacing, refinements=1, minimum_area_mult=4.0, verbose=1
     ):
-        super().__init__(bbox, spacing)
 
-        self.shp = shp
-        self.h0 = self.spacing  # this converts meters -> wgs84 degees
+        self.h0 = self.spacing  # this automatically converts meters -> wgs84 degees
+        self.minimum_area_mult = minimum_area_mult
+
         self.inner = []
         self.outer = []
         self.mainland = []
         self.boubox = []
-        self.refinements = refinements
-        self.minimum_area_mult = minimum_area_mult
 
-        polys = _from_shapefile(self.shp, self.bbox, verbose)
+        if isinstance(vectors, list):
+            _vectors = _convert_to_array(vectors)
+        elif isinstance(vectors, numpy.ndarray):
+            _vectors = vectors
+        else:
+            self.shp_file = vectors
+            _vectors = _from_shapefile(self.shp_file, self.bbox, verbose)
 
-        polys = _smooth_shoreline(polys, self.refinements, verbose)
+        # initialize Vector super class
+        super().__init__(_vectors, bbox, spacing, refinements)
 
-        polys = _densify(polys, self.h0, self.bbox, verbose)
+        self._smooth_shoreline(verbose)
 
-        polys = _nth_simplify(polys, self.bbox, verbose)
+        self._densify(verbose)
+
+        self._nth_simplify(verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, polys, self.h0 / 2, self.minimum_area_mult, verbose
+            self.bbox, self.vector, self.h0 / 2, self.minimum_area_mult, verbose
         )
 
     @property
-    def shp(self):
-        return self.__shp
+    def shp_file(self):
+        return self.__shp_file
 
-    @shp.setter
-    def shp(self, filename):
+    @shp_file.setter
+    def shp_file(self, filename):
         if not os.path.isfile(filename):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
-        self.__shp = filename
+        self.__shp_file = filename
 
     @property
-    def refinements(self):
-        return self.__refinements
+    def h0(self):
+        return self.__h0
 
-    @refinements.setter
-    def refinements(self, value):
-        if value < 0:
-            raise ValueError("Refinements must be > 0")
-        self.__refinements = value
+    @h0.setter
+    def h0(self, value):
+        if value <= 0:
+            raise ValueError("h0 must be > 0")
+        value /= 111e3  # convert to wgs84 degrees
+        self.__h0 = value
 
     @property
     def minimum_area_mult(self):
@@ -330,17 +356,6 @@ class Shoreline(Vector):
                 " prune inner geometry must be > 0.0"
             )
         self.__minimum_area_mult = value
-
-    @property
-    def h0(self):
-        return self.__h0
-
-    @h0.setter
-    def h0(self, value):
-        if value <= 0:
-            raise ValueError("h0 must be > 0")
-        value /= 111e3  # convert to wgs84 degrees
-        self.__h0 = value
 
     def plot(self, ax=None, xlabel=None, ylabel=None, title=None):
         """Visualize the content in the shp field of Shoreline"""
