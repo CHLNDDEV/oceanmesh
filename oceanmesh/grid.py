@@ -63,8 +63,8 @@ class Grid:
         self.dx = dx
         self.dy = dy
         self.hmin = hmin
-        self.nx = int(floor((self.bbox[1] - self.bbox[0]) / self.dx))
-        self.ny = int(floor((self.bbox[3] - self.bbox[2]) / self.dy))
+        self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
+        self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
         self.values = values
         self.eval = None
         self.fill = fill

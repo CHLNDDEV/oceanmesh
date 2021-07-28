@@ -7,7 +7,7 @@ oceanmesh: Automatic coastal ocean mesh generation
 
 
 
-Coastal ocean mesh generation from ESRI Shapefiles and digitial elevation models.
+Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
 
 
 Functionality
@@ -29,10 +29,14 @@ Otherwise please reach out to either Dr. William Pringle (wpringle@nd.edu) or Dr
 Installation
 ============
 
-For installation, oceanmesh needs [CGAL](https://www.cgal.org/) and
+For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/) and
 [pybind11](https://github.com/pybind/pybind11):
 
-    sudo apt install libcgal-dev python3-pybind11
+    sudo apt install cmake libcgal-dev python3-pybind11
+
+CGAL and pybind can also be installed with [`conda`](https://www.anaconda.com/products/individual):
+
+    conda install -c conda-forge cgal pybind11 
 
 After that, clone the repo and oceanmesh can be updated/installed using pip.
 
