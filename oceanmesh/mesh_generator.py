@@ -346,5 +346,5 @@ def _unpack_pfix(dim, opts):
 
 
 def _get_topology(dt):
-    """ Get points and entities from :clas:`CGAL:DelaunayTriangulation2/3` object"""
+    """Get points and entities from :clas:`CGAL:DelaunayTriangulation2/3` object"""
     return dt.get_finite_vertices(), dt.get_finite_cells()

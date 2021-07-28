@@ -6,7 +6,9 @@ from .grid import Grid
 __all__ = ["distance_sizing_function", "wavelength_sizing_function"]
 
 
-def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose=1):
+def distance_sizing_function(
+    shoreline, rate=0.15, max_edge_length=None, verbose=1, coarsen=1
+):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
 
     Parameters
@@ -15,6 +17,12 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose
         Data processed from :class:`Shoreline`.
     rate: float, optional
         The rate of expansion in decimal percent from the shoreline.
+    max_edge_length: float, optional
+        The maximum allowable edge length
+    verbose: boolean, optional
+        Whether to write messages to the screen
+    coarsen: integer, optional
+        Downsample the grid by a constant factor in x and y axes
 
     Returns
     -------
@@ -24,7 +32,7 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose
     """
     if verbose > 0:
         print("Building a distance sizing function...")
-    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0, hmin=shoreline.h0)
+    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
@@ -43,7 +51,11 @@ def distance_sizing_function(shoreline, rate=0.15, max_edge_length=None, verbose
 
 
 def wavelength_sizing_function(
-    dem, wl=10, min_edgelength=None, max_edge_length=None, verbose=1
+    dem,
+    wl=10,
+    min_edgelength=None,
+    max_edge_length=None,
+    verbose=1,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
@@ -59,6 +71,9 @@ def wavelength_sizing_function(
         of the edgelength function is used.
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
+    verbose: boolean, optional
+        Whether to write messages to the screen
+
 
     Returns
     -------
