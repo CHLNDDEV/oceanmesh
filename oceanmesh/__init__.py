@@ -6,7 +6,7 @@ from oceanmesh.clean import (
 )
 from oceanmesh.edgefx import distance_sizing_function, wavelength_sizing_function
 from oceanmesh.edges import draw_edges, get_poly_edges
-from oceanmesh.geodata import DEM, Geodata, Shoreline
+from oceanmesh.geodata import DEM, Vector, Shoreline
 from oceanmesh.grid import Grid, compute_minimum
 from oceanmesh.signed_distance_function import Domain, signed_distance_function
 
@@ -23,7 +23,7 @@ __all__ = [
     "delete_exterior_faces",
     "SizeFunction",
     "Grid",
-    "Geodata",
+    "Vector",
     "DEM",
     "Domain",
     "Shoreline",

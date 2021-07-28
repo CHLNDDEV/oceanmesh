@@ -24,7 +24,7 @@ Questions?
 
 Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-hcu2nag7-NUBw52cxxlYupLrc1hqvhw).
 
-Otherwise please reach out to either Dr. William Pringle (wpringle@nd.edu) or Dr. Keith Roberts (krober@usp.br) with questions or concerns!
+Otherwise please reach out to Dr. Keith Roberts (keithrbt0@gmail.com) with questions or concerns!
 
 Installation
 ============

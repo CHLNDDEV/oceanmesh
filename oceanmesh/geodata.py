@@ -12,7 +12,7 @@ from .grid import Grid
 
 nan = numpy.nan
 
-__all__ = ["Geodata", "Shoreline", "DEM"]
+__all__ = ["Vector", "Shoreline", "DEM"]
 
 
 def _convert_to_array(lst):
@@ -206,16 +206,15 @@ def _nth_simplify(polys, bbox, verbose):
     return _convert_to_array(out)
 
 
-# TODO: this should be called "Vector" and contain general methods for vector datasets
-class Geodata:
+class Vector:
     """
     Geographical data class that handles geographical data describing
-    shorelines in the form of a shapefile and topobathy in the form of a
-    digital elevation model (DEM).
+    shorelines in the form of a vector shapefile
     """
 
-    def __init__(self, bbox):
+    def __init__(self, bbox, spacing):
         self.bbox = bbox
+        self.spacing = spacing
 
     @property
     def bbox(self):
@@ -233,6 +232,15 @@ class Geodata:
             if value[3] < value[2]:
                 raise ValueError("bbox has wrong values.")
             self.__bbox = value
+
+    @property
+    def spacing(self):
+        return self.__spacing
+
+    @spacing.setter
+    def spacing(self, value):
+        assert value > 0, "spacing must be positive and g.t. 0"
+        self.__spacing = value
 
 
 def _from_shapefile(filename, bbox, verbose):
@@ -257,18 +265,20 @@ def _from_shapefile(filename, bbox, verbose):
     return _convert_to_array(polys)
 
 
-class Shoreline(Geodata):
+class Shoreline(Vector):
     """
-    The shoreline class extends :class:`Geodata` to store data
+    The shoreline class extends :class:`Vector` to store data
     that is later used to create signed distance functions to
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
-        super().__init__(bbox)
+    def __init__(
+        self, shp, bbox, spacing, refinements=1, minimum_area_mult=4.0, verbose=1
+    ):
+        super().__init__(bbox, spacing)
 
         self.shp = shp
-        self.h0 = h0  # this converts meters -> wgs84 degees
+        self.h0 = self.spacing  # this converts meters -> wgs84 degees
         self.inner = []
         self.outer = []
         self.mainland = []
