@@ -1,10 +1,9 @@
-from oceanmesh.clean import (
-    delete_exterior_faces,
-    delete_faces_connected_to_one_face,
-    delete_interior_faces,
-    make_mesh_boundaries_traversable,
-)
-from oceanmesh.edgefx import distance_sizing_function, wavelength_sizing_function
+from oceanmesh.clean import (delete_exterior_faces,
+                             delete_faces_connected_to_one_face,
+                             delete_interior_faces,
+                             make_mesh_boundaries_traversable)
+from oceanmesh.edgefx import (distance_sizing_function, enforce_mesh_gradation,
+                              wavelength_sizing_function)
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
 from oceanmesh.grid import Grid, compute_minimum
@@ -28,6 +27,7 @@ __all__ = [
     "Domain",
     "Shoreline",
     "distance_sizing_function",
+    "enforce_mesh_gradation",
     "wavelength_sizing_function",
     "signed_distance_function",
     "get_poly_edges",

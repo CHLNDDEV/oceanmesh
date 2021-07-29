@@ -1,9 +1,47 @@
+import warnings
+
 import numpy
 import skfmm
 
+from .cpp.HamiltonJacobi import gradient_limit
 from .grid import Grid
 
-__all__ = ["distance_sizing_function", "wavelength_sizing_function"]
+__all__ = [
+    "enforce_mesh_gradation",
+    "distance_sizing_function",
+    "wavelength_sizing_function",
+]
+
+
+def enforce_mesh_gradation(grid, gradation=0.15, verbose=1):
+    """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
+
+    Parameters
+    ---------
+
+    Returns
+    -------
+
+    """
+    if gradation < 0:
+        raise ValueError("Parameter `gradation` must be > 0.0")
+    if gradation > 1.0:
+        warnings.warn("Parameter `gradation` is set excessively high (> 1.0)")
+    if verbose:
+        print(f"Enforcing mesh size gradation of {gradation} decimal percent...")
+
+    elen = grid.dx
+    if grid.dx != grid.dy:
+        assert "Structured grids with unequal grid spaces not yet supported"
+    cell_size = grid.values.copy()
+    sz = cell_size.shape
+    sz = (sz[0], sz[1], 1)
+    cell_size = cell_size.flatten("F")
+    tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
+    tmp = numpy.reshape(tmp, (sz[0], sz[1]), "F")
+    grid_limited = Grid(bbox=grid.bbox, dx=grid.dx, values=tmp)
+    grid_limited.build_interpolant()
+    return grid_limited
 
 
 def distance_sizing_function(

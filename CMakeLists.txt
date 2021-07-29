@@ -33,4 +33,5 @@ message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIRS}")
 
 #add_subdirectory(pybind11)
 pybind11_add_module(delaunay_class ${SOURCES} "${SRC}/delaunay_class.cpp")
+pybind11_add_module(HamiltonJacobi ${SOURCES} "${SRC}/HamiltonJacobi.cpp")
 pybind11_add_module(fast_geometry ${SOURCES} "${SRC}/fast_geometry.cpp")

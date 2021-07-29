@@ -80,6 +80,7 @@ class CMakeBuild(build_ext):
 
 setup(
     ext_modules=[
+        CMakeExtension("oceanmesh/cpp/HamiltonJacobi"),
         CMakeExtension("oceanmesh/cpp/delaunay_class"),
         CMakeExtension("oceanmesh/cpp/fast_geometry"),
     ],
