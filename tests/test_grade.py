@@ -11,4 +11,4 @@ def test_grade():
     edge_length = om.distance_sizing_function(shore, rate=0.35)
 
     test_edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.20)
-    test_edge_length.plot(show=False, file_name="test_edge_length.png")
+    test_edge_length.plot(show=False, file_name="test_grade_edgelength.png")

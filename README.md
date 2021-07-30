@@ -29,10 +29,10 @@ Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or 
 Installation
 ============
 
-For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/) and
+For installation, oceanmesh needs [cmake](https://cmake.org/), [gmp](https://gmplib.org/), [mpfr](https://www.mpfr.org/), [CGAL](https://www.cgal.org/) and
 [pybind11](https://github.com/pybind/pybind11):
 
-    sudo apt install cmake libcgal-dev python3-pybind11
+    sudo apt install cmake libmpfr-dev libgmp3-dev libcgal-dev python3-pybind11
 
 CGAL and pybind can also be installed with [`conda`](https://www.anaconda.com/products/individual):
 
