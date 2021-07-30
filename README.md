@@ -36,11 +36,16 @@ For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://ww
 
 CGAL and pybind can also be installed with [`conda`](https://www.anaconda.com/products/individual):
 
-    conda install -c conda-forge cgal pybind11 
+    conda install -c conda-forge cgal pybind11
 
 After that, clone the repo and oceanmesh can be updated/installed using pip.
 
     pip install -U -e .
+
+On some clusters/HPC in order to install CGAL, you may need to load/install [gmp](https://gmplib.org/) and [mpfr](https://www.mpfr.org/).
+For example, to install:
+
+    sudo apt install libmpfr-dev libgmp3-dev
 
 :warning:
 
