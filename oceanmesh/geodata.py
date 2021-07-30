@@ -332,7 +332,9 @@ class Shoreline(Geodata):
         value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
 
-    def plot(self, ax=None, xlabel=None, ylabel=None, title=None):
+    def plot(
+        self, ax=None, xlabel=None, ylabel=None, title=None, file_name=None, show=True
+    ):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
 
@@ -379,7 +381,10 @@ class Shoreline(Geodata):
 
         ax.set_aspect("equal", adjustable="box")
 
-        plt.show()
+        if show:
+            plt.show()
+        if file_name is not None:
+            plt.savefig(file_name)
         return ax
 
 
@@ -407,10 +412,11 @@ def _extract_bounds(lons, lats, bbox):
         )
     # latitude lower and upper index
     latli = numpy.argmin(numpy.abs(lats - bbox[2]))
-    latui = numpy.argmin(numpy.abs(lats - bbox[3]))
+    latui = numpy.argmin(numpy.abs(lats - bbox[3])) + 1
     # longitude lower and upper index
     lonli = numpy.argmin(numpy.abs(lons - bbox[0]))
-    lonui = numpy.argmin(numpy.abs(lons - bbox[1]))
+    lonui = numpy.argmin(numpy.abs(lons - bbox[1])) + 1
+
     return latli, latui, lonli, lonui
 
 
@@ -504,6 +510,6 @@ class DEM(Grid):
             bbox=bbox,
             dx=dx,
             dy=dy,
-            values=topobathy.T,
         )
+        self.values = topobathy[: self.ny, : self.nx].T
         super().build_interpolant()

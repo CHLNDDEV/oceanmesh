@@ -54,8 +54,6 @@ class Grid:
     """
 
     def __init__(self, bbox, dx, dy=None, hmin=None, values=None, fill=None):
-        floor = numpy.floor
-
         if dy is None:
             dy = dx
         self.bbox = bbox
@@ -63,8 +61,8 @@ class Grid:
         self.dx = dx
         self.dy = dy
         self.hmin = hmin
-        self.nx = int(floor((self.bbox[1] - self.bbox[0]) / self.dx))
-        self.ny = int(floor((self.bbox[3] - self.bbox[2]) / self.dy))
+        self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
+        self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
         self.values = values
         self.eval = None
         self.fill = fill
@@ -115,14 +113,10 @@ class Grid:
         if numpy.isscalar(data):
             data = numpy.tile(data, (self.nx, self.ny))
         elif data is None:
-            pass
-        elif data.shape != (self.nx, self.ny):
-            raise ValueError(
-                f"Shape of values {data.shape} does not match grid size {self.nx, self.ny}"
-            )
-        self.__values = data
+            return
+        self.__values = data[: self.nx, : self.ny]
 
-    def create_vectors(self, coarsen=1):
+    def create_vectors(self):
         """Build coordinate vectors
 
         Parameters
@@ -137,11 +131,11 @@ class Grid:
             1D array contain data with `float` type of y-coordinates.
 
         """
-        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.dx * coarsen
-        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.dy * coarsen
+        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.dx
+        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.dy
         return x, y
 
-    def create_grid(self, coarsen=1):
+    def create_grid(self):
         """Build a structured grid
 
         Parameters
@@ -156,7 +150,7 @@ class Grid:
             2D array contain data with `float` type.
 
         """
-        x, y = self.create_vectors(coarsen)
+        x, y = self.create_vectors()
         return numpy.meshgrid(x, y, sparse=False, indexing="ij")
 
     def find_indices(self, points, lon, lat, tree=None):
@@ -243,6 +237,7 @@ class Grid:
     def plot(
         self,
         hold=False,
+        show=True,
         vmin=None,
         vmax=None,
         coarsen=1,
@@ -250,6 +245,7 @@ class Grid:
         ylabel=None,
         title=None,
         cbarlabel=None,
+        file_name=None,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -265,23 +261,31 @@ class Grid:
 
         """
 
-        x, y = self.create_grid(coarsen)
+        x, y = self.create_grid()
 
         fig, ax = plt.subplots()
-        c = ax.pcolormesh(x, y, self.values, vmin=vmin, vmax=vmax, shading="auto")
-        cbar = plt.colorbar(c)
-        if cbar is not None:
-            cbar.set_label(cbarlabel)
         ax.axis("equal")
+        c = ax.pcolormesh(
+            x[:-1:coarsen, :-1:coarsen],
+            y[:-1:coarsen, :-1:coarsen],
+            self.values[:-1:coarsen, :-1:coarsen],
+            vmin=vmin,
+            vmax=vmax,
+            shading="auto",
+        )
+        cbar = plt.colorbar(c)
+        if cbarlabel is not None:
+            cbar.set_label(cbarlabel)
         if xlabel is not None:
             ax.set_xlabel(xlabel)
         if ylabel is not None:
             ax.set_ylabel(ylabel)
         if title is not None:
             ax.set_title(title)
-        if hold is False:
-            fig.colorbar(c, ax=ax)
+        if hold is False and show:
             plt.show()
+        if file_name is not None:
+            plt.savefig(file_name)
         return ax
 
     def build_interpolant(self):
@@ -295,6 +299,7 @@ class Grid:
 
         """
         lon1, lat1 = self.create_vectors()
+
         fp = RegularGridInterpolator(
             (lon1, lat1),
             self.values,
