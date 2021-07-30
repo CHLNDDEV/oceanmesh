@@ -17,7 +17,7 @@ def test_grade():
 
     domain = om.signed_distance_function(shore)
 
-    points, cells = om.generate_mesh(domain, test_edge_length)
+    points, cells = om.generate_mesh(domain, test_edge_length, max_iter=100)
 
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
 
