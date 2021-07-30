@@ -70,7 +70,7 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double 
 
   double ftol = *(std::min_element(ffun.begin(), ffun.end())) * std::sqrt(EPS);
 
-  std::array<int, 7> npos;
+  std::array<int, 9> npos;
   npos.fill(0);
 
   // allocate output
@@ -101,32 +101,35 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double 
       int ipos, jpos, kpos;
       ind2sub(inod, dims[0], dims[1], &ipos, &jpos, &kpos);
 
-      // ---- gather indices using 4 (6 in 3d) edge stencil centered on inod
+      // ---- gather indices centered on inod
       npos[0] = inod;
-
+      // right
       npos[1] =
           sub2ind(ipos, std::min(jpos + 1, dims[1]), kpos, dims[0], dims[1]);
-
+      // left
       npos[2] = sub2ind(ipos, std::max(jpos - 1, 1), kpos, dims[0], dims[1]);
-
-      npos[3] =
-          sub2ind(std::min(ipos + 1, dims[0]), jpos, kpos, dims[0], dims[1]);
-
+      // top
+      npos[3] = sub2ind(std::min(ipos + 1, dims[0]), jpos, kpos, dims[0], dims[1]);
+      // bottom
       npos[4] = sub2ind(std::max(ipos - 1, 1), jpos, kpos, dims[0], dims[1]);
 
-      npos[5] =
-          sub2ind(ipos, jpos, std::min(kpos + 1, dims[2]), dims[0], dims[1]);
+      // top right diagonal
+      npos[5] = sub2ind(std::min(ipos +1, dims[0]), std::min(jpos +1, dims[1]), kpos, dims[0], dims[1]);
+      // top left diagonal
+      npos[6] = sub2ind(std::max(ipos -1 , 1), std::min(jpos +1, dims[1]), kpos, dims[0], dims[1]);
+      // bottom left diagonal
+      npos[7] = sub2ind(std::max(ipos -1 , 1), std::max(jpos -1, 1), kpos, dims[0], dims[1]);
+      // bottom right diagonal
+      npos[8] = sub2ind(std::min(ipos +1 , dims[0]), std::min(jpos+1, dims[1]), kpos, dims[0], dims[1]);
 
-      npos[6] = sub2ind(ipos, jpos, std::max(kpos - 1, 1), dims[0], dims[1]);
-
-      for (std::size_t u = 0; u < 7; u++)
+      for (std::size_t u = 0; u < 9; u++)
         npos[u]--;
 
       int nod1 = npos[0];
       assert(nod1 < ffun_s.size());
       assert(nod1 > -1);
 
-      for (std::size_t p = 2; p < 7; p++) {
+      for (std::size_t p = 2; p < 9; p++) {
 
         int nod2 = npos[p];
         assert(nod2 < ffun_s.size());

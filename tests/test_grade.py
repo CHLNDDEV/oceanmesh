@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import oceanmesh as om
 
 
@@ -12,3 +14,18 @@ def test_grade():
 
     test_edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.20)
     test_edge_length.plot(show=False, file_name="test_edge_length.png")
+
+    domain = om.signed_distance_function(shore)
+
+    points, cells = om.generate_mesh(domain, test_edge_length)
+
+    points, cells = om.make_mesh_boundaries_traversable(points, cells)
+
+    points, cells = om.delete_faces_connected_to_one_face(points, cells)
+
+    # plot
+    fig, ax = plt.subplots()
+    ax.set_aspect("equal")
+    triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
+    ax.triplot(triang, "-", lw=1)
+    plt.show()

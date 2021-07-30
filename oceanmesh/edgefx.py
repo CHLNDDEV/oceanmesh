@@ -39,7 +39,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=1):
     cell_size = cell_size.flatten("F")
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = numpy.reshape(tmp, (sz[0], sz[1]), "F")
-    grid_limited = Grid(bbox=grid.bbox, dx=grid.dx, values=tmp)
+    grid_limited = Grid(bbox=grid.bbox, dx=grid.dx, values=tmp, hmin=grid.hmin)
     grid_limited.build_interpolant()
     return grid_limited
 
