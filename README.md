@@ -22,9 +22,9 @@ Functionality
 Questions?
 ============
 
-Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-hcu2nag7-NUBw52cxxlYupLrc1hqvhw).
+Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-su1q3lh3-C_j6AIOQPrewqZnanhzN7g).
 
-Otherwise please reach out to either Dr. William Pringle (wpringle@nd.edu) or Dr. Keith Roberts (krober@usp.br) with questions or concerns!
+Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or Dr. William Pringle (wpringle@anl.gov) with questions or concerns!
 
 Installation
 ============
@@ -36,11 +36,16 @@ For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://ww
 
 CGAL and pybind can also be installed with [`conda`](https://www.anaconda.com/products/individual):
 
-    conda install -c conda-forge cgal pybind11 
+    conda install -c conda-forge cgal pybind11
 
 After that, clone the repo and oceanmesh can be updated/installed using pip.
 
     pip install -U -e .
+
+On some clusters/HPC in order to install CGAL, you may need to load/install [gmp](https://gmplib.org/) and [mpfr](https://www.mpfr.org/).
+For example, to install:
+
+    sudo apt install libmpfr-dev libgmp3-dev
 
 :warning:
 
