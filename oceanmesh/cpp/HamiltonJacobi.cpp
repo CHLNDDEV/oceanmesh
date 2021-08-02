@@ -60,7 +60,8 @@ std::vector<int> findIndices(const std::vector<int> &A, const int value) {
 }
 
 // solve the Hamilton-Jacobi equation
-std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double &elen,
+std::vector<double> c_gradient_limit(const std::vector<int> &dims, 
+                              const double &elen,
                               const double &dfdx, const int &imax,
                               const std::vector<double> &ffun) {
 
@@ -73,10 +74,13 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double 
   std::array<int, 9> npos;
   npos.fill(0);
 
+  double elend = elen * std::sqrt(2.0);
+
   // allocate output
   std::vector<double> ffun_s;
   ffun_s.resize(ffun.size());
   ffun_s = ffun;
+  
 
   int maxSz = dims[0] * dims[1] * dims[2];
 
@@ -129,16 +133,26 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double 
       assert(nod1 < ffun_s.size());
       assert(nod1 > -1);
 
-      for (std::size_t p = 2; p < 9; p++) {
+      for (std::size_t p = 1; p < 9; p++) {
 
         int nod2 = npos[p];
         assert(nod2 < ffun_s.size());
         assert(nod2 > -1);
 
+        if (p < 5) {
+        
+          double elenp = elen;
+
+        } else {
+        
+          double elenp = elend;
+        }
+
+
         //----------------- calc. limits about min.-value
         if (ffun_s[nod1] > ffun_s[nod2]) {
 
-          double fun1 = ffun_s[nod2] + elen * dfdx;
+          double fun1 = ffun_s[nod2] + elenp * dfdx;
           if (ffun_s[nod1] > fun1 + ftol) {
             ffun_s[nod1] = fun1;
             aset[nod1] = iter;
@@ -146,7 +160,7 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims, const double 
 
         } else {
 
-          double fun2 = ffun_s[nod1] + elen * dfdx;
+          double fun2 = ffun_s[nod1] + elenp * dfdx;
           if (ffun_s[nod2] > fun2 + ftol) {
             ffun_s[nod2] = fun2;
             aset[nod2] = iter;
