@@ -60,7 +60,7 @@ std::vector<int> findIndices(const std::vector<int> &A, const int value) {
 }
 
 // solve the Hamilton-Jacobi equation
-std::vector<double> c_gradient_limit(const std::vector<int> &dims, 
+std::vector<double> c_gradient_limit(const std::vector<int> &dims,
                               const double &elen,
                               const double &dfdx, const int &imax,
                               const std::vector<double> &ffun) {
@@ -80,7 +80,7 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
   std::vector<double> ffun_s;
   ffun_s.resize(ffun.size());
   ffun_s = ffun;
-  
+
 
   int maxSz = dims[0] * dims[1] * dims[2];
 
@@ -139,13 +139,10 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
         assert(nod2 < ffun_s.size());
         assert(nod2 > -1);
 
-        if (p < 5) {
-        
-          double elenp = elen;
+        double elenp = elen;
 
-        } else {
-        
-          double elenp = elend;
+        if (p > 4) {
+          elenp = elend;
         }
 
 
