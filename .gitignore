@@ -13,3 +13,7 @@ build/
 *.hdf5
 *.msh
 *.so
+*.png
+tests/*.txt
+*.zip
+tests/gshhg-shp-2.3.7/

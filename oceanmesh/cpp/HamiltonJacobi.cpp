@@ -139,12 +139,13 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
         assert(nod2 < ffun_s.size());
         assert(nod2 > -1);
 
+        // use non-diagonal element length for p = [1..4]
         double elenp = elen;
 
+        // use diagonal element length for p = [5..8]
         if (p > 4) {
           elenp = elend;
         }
-
 
         //----------------- calc. limits about min.-value
         if (ffun_s[nod1] > ffun_s[nod2]) {
