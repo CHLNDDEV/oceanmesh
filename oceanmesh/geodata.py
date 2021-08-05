@@ -153,14 +153,20 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
               boubox = boubox[~outside,:]
             # 2/4 Create a list of segments that are inside boubox (segment to add)
               _isegs = _index_segments_to_list(numpy.where(inside)[0])
-            # 3/4 Loop though segments and find insertion indieces
+            # 3/4 Loop though segments and find insertion indexes
               for _iseg in _isegs:
                 _pi = poly[:-2,:][_iseg,:]
                 i,j = _find_closest_index(boubox,_pi)
-                if i>j:
-                  boubox = _shift_first_last(boubox)
-                  i,j = _find_closest_index(boubox,_pi)
-                boubox = numpy.vstack((boubox[:i+1,:],_pi,boubox[j:,:]))
+              # Because `outside` was removed from path, indexes i,j are expected
+              # to be neighbours. Make case for last to first index.
+                if i+1 != j:
+                  _shift_by = 2
+                  boubox = _shift_first_last(boubox,_shift_by)
+                  i -= _shift_by
+                  j = i+1
+                  del(_shift_by)
+
+                boubox = numpy.vstack((boubox[:j,:],_pi,boubox[j:,:]))
                 del(i,j,_pi)
 
               del(_iseg,_isegs)
@@ -237,7 +243,7 @@ def _nth_simplify(polys, bbox, verbose):
 
 def _index_segments_to_list(s):
     """
-    Split indices that define segments to list of segments.
+    Split indexes that define segments to list of segments.
     """
     _l = []
     _i = numpy.where(numpy.diff(s)>1)[0]+1
@@ -258,12 +264,16 @@ def _find_closest_index(_p,_s):
 
     return i,j
 
-def _shift_first_last(_p,_shift=0.4):
+def _shift_first_last(_p,n=2):
     """
     Move first and last point in array to a different array index.
     """
-    n = int(_p.shape[0]*_shift)
+    if n<1 or n>=_p.shape[0]-1:
+      raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n._p.shape[0]))
+
     _arr = numpy.vstack((_p[n:,:],_p[0:n,:]))
+    if not numpy.sum(_p)==numpy.sum(_arr):
+      raise IndexError('Checksum mismatch (unequal arrays).')
 
     return _arr
 
@@ -458,7 +468,7 @@ class Shoreline(Geodata):
 
 
 def _extract_bounds(lons, lats, bbox):
-    """Extract the indices of the subregion"""
+    """Extract the indexes of the subregion"""
     # bounds (from DEM)
     blol, blou = numpy.amin(lons), numpy.amax(lons)
     blal, blau = numpy.amin(lats), numpy.amax(lats)

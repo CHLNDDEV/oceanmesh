@@ -14,7 +14,6 @@ from oceanmesh import (
 import shapefile, shapely.geometry
 
 shp='ocean.shp'
-#hp='ocean_full_res.shp'
 with shapefile.Reader(shp) as shpf:
   shapes = shpf.shapes()
   n = len(shapes)
