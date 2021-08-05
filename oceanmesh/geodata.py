@@ -109,16 +109,26 @@ def _is_overlapping(bbox1, bbox2):
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def _classify_shoreline(bbox, polys, h0, minimum_area_mult, verbose):
+def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
+    (3) `boubox` polygon array is will be clipped by segments contained by `mainland`.
     """
     if verbose > 1:
         print("Classifying shoreline segments...")
 
-    boubox = _create_boubox(bbox)
+    if boubox == []:
+      boubox = _create_boubox(bbox)
+      boubox = numpy.asarray(boubox)
+
+    boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
+  # Remove nan's (append again at end)
+    isNaN = ( numpy.sum(numpy.isnan(boubox),axis=1)>0 )
+    if any(isNaN):
+      boubox = numpy.delete(boubox,isNaN,axis=0)
+    del(isNaN)
 
     inner = numpy.empty(shape=(0, 2))
     inner[:] = nan
@@ -135,9 +145,29 @@ def _classify_shoreline(bbox, polys, h0, minimum_area_mult, verbose):
                 continue
             inner = numpy.append(inner, poly, axis=0)
         elif any(inside):
-            mainland = numpy.append(mainland, poly, axis=0)
+            mainland = numpy.vstack((mainland,poly[:-2,:][inside,:],[[nan, nan]]))
+          # Clip mainland segment from boubox and regenerate path
+            outside = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
+            if any(outside):
+            # 1/4 Remove points outside from boubox
+              boubox = boubox[~outside,:]
+            # 2/4 Create a list of segments that are inside boubox (segment to add)
+              _isegs = _index_segments_to_list(numpy.where(inside)[0])
+            # 3/4 Loop though segments and find insertion indieces
+              for _iseg in _isegs:
+                _pi = poly[:-2,:][_iseg,:]
+                i,j = _find_closest_index(boubox,_pi)
+                if i>j:
+                  boubox = _shift_first_last(boubox)
+                  i,j = _find_closest_index(boubox,_pi)
+                boubox = numpy.vstack((boubox[:i+1,:],_pi,boubox[j:,:]))
+                del(i,j,_pi)
 
-    boubox = _densify(numpy.array(boubox), h0 / 2, bbox, radius=0.1)
+              del(_iseg,_isegs)
+            # 4/4 Regenerate path
+              path = mpltPath.Path(boubox)
+            del(outside)
+
     boubox = numpy.append(boubox, [[nan, nan]], axis=0)
 
     return inner, mainland, boubox
@@ -205,6 +235,37 @@ def _nth_simplify(polys, bbox, verbose):
         out.append(line)
     return _convert_to_array(out)
 
+def _index_segments_to_list(s):
+    """
+    Split indices that define segments to list of segments.
+    """
+    _l = []
+    _i = numpy.where(numpy.diff(s)>1)[0]+1
+    for _a in numpy.split(s,_i):
+      _l.append(_a)
+
+    return _l
+
+def _find_closest_index(_p,_s):
+    """
+    Find closes coordinate array index (_p) based on
+    coordinate pair given in _s.
+    """
+    d = (_p[:,0] - _s[0,0])**2 + (_p[:,1] - _s[0,1])**2
+    i = numpy.argmin(d)
+    d = (_p[:,0] - _s[-1,0])**2 + (_p[:,1] - _s[-1,1])**2
+    j = numpy.argmin(d)
+
+    return i,j
+
+def _shift_first_last(_p,_shift=0.4):
+    """
+    Move first and last point in array to a different array index.
+    """
+    n = int(_p.shape[0]*_shift)
+    _arr = numpy.vstack((_p[n:,:],_p[0:n,:]))
+
+    return _arr
 
 # TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
@@ -265,6 +326,14 @@ class Shoreline(Geodata):
     """
 
     def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+
+        if isinstance(bbox,tuple):
+          _boubox = numpy.asarray(_create_boubox(bbox))
+        elif isinstance(bbox,numpy.ndarray):
+          _boubox = numpy.asarray(bbox)
+          bbox = (numpy.nanmin(_boubox[:,0]),numpy.nanmax(_boubox[:,0]),\
+                  numpy.nanmin(_boubox[:,1]),numpy.nanmax(_boubox[:,1]) )
+
         super().__init__(bbox)
 
         self.shp = shp
@@ -272,7 +341,7 @@ class Shoreline(Geodata):
         self.inner = []
         self.outer = []
         self.mainland = []
-        self.boubox = []
+        self.boubox = _boubox
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
@@ -285,7 +354,7 @@ class Shoreline(Geodata):
         polys = _nth_simplify(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, polys, self.h0 / 2, self.minimum_area_mult, verbose
+            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose
         )
 
     @property
