@@ -8,19 +8,68 @@ from .grid import Grid
 
 __all__ = [
     "enforce_mesh_gradation",
+    "enforce_mesh_size_bounds_depth",
     "distance_sizing_function",
     "wavelength_sizing_function",
 ]
+
+
+def enforce_mesh_size_bounds_depth(grid, dem, bounds, verbose=1):
+    """Enforce mesh size bounds as a function of depth
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+
+    """
+    lon, lat = grid.create_grid()
+    tmpz = dem.eval((lon, lat))
+    for i, bound in enumerate(bounds):
+        assert (
+            len(bound) == 4
+        ), "Bounds must be specified  as a list with [min_mesh_size, max_mesh_size, min_depth_bound, max_depth_bound]"
+        min_h, max_h, min_z, max_z = bound
+        min_h /= 111e3
+        max_h /= 111e3
+        # sanity checks
+        error_sz = f"For bound number {i} the maximum size bound {max_h} is smaller than the minimum size bound {min_h}"
+        error_depth = f"For bound number {i} the maximum depth bound {max_z} is smaller than the minimum depth bound {min_z}"
+        assert min_h < max_h, error_sz
+        assert min_z < max_z, error_depth
+        # get grid values to enforce the bounds
+        upper_indices = numpy.where(
+            tmpz > min_z and tmpz <= max_z and grid.values >= max_h
+        )[0]
+        lower_indices = numpy.where(
+            tmpz > min_z and tmpz <= max_z and grid.values < min_h
+        )[0]
+        # enforce the bounds here
+        grid.values[upper_indices] = max_h
+        grid.values[lower_indices] = min_h
+
+    grid.build_interpolant()
+
+    return grid
 
 
 def enforce_mesh_gradation(grid, gradation=0.15, verbose=1):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
-    ---------
+    ----------
+    grid: :class:`Grid`
+        A grid object with its values field populated
+    gradation: float
+        The decimal percent mesh size gradation rate to-be-enforced.
+    verbose: boolean
+        whether to write messages to the screen
 
     Returns
     -------
+    grid: class:`Grid`
+        A grid ojbect with its values field gradient limited
 
     """
     if gradation < 0:
