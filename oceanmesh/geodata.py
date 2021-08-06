@@ -101,6 +101,14 @@ def _poly_area(x, y):
         numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
     )
 
+def _poly_length(coords):
+    """Calculates circumference of a polygon"""
+    if all(numpy.isclose(coords[0,:],coords[-1,:])):
+      c = coords
+    else:
+      c = numpy.vstack((coords,coords[0,:]))
+
+    return numpy.sum(numpy.sqrt(numpy.sum(numpy.diff(c,axis=0)**2,axis=1)))
 
 def _is_overlapping(bbox1, bbox2):
     """Determines if two axis-aligned boxes intersect"""
@@ -138,41 +146,42 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     polys = _convert_to_list(polys)
     path = mpltPath.Path(boubox)
     for poly in polys:
-        inside = path.contains_points(poly[:-2])
-        if all(inside):
-            area = _poly_area(poly[:-2, 0], poly[:-2, 1])
-            if area < minimum_area_mult * h0 ** 2:
-                continue
-            inner = numpy.append(inner, poly, axis=0)
-        elif any(inside):
-            mainland = numpy.vstack((mainland,poly[:-2,:][inside,:],[[nan, nan]]))
-          # Clip mainland segment from boubox and regenerate path
-            outside = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
-            if any(outside):
-            # 1/4 Remove points outside from boubox
-              boubox = boubox[~outside,:]
-            # 2/4 Create a list of segments that are inside boubox (segment to add)
-              _isegs = _index_segments_to_list(numpy.where(inside)[0])
-            # 3/4 Loop though segments and find insertion indexes
-              for _iseg in _isegs:
-                _pi = poly[:-2,:][_iseg,:]
-                i,j = _find_closest_index(boubox,_pi)
-              # Because `outside` was removed from path, indexes i,j are expected
-              # to be neighbours. Make case for last to first index.
-                if i+1 != j:
-                  _shift_by = 2
-                  boubox = _shift_first_last(boubox,_shift_by)
-                  i -= _shift_by
-                  j = i+1
-                  del(_shift_by)
+      inside = path.contains_points(poly[:-2])
+      if all(inside):
+        area = _poly_area(poly[:-2, 0], poly[:-2, 1])
+        if area < minimum_area_mult * h0 ** 2:
+          continue
+        inner = numpy.append(inner, poly, axis=0)
+      elif any(inside):
+      # Clip mainland segment from boubox and regenerate path
+        outside = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
+        if any(outside):
+        # 1/4 Remove points outside from boubox
+          boubox = boubox[~outside,:]
+        # 2/4 Create a list of segments that are inside boubox (segment to add)
+          _isegs = _index_segments_to_list(numpy.where(inside)[0])
+        # 3/4 Loop though segments and find insertion indexes
+          for _iseg in _isegs:
+            _pi = poly[:-2,:][_iseg,:]
+            i,j = _find_closest_index(boubox,_pi)
+          # Because `outside` was removed from path, indexes i,j are expected
+          # to be neighbours. Make case for last to first index.
+            if i+1 != j:
+              _shift_by = 2
+              boubox = _shift_first_last(boubox,_shift_by)
+              i -= _shift_by
+              j = i+1
+              del(_shift_by)
 
-                boubox = numpy.vstack((boubox[:j,:],_pi,boubox[j:,:]))
-                del(i,j,_pi)
+            boubox = numpy.vstack((boubox[:j,:],_pi,boubox[j:,:]))
+            mainland = numpy.vstack((mainland,_pi,_pi[0,:],[[nan,nan]]))
+            del(i,j,_pi)
 
-              del(_iseg,_isegs)
-            # 4/4 Regenerate path
-              path = mpltPath.Path(boubox)
-            del(outside)
+          del(_iseg,_isegs)
+        # 4/4 Regenerate path
+          path = mpltPath.Path(boubox)
+        del(outside)
+      del(inside)
 
     boubox = numpy.append(boubox, [[nan, nan]], axis=0)
 
@@ -271,9 +280,16 @@ def _shift_first_last(_p,n=2):
     if n<1 or n>=_p.shape[0]-1:
       raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n._p.shape[0]))
 
-    _arr = numpy.vstack((_p[n:,:],_p[0:n,:]))
-    if not numpy.sum(_p)==numpy.sum(_arr):
-      raise IndexError('Checksum mismatch (unequal arrays).')
+    if all(numpy.isclose(_p[0,:],_p[-1,:])):
+      _a = _p[:-1,:]
+    else:
+      _a = _p
+
+    _arr = numpy.vstack((_a[n:,:],_a[0:n,:],_a[n,:]))
+    _lenP = _poly_length(_p)
+    _lenA = _poly_length(_arr)
+    if not numpy.isclose(_lenP,_lenA):
+      raise IndexError('Checksum mismatch (unequal arrays circumferences).')
 
     return _arr
 
