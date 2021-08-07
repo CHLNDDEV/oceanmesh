@@ -19,10 +19,20 @@ def enforce_mesh_size_bounds_depth(grid, dem, bounds, verbose=1):
 
     Parameters
     ----------
+    grid: :class:`Grid`
+        A grid object with its values field populated
+    dem:  :class:`Dem`
+        Data processed from :class:`Dem`.
+    bounds: list of list
+        A list of potentially > 1 len(4) lists containing
+        [[min_mesh_size, max_mesh_size, min_depth_bound, max_depth_bound]]
+    verbose: boolean
+        Whether or not to print messages to the screen
 
     Returns
     -------
-
+    :class:`Grid` object
+        A sizing function with the bounds mesh size bounds enforced.
     """
     lon, lat = grid.create_grid()
     tmpz = dem.eval((lon, lat))
@@ -31,6 +41,7 @@ def enforce_mesh_size_bounds_depth(grid, dem, bounds, verbose=1):
             len(bound) == 4
         ), "Bounds must be specified  as a list with [min_mesh_size, max_mesh_size, min_depth_bound, max_depth_bound]"
         min_h, max_h, min_z, max_z = bound
+        # for now do this crude conversion
         min_h /= 111e3
         max_h /= 111e3
         # sanity checks
@@ -40,10 +51,10 @@ def enforce_mesh_size_bounds_depth(grid, dem, bounds, verbose=1):
         assert min_z < max_z, error_depth
         # get grid values to enforce the bounds
         upper_indices = numpy.where(
-            tmpz > min_z and tmpz <= max_z and grid.values >= max_h
+            (tmpz > min_z) & (tmpz <= max_z) & (grid.values >= max_h)
         )[0]
         lower_indices = numpy.where(
-            tmpz > min_z and tmpz <= max_z and grid.values < min_h
+            (tmpz > min_z) & (tmpz <= max_z) & (grid.values < min_h)
         )[0]
         # enforce the bounds here
         grid.values[upper_indices] = max_h
