@@ -153,7 +153,9 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
           continue
         inner = numpy.append(inner, poly, axis=0)
       elif any(inside):
-      # Clip mainland segment from boubox and regenerate path
+      # Append polygon segment to mainland
+        mainland = numpy.vstack((mainland,poly))
+      # Clip polygon segment from boubox and regenerate path
         outside = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
         if any(outside):
         # 1/4 Remove points outside from boubox
@@ -174,7 +176,6 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
               del(_shift_by)
 
             boubox = numpy.vstack((boubox[:j,:],_pi,boubox[j:,:]))
-            mainland = numpy.vstack((mainland,_pi,_pi[0,:],[[nan,nan]]))
             del(i,j,_pi)
 
           del(_iseg,_isegs)
@@ -219,6 +220,51 @@ def _smooth_shoreline(polys, N, verbose):
     return _convert_to_array(out)
 
 
+def _clip_polys(polys, bbox, verbose):
+    """Clip segments in `polys` that intersect with `bbox`.
+    Clipped segments need to extend outside `bbox` to avoid
+    false positive `all(inside)` cases. Solution here is to
+    add a small offset to the `bbox`.
+    """
+    if verbose > 1:
+        print("Collapsing polygon segments outside bbox...")
+
+    # Inflate bounding box to allow clipped segment to overshoot original box.
+    delta = 0.002 # ~2km
+    bbox = (bbox[0]-delta,bbox[1]+delta,bbox[2]-delta,bbox[3]+delta)
+    boubox = numpy.asarray(_create_boubox(bbox))
+    path = mpltPath.Path(boubox)
+    polys = _convert_to_list(polys)
+
+    out = []
+    for i,poly in enumerate(polys):
+      inside = path.contains_points(poly[:-2,:])
+      if all(inside):
+        out.append(poly)
+      elif any(inside):
+        outside = ~inside
+        _ins = _index_segments_to_list(numpy.where(inside)[0])
+
+        for _seg in _ins:
+          _pFi = poly[:-2,:][[_seg[0]-1,_seg[0]],:]
+          _pLa = poly[:-2,:][[_seg[-1],_seg[-1]+1],:]
+          _pseg = poly[:-2,:][_seg,:]
+
+          _x1,_y1 = _intersect_segment(_pFi,bbox)
+          _xL,_yL = _intersect_segment(_pLa,bbox)
+
+          if numpy.isclose(_xL-_x1,0.) or numpy.isclose(_yL-_y1,0.):
+            _pseg = numpy.vstack((_pseg,[[_xL,_yL],[_x1,_y1]]))
+          else:
+            _i = mpltPath.Path(poly).contains_points(boubox[:-1,:])
+            _iB = numpy.where(_i)[0][0]
+            _pseg = numpy.vstack((_pseg,[[_xL,_yL],boubox[_iB,:],[_x1,_y1]]))
+
+          out.append( numpy.vstack((_pseg,_pseg[0,:],[[nan,nan]])) )
+
+    return _convert_to_array(out)
+
+
 def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
     if verbose > 1:
@@ -250,6 +296,7 @@ def _nth_simplify(polys, bbox, verbose):
         out.append(line)
     return _convert_to_array(out)
 
+
 def _index_segments_to_list(s):
     """
     Split indexes that define segments to list of segments.
@@ -260,6 +307,7 @@ def _index_segments_to_list(s):
       _l.append(_a)
 
     return _l
+
 
 def _find_closest_index(_p,_s):
     """
@@ -272,6 +320,7 @@ def _find_closest_index(_p,_s):
     j = numpy.argmin(d)
 
     return i,j
+
 
 def _shift_first_last(_p,n=2):
     """
@@ -292,6 +341,60 @@ def _shift_first_last(_p,n=2):
       raise IndexError('Checksum mismatch (unequal arrays circumferences).')
 
     return _arr
+
+def _intersect_segment(line,bbox):
+    """
+    Return point intersection of line of 2 points (numpy.array)
+    with bounding box (tuple: xmin,xmax,ymin,ymax).
+    Note: The solution presented here considers a special case, where
+          intersection with horizontal and vertical is found.
+
+    TODO: The general case would consider the solution to 2 linear
+          systems using the Cramer's rule. Consider the linear system
+            a1*x + b1*y = c1
+            a2*x + b2*y = c2
+          and assume (a1*b1 - b1*a2) is non-zero. The solution
+          (xi,yi) is found with Cramer's rule as
+            xi = (c1*b2 - b1*c2) / (a1*b2 - b1*a2)
+            yi = (a1*c2 - c1*a2) / (a1*b2 - b1*a2) .
+    """
+    box = (line[:,0].min(),line[:,0].max(),line[:,1].min(),line[:,1].max())
+
+    if numpy.isclose(line[1,0]-line[0,0], 0.):
+    # Special case: intersection of vertical segment.
+      xi = line[0,0]
+      for yi in bbox[2:]:
+        if box[2]<=yi and yi<=box[3]:
+          break
+        else:
+          xi = numpy.nan
+          yi = numpy.nan
+    else:
+    # Convert line segment to linear function y = mx + n
+      fit = numpy.zeros(2)
+      fit[0] = (line[1,1]-line[0,1]) / (line[1,0]-line[0,0])  # m
+      fit[1] = line[0,1] - (line[0,0]*fit[0])                 # n
+     #print('line: y = {:.3f}x {:+.3f}'.format(fit[0],fit[1]))
+
+      fit_xi = lambda y,p: (y-p[1]) / p[0]
+      fit_yi = lambda x,p: p[0]*x + p[1]
+
+      for i,lim in enumerate(bbox):
+        if i<2:
+         xi = lim;
+         yi = fit_yi(xi,fit)
+        elif i<4:
+         yi = lim
+         xi = fit_xi(yi,fit)
+
+        if box[0]<=xi and xi<=box[1] and box[2]<=yi and yi<=box[3]:
+          break
+        else:
+          xi = nan
+          yi = nan
+
+    return xi,yi
+
 
 # TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
@@ -377,7 +480,7 @@ class Shoreline(Geodata):
 
         polys = _densify(polys, self.h0, self.bbox, verbose)
 
-        polys = _nth_simplify(polys, self.bbox, verbose)
+        polys = _clip_polys(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
             self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose

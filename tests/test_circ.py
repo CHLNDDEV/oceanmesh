@@ -28,7 +28,7 @@ with shapefile.Reader(shp) as shpf:
 
 del(shapes,shape,shpf)
 
-shp='land.shp'
+shp='islands.shp'
 
 min_edge_length = 2.e3  # h0
 max_edge_length = 10.e3
