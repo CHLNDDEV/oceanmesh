@@ -18,7 +18,7 @@ class Domain:
         return self.domain(x)
 
 
-def signed_distance_function(shoreline, verbose=1):
+def signed_distance_function(shoreline, verbose=1, flip=0):
     """Takes a `shoreline` object containing segments representing islands and mainland boundaries
     and calculates a signed distance function with it (assuming the polygons are all closed).
     This function is queried every meshing iteration.
@@ -55,22 +55,9 @@ def signed_distance_function(shoreline, verbose=1):
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
         cond = numpy.logical_and(in_shoreline, in_boubox)
+        if flip:
+            cond = ~cond
         dist = (-1) ** (cond) * d
         return dist
 
     return Domain(shoreline.bbox, func)
-
-
-def _create_boubox(bbox):
-    """Create a bounding box from domain extents `bbox`."""
-    xmin, xmax, ymin, ymax = bbox
-    return numpy.array(
-        [
-            [xmin, ymin],
-            [xmax, ymin],
-            [xmax, ymax],
-            [xmin, ymax],
-            [xmin, ymin],
-            [nan, nan],
-        ]
-    )

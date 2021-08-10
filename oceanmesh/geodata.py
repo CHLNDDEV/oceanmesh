@@ -30,14 +30,16 @@ def _convert_to_list(arr):
 
 def _create_boubox(bbox):
     """Create a bounding box from domain extents `bbox`."""
-    xmin, xmax, ymin, ymax = bbox
-    return [
-        [xmin, ymin],
-        [xmax, ymin],
-        [xmax, ymax],
-        [xmin, ymax],
-        [xmin, ymin],
-    ]
+    if isinstance(bbox, tuple):
+        xmin, xmax, ymin, ymax = bbox
+        return [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+        ]
+    return bbox
 
 
 def _create_ranges(start, stop, N, endpoint=True):
@@ -447,18 +449,25 @@ class Geodata:
         if value is None:
             self.__bbox = value
         else:
-            if len(value) < 4:
-                raise ValueError("bbox has wrong number of values.")
-            if value[1] < value[0]:
-                raise ValueError("bbox has wrong values.")
-            if value[3] < value[2]:
-                raise ValueError("bbox has wrong values.")
+            if isinstance(value, tuple):
+                if len(value) < 4:
+                    raise ValueError("bbox has wrong number of values.")
+                if value[1] < value[0]:
+                    raise ValueError("bbox has wrong values.")
+                if value[3] < value[2]:
+                    raise ValueError("bbox has wrong values.")
             self.__bbox = value
 
 
 def _from_shapefile(filename, bbox, verbose):
     """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
-
+    if not isinstance(bbox, tuple):
+        bbox = (
+            numpy.amin(bbox[:, 0]),
+            numpy.amax(bbox[:, 0]),
+            numpy.amin(bbox[:, 1]),
+            numpy.amax(bbox[:, 1]),
+        )
     polys = []  # tmp storage for polygons and polylines
 
     if verbose > 0:
@@ -489,7 +498,7 @@ class Shoreline(Geodata):
 
         if isinstance(bbox,tuple):
           _boubox = numpy.asarray(_create_boubox(bbox))
-        elif isinstance(bbox,numpy.ndarray):
+        else:
           _boubox = numpy.asarray(bbox)
           bbox = (numpy.nanmin(_boubox[:,0]),numpy.nanmax(_boubox[:,0]),\
                   numpy.nanmin(_boubox[:,1]),numpy.nanmax(_boubox[:,1]) )
@@ -571,12 +580,15 @@ class Shoreline(Geodata):
 
         if ax is None:
             fig, ax = plt.subplots()
+            ax.axis("equal")
+
         if len(self.mainland) != 0:
             (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
             flg1 = True
         if len(self.inner) != 0:
             (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
             flg2 = True
+        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "g-")
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
@@ -595,11 +607,11 @@ class Shoreline(Geodata):
         ax.add_patch(rect)
 
         if flg1 and flg2:
-            ax.legend((line1, line2), ("mainland", "inner"))
+            ax.legend((line1, line2, line3), ("mainland", "inner", "outer"))
         elif flg1 and not flg2:
-            ax.legend((line1), ("mainland"))
+            ax.legend((line1, line3), ("mainland", "outer"))
         elif flg2 and not flg1:
-            ax.legend((line2), ("inner"))
+            ax.legend((line2, line3), ("inner", "outer"))
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)
