@@ -3,6 +3,7 @@ import os
 
 import matplotlib.path as mpltPath
 import numpy
+import numpy.linalg
 import shapefile
 from netCDF4 import Dataset
 from PIL import Image
@@ -131,6 +132,9 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
       boubox = _create_boubox(bbox)
       boubox = numpy.asarray(boubox)
 
+    if not _is_path_ccw(boubox):
+      boubox = numpy.flipud(boubox)
+
     boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
   # Remove nan's (append again at end)
     isNaN = ( numpy.sum(numpy.isnan(boubox),axis=1)>0 )
@@ -163,12 +167,19 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
         # 2/4 Create a list of segments that are inside boubox (segment to add)
           _isegs = _index_segments_to_list(numpy.where(inside)[0])
         # 3/4 Loop though segments and find insertion indexes
+          numpy.set_printoptions(precision=3,suppress=True)
           for _iseg in _isegs:
+            _n = len(_iseg)
             _pi = poly[:-2,:][_iseg,:]
             i,j = _find_closest_index(boubox,_pi)
+
           # Because `outside` was removed from path, indexes i,j are expected
           # to be neighbours. Make case for last to first index.
-            if i+1 != j:
+            if abs(j-1)!=1 and j<i:
+              _pi = numpy.flipud(_pi)
+              i,j = _find_closest_index(boubox,_pi)
+
+            if i<j and i+1 != j:
               _shift_by = 2
               boubox = _shift_first_last(boubox,_shift_by)
               i -= _shift_by
@@ -320,6 +331,26 @@ def _find_closest_index(_p,_s):
     j = numpy.argmin(d)
 
     return i,j
+
+
+def _is_path_ccw(_p):
+    """Compute curve orientation from first two line segment of a polygon.
+    Source: https://en.wikipedia.org/wiki/Curve_orientation
+    """
+    detO = 0.
+    O = numpy.ones((3,3))
+
+    i = 0
+    while (i+3<_p.shape[0] and numpy.isclose(detO,0.)):
+      # Colinear vectors detected. Try again with next 3 indices.
+      O[:,1:] = _p[i:i+3,:]
+      detO = numpy.linalg.det(O)
+      i += 1
+
+    if numpy.isclose(detO,0.):
+      raise RuntimeError('Cannot determine orientation from colinear path.')
+
+    return detO>0.
 
 
 def _shift_first_last(_p,n=2):
@@ -483,7 +514,7 @@ class Shoreline(Geodata):
         polys = _clip_polys(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose
+           self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose
         )
 
     @property
