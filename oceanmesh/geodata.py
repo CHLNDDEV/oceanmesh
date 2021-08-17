@@ -251,21 +251,30 @@ def _clip_polys(polys, bbox, verbose):
 
     out = []
     for i,poly in enumerate(polys):
-      inside = path.contains_points(poly[:-2,:])
+      plg = poly[:-2,:]
+      inside = path.contains_points(plg)
       if all(inside):
         out.append(poly)
       elif any(inside):
-        outside = ~inside
+        _ins = numpy.where(inside)[0]
+      # Change order of polygon vertices to make sure that the first
+      # coordinate falls outside the bounding box.
+        if 0 in _ins:
+          _shift_by =  numpy.where(~inside)[0][0]
+          plg = _shift_first_last(plg,_shift_by)
+          inside = path.contains_points(plg)
+
         _ins = _index_segments_to_list(numpy.where(inside)[0])
 
         for _seg in _ins:
-          _pFi = poly[:-2,:][[_seg[0]-1,_seg[0]],:]
-          _pLa = poly[:-2,:][[_seg[-1],_seg[-1]+1],:]
-          _pseg = poly[:-2,:][_seg,:]
+          _pFi = plg[[_seg[0]-1,_seg[0]],:]
+          _pLa = plg[[_seg[-1],_seg[-1]+1],:]
+          _pseg = plg[_seg,:]
 
           _x1,_y1 = _intersect_segment(_pFi,bbox)
           _xL,_yL = _intersect_segment(_pLa,bbox)
-
+          if any(numpy.isnan([_x1,_y1,_xL,_yL])):
+            raise ValueError('Could not find intersection between polygon segment and bounding box.')
           if numpy.isclose(_xL-_x1,0.) or numpy.isclose(_yL-_y1,0.):
             _pseg = numpy.vstack((_pseg,[[_xL,_yL],[_x1,_y1]]))
           else:
@@ -358,6 +367,7 @@ def _is_path_ccw(_p):
 def _shift_first_last(_p,n=2):
     """
     Move first and last point in array to a different array index.
+    No NaN in array allowed.
     """
     if n<1 or n>=_p.shape[0]-1:
       raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n._p.shape[0]))
@@ -497,9 +507,11 @@ class Shoreline(Geodata):
     def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
 
         if isinstance(bbox,tuple):
-          _boubox = numpy.asarray(_create_boubox(bbox))
+          _boubox = numpy.asarray(_create_boubox(bbox)) # polygon is CCW
         else:
           _boubox = numpy.asarray(bbox)
+          if not _is_path_ccw(_boubox):
+            _boubox = numpy.flipud(_boubox)
           bbox = (numpy.nanmin(_boubox[:,0]),numpy.nanmax(_boubox[:,0]),\
                   numpy.nanmin(_boubox[:,1]),numpy.nanmax(_boubox[:,1]) )
 
