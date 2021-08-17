@@ -259,7 +259,7 @@ def _clip_polys(polys, bbox, verbose):
         _ins = numpy.where(inside)[0]
       # Change order of polygon vertices to make sure that the first
       # coordinate falls outside the bounding box.
-        if 0 in _ins:
+        if 0 in set(_ins):
           _shift_by =  numpy.where(~inside)[0][0]
           plg = _shift_first_last(plg,_shift_by)
           inside = path.contains_points(plg)
@@ -268,7 +268,7 @@ def _clip_polys(polys, bbox, verbose):
 
         for _seg in _ins:
           _pFi = plg[[_seg[0]-1,_seg[0]],:]
-          _pLa = plg[[_seg[-1],_seg[-1]+1],:]
+          _pLa = plg[[_seg[-1],(_seg[-1]+1)%plg.shape[0]],:]
           _pseg = plg[_seg,:]
 
           _x1,_y1 = _intersect_segment(_pFi,bbox)
