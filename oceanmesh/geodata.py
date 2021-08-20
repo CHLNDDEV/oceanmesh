@@ -29,7 +29,7 @@ def _convert_to_list(arr):
 
 
 def _create_boubox(bbox):
-    """Create a bounding box from domain extents `bbox`."""
+    """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
     if isinstance(bbox, tuple):
         xmin, xmax, ymin, ymax = bbox
         return [
@@ -130,11 +130,10 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     if verbose > 1:
         print("Classifying shoreline segments...")
 
-    if boubox == []:
+    if len(boubox) == 0:
       boubox = _create_boubox(bbox)
       boubox = numpy.asarray(boubox)
-
-    if not _is_path_ccw(boubox):
+    elif not _is_path_ccw(boubox):
       boubox = numpy.flipud(boubox)
 
     boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
@@ -169,7 +168,6 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
         # 2/4 Create a list of segments that are inside boubox (segment to add)
           _isegs = _index_segments_to_list(numpy.where(inside)[0])
         # 3/4 Loop though segments and find insertion indexes
-          numpy.set_printoptions(precision=3,suppress=True)
           for _iseg in _isegs:
             _n = len(_iseg)
             _pi = poly[:-2,:][_iseg,:]
@@ -233,56 +231,69 @@ def _smooth_shoreline(polys, N, verbose):
     return _convert_to_array(out)
 
 
-def _clip_polys(polys, bbox, verbose):
+def _clip_polys(polys, bbox, verbose,delta=0.10):
     """Clip segments in `polys` that intersect with `bbox`.
     Clipped segments need to extend outside `bbox` to avoid
     false positive `all(inside)` cases. Solution here is to
-    add a small offset to the `bbox`.
+    add a small offset `delta` to the `bbox`.
     """
     if verbose > 1:
         print("Collapsing polygon segments outside bbox...")
 
     # Inflate bounding box to allow clipped segment to overshoot original box.
-    delta = 0.002 # ~2km
+    boubox0 = numpy.asarray(_create_boubox(bbox))
     bbox = (bbox[0]-delta,bbox[1]+delta,bbox[2]-delta,bbox[3]+delta)
     boubox = numpy.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
 
+    numpy.set_printoptions(precision=3,suppress=True)  # DEBUG
+    i=0                                                # DEBUG
     out = []
-    for i,poly in enumerate(polys):
-      plg = poly[:-2,:]
-      inside = path.contains_points(plg)
+    for poly in polys:
+      p = poly[:-1,:]
+ #    if i in [1,2]:               # DEBUG
+ #      p[:,0] += -.24             # DEBUG
+
+      inside = path.contains_points(p)
+      iRemove = []
       if all(inside):
         out.append(poly)
       elif any(inside):
-        _ins = numpy.where(inside)[0]
-      # Change order of polygon vertices to make sure that the first
-      # coordinate falls outside the bounding box.
-        if 0 in set(_ins):
-          _shift_by =  numpy.where(~inside)[0][0]
-          plg = _shift_first_last(plg,_shift_by)
-          inside = path.contains_points(plg)
+        for j in range(0,len(p)):
+          if not inside[j]:  # snap point to inflated domain bounding box
+            p[j,0] = max( bbox[0], min(p[j,0],bbox[1]) )
+            p[j,1] = max( bbox[2], min(p[j,1],bbox[3]) )
+            _isclose = numpy.isclose( p[j-1,:],p[j,:] )
+            if j>1 and all(_isclose) or ( any(_isclose) and \
+              all(numpy.sum(numpy.isclose(p[j,:],boubox),axis=1)<2) ):
+              iRemove.append(j)
 
-        _ins = _index_segments_to_list(numpy.where(inside)[0])
+      # Remove colinear||duplicate vertices
+        if len(iRemove)>0:
+          p = numpy.delete(p,iRemove,axis=0)
+          del(iRemove)
 
-        for _seg in _ins:
-          _pFi = plg[[_seg[0]-1,_seg[0]],:]
-          _pLa = plg[[_seg[-1],(_seg[-1]+1)%plg.shape[0]],:]
-          _pseg = plg[_seg,:]
+        line = p
 
-          _x1,_y1 = _intersect_segment(_pFi,bbox)
-          _xL,_yL = _intersect_segment(_pLa,bbox)
-          if any(numpy.isnan([_x1,_y1,_xL,_yL])):
-            raise ValueError('Could not find intersection between polygon segment and bounding box.')
-          if numpy.isclose(_xL-_x1,0.) or numpy.isclose(_yL-_y1,0.):
-            _pseg = numpy.vstack((_pseg,[[_xL,_yL],[_x1,_y1]]))
-          else:
-            _i = mpltPath.Path(poly).contains_points(boubox[:-1,:])
-            _iB = numpy.where(_i)[0][0]
-            _pseg = numpy.vstack((_pseg,[[_xL,_yL],boubox[_iB,:],[_x1,_y1]]))
+      # Close polygon
+        if not all( numpy.isclose(line[0,:],line[-1,:]) ):
+          line = numpy.append(line, [line[0,:],[nan,nan]], axis=0)
+        else:
+          line = numpy.append(line, [[nan, nan]], axis=0)
 
-          out.append( numpy.vstack((_pseg,_pseg[0,:],[[nan,nan]])) )
+        out.append(line)
+
+      i+=1  #DEBUG
+
+    plg = _convert_to_array(out)          # DEBUG
+    import matplotlib.pyplot as pyplot    # DEBUG
+    pyplot.figure(1)                      # DEBUG
+    pyplot.clf()                          # DEBUG
+    pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
+    pyplot.plot(plg[:,0],plg[:,1],'-',color='gray')                    # DEBUG
+    pyplot.gca().axis('equal')            # DEBUG
+    pyplot.savefig('_clip_polys.svg')     # DEBUG
 
     return _convert_to_array(out)
 
@@ -291,7 +302,7 @@ def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
     if verbose > 1:
         print("Collapsing segments outside bbox...")
-    boubox = _create_boubox(bbox)
+    boubox = numpy.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
     out = []
@@ -305,7 +316,7 @@ def _nth_simplify(polys, bbox, verbose):
             else:  # pt is outside of domain
                 bd = min(
                     j + 50, len(inside) - 1
-                )  # collapses 200 pts to 1 vertex (arbitary)
+                )  # collapses 50 pts to 1 vertex (arbitary)
                 exte = min(50, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
@@ -316,6 +327,7 @@ def _nth_simplify(polys, bbox, verbose):
             j += 1
         line = numpy.append(line, [[nan, nan]], axis=0)
         out.append(line)
+
     return _convert_to_array(out)
 
 
@@ -384,6 +396,13 @@ def _shift_first_last(_p,n=2):
       raise IndexError('Checksum mismatch (unequal arrays circumferences).')
 
     return _arr
+def _make_segment(p0,p1,n):
+
+    s = numpy.zeros((n,2))
+    s[:,0] = numpy.linspace(p0[0], p1[0], n)
+    s[:,1] = numpy.linspace(p0[1], p1[1], n)
+
+    return s
 
 def _intersect_segment(line,bbox):
     """
@@ -404,10 +423,11 @@ def _intersect_segment(line,bbox):
     box = (line[:,0].min(),line[:,0].max(),line[:,1].min(),line[:,1].max())
 
     if numpy.isclose(line[1,0]-line[0,0], 0.):
-    # Special case: intersection of vertical segment.
+    # Special case: line segment is vertical
       xi = line[0,0]
-      for yi in bbox[2:]:
+      for j,yi in enumerate(bbox[2:]):
         if box[2]<=yi and yi<=box[3]:
+          i = j+2
           break
         else:
           xi = numpy.nan
@@ -436,7 +456,7 @@ def _intersect_segment(line,bbox):
           xi = nan
           yi = nan
 
-    return xi,yi
+    return xi,yi,i
 
 
 # TODO: this should be called "Vector" and contain general methods for vector datasets
@@ -507,7 +527,7 @@ class Shoreline(Geodata):
     def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
 
         if isinstance(bbox,tuple):
-          _boubox = numpy.asarray(_create_boubox(bbox)) # polygon is CCW
+          _boubox = numpy.asarray(_create_boubox(bbox))
         else:
           _boubox = numpy.asarray(bbox)
           if not _is_path_ccw(_boubox):
@@ -532,6 +552,7 @@ class Shoreline(Geodata):
 
         polys = _densify(polys, self.h0, self.bbox, verbose)
 
+      # polys = _nth_simplify(polys, self.bbox, verbose)
         polys = _clip_polys(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
