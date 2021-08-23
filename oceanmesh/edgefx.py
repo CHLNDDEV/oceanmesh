@@ -26,8 +26,8 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=1):
     bounds: list of list
         A list of potentially > 1 len(4) lists containing
         [[min_mesh_size, max_mesh_size, min_elevation_bound, max_elevation_bound]]
-        The elevation bounds should be the same definition as specified in the DEM
-        (e.g., negative downwards towards the Earth's center).
+        The orientation of the elevation bounds should be the same as that of the DEM
+        (i.e., negative downwards towards the Earth's center).
     verbose: boolean
         Whether or not to print messages to the screen
 
