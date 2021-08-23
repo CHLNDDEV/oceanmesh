@@ -52,11 +52,11 @@ def enforce_mesh_size_bounds_depth(grid, dem, bounds, verbose=1):
         # get grid values to enforce the bounds
         upper_indices = numpy.where(
             (tmpz > min_z) & (tmpz <= max_z) & (grid.values >= max_h)
-        )[0]
+        )
         lower_indices = numpy.where(
             (tmpz > min_z) & (tmpz <= max_z) & (grid.values < min_h)
-        )[0]
-        # enforce the bounds here
+        )
+
         grid.values[upper_indices] = max_h
         grid.values[lower_indices] = min_h
 
