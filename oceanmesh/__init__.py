@@ -8,6 +8,7 @@ from oceanmesh.edgefx import (
     distance_sizing_function,
     enforce_mesh_gradation,
     wavelength_sizing_function,
+    enforce_mesh_size_bounds_elevation,
 )
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
@@ -23,6 +24,7 @@ __all__ = [
     "compute_minimum",
     "delete_faces_connected_to_one_face",
     "make_mesh_boundaries_traversable",
+    "enforce_mesh_size_bounds_elevation",
     "delete_interior_faces",
     "delete_exterior_faces",
     "SizeFunction",
