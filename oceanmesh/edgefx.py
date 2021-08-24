@@ -3,7 +3,7 @@ import warnings
 import numpy
 import skfmm
 
-from .cpp.HamiltonJacobi import gradient_limit
+from _HamiltonJacobi import gradient_limit
 from .grid import Grid
 
 __all__ = [

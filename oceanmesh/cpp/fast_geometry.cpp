@@ -76,6 +76,6 @@ py::array unique_edges(
                       ));
 }
 
-PYBIND11_MODULE(fast_geometry, m) {
+PYBIND11_MODULE(_fast_geometry, m) {
   m.def("unique_edges", &unique_edges);
 }
