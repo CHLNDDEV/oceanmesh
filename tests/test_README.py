@@ -1,7 +1,6 @@
 import os
 import pathlib
 import zipfile
-import pytest
 import requests
 
 this_dir = pathlib.Path(__file__).resolve().parent
@@ -11,6 +10,7 @@ def test_readme():
 
     # download
     url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
+    #'gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp
     filename = url.split("/")[-1]
     with open(filename, "wb") as f:
         r = requests.get(url)

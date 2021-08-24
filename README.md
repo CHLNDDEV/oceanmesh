@@ -104,10 +104,7 @@ See the `testing/` folder for more inspiration.
 Testing
 ============
 
-To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type
-```
-MPLBACKEND=Agg pytest --maxfail=1
-```
+To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type `tox`. `tox` can be installed via pip.
 
 
 License
