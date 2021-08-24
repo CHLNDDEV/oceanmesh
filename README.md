@@ -100,6 +100,8 @@ meshio.write_points_cells(
 )
 ```
 
+See the `testing/` folder for more inspiration.
+
 Testing
 ============
 
