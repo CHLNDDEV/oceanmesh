@@ -24,4 +24,4 @@ def test_edgefx():
     dis4 = dis1.project(dis2)
     ax = dis4.plot(hold=False)
 
-test_edgefx()
+test_edgefx()  # DEBUG

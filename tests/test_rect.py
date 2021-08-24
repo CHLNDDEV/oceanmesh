@@ -28,4 +28,4 @@ def test_rect():
   pyplot.savefig(oFile+'.svg')
 
 
-test_rect()
+test_rect() # DEBUG

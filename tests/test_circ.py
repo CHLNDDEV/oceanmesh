@@ -42,4 +42,4 @@ def test_circ():
   oFile = os.path.basename(sys.argv[0]).replace('.py','')
   pyplot.savefig(oFile+'.svg')
 
-test_circ()
+test_circ()  # debug
