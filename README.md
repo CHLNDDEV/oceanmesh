@@ -62,6 +62,7 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
 
 ```python
+import os
 import meshio
 
 from oceanmesh import (
@@ -74,7 +75,7 @@ from oceanmesh import (
 )
 
 
-fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+fname = os.path.join(os.path.dirname(__file__),gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp)
 
 bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
