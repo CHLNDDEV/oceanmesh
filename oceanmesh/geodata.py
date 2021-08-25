@@ -247,27 +247,48 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
 
-    numpy.set_printoptions(precision=3,suppress=True)  # DEBUG
-    i=0                                                # DEBUG
+#   numpy.set_printoptions(precision=3,suppress=True)  # DEBUG
+#   i=0                                                # DEBUG
     out = []
+
     for poly in polys:
       p = poly[:-1,:]
- #    if i in [1,2]:               # DEBUG
- #      p[:,0] += -.24             # DEBUG
+#     if i in [1,2]:               # DEBUG
+#       p[:,0] += -.24             # DEBUG
 
       inside = path.contains_points(p)
+
       iRemove = []
+
+      _keepLL = True
+      _keepUL = True
+      _keepLR = True
+      _keepUR = True
+
       if all(inside):
         out.append(poly)
       elif any(inside):
         for j in range(0,len(p)):
           if not inside[j]:  # snap point to inflated domain bounding box
-            p[j,0] = max( bbox[0], min(p[j,0],bbox[1]) )
-            p[j,1] = max( bbox[2], min(p[j,1],bbox[3]) )
-            _isclose = numpy.isclose( p[j-1,:],p[j,:] )
-            if j>1 and all(_isclose) or ( any(_isclose) and \
-              all(numpy.sum(numpy.isclose(p[j,:],boubox),axis=1)<2) ):
-              iRemove.append(j)
+            px = p[j,0]
+            py = p[j,1]
+            if not (bbox[0]<px and px<bbox[1]) or not (bbox[2]<py and py<bbox[3]):
+              if _keepLL and px<bbox[0] and py<bbox[2]:   # is over lower-left
+                p[j,:] = [bbox[0],bbox[2]]
+                _keepLL = False
+              elif _keepUL and px<bbox[0] and bbox[3]<py: # is over upper-left
+                p[j,:] = [bbox[0],bbox[3]]
+                _keepUL = False
+              elif _keepLR and bbox[1]<px and py<bbox[2]: # is over lower-right
+                p[j,:] = [bbox[1],bbox[2]]
+                _keepLR = False
+              elif _keepUR and bbox[1]<px and bbox[3]<py: # is over upper-right
+                p[j,:] = [bbox[1],bbox[3]]
+                _keepUR = False
+              else:
+                iRemove.append(j)
+
+       #print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
 
       # Remove colinear||duplicate vertices
         if len(iRemove)>0:
@@ -284,7 +305,7 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
 
         out.append(line)
 
-      i+=1  #DEBUG
+#     i+=1  #DEBUG
 
     plg = _convert_to_array(out)          # DEBUG
     import matplotlib.pyplot as pyplot    # DEBUG
