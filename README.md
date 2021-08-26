@@ -29,14 +29,13 @@ Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or 
 Installation
 ============
 
-For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/) and
-[pybind11](https://github.com/pybind/pybind11):
+For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/):
 
-    sudo apt install cmake libcgal-dev python3-pybind11
+    sudo apt install cmake libcgal-dev
 
-CGAL and pybind can also be installed with [`conda`](https://www.anaconda.com/products/individual):
+CGAL and can also be installed with [`conda`](https://www.anaconda.com/products/individual):
 
-    conda install -c conda-forge cgal pybind11
+    conda install -c conda-forge cgal
 
 After that, clone the repo and oceanmesh can be updated/installed using pip.
 
@@ -63,6 +62,10 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
 
 ```python
+import pathlib
+import zipfile
+import requests
+
 import meshio
 
 from oceanmesh import (
@@ -74,6 +77,16 @@ from oceanmesh import (
     delete_faces_connected_to_one_face,
 )
 
+# Download and load the GSHHS shoreline
+url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
+filename = url.split("/")[-1]
+print(filename)
+with open(filename, "wb") as f:
+    r = requests.get(url)
+    f.write(r.content)
+
+with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
+    zip_ref.extractall("gshhg-shp-2.3.7")
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
@@ -105,10 +118,7 @@ See the `testing/` folder for more inspiration.
 Testing
 ============
 
-To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type
-```
-MPLBACKEND=Agg pytest --maxfail=1
-```
+To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type `tox`. `tox` can be installed via pip.
 
 
 License

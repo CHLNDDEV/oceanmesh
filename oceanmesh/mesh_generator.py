@@ -3,8 +3,8 @@ import time
 import numpy as np
 import scipy.sparse as spsparse
 
-from .cpp.delaunay_class import DelaunayTriangulation as DT
-from .cpp.fast_geometry import unique_edges
+from _delaunay_class import DelaunayTriangulation as DT
+from _fast_geometry import unique_edges
 from .fix_mesh import fix_mesh
 from .grid import Grid
 from .signed_distance_function import Domain
