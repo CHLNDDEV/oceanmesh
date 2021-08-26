@@ -62,7 +62,10 @@ Build a simple mesh around New York witha minimum element size of 1 km expanding
 
 
 ```python
-import os
+import pathlib
+import zipfile
+import requests
+
 import meshio
 
 from oceanmesh import (
@@ -74,8 +77,18 @@ from oceanmesh import (
     delete_faces_connected_to_one_face,
 )
 
+# Download and load the GSHHS shoreline
+url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
+filename = url.split("/")[-1]
+print(filename)
+with open(filename, "wb") as f:
+    r = requests.get(url)
+    f.write(r.content)
 
-fname = os.path.join(os.path.dirname(__file__),gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp)
+with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
+    zip_ref.extractall("gshhg-shp-2.3.7")
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
 bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
