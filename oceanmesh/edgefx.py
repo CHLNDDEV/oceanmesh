@@ -204,7 +204,7 @@ def wavelength_sizing_function(
 
 
 def create_multiscale(list_of_grids, verbose=True):
-    """Given a list of mesh size functions in a hiearcharcy
+    """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
     create a so-called multiscale mesh size function
 
@@ -228,7 +228,8 @@ def create_multiscale(list_of_grids, verbose=True):
     # loop through remaining sizing functions
     for idx1, new_coarse in enumerate(list_of_grids[:-1]):
         # project all finer onto coarse and enforce gradation
-        print(f"For sizing function #{idx1}")
+        if verbose:
+            print(f"For sizing function #{idx1}")
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
             if verbose:
                 print(
