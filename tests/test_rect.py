@@ -3,9 +3,10 @@ import matplotlib.pyplot as pyplot
 import numpy
 import oceanmesh
 
+shp = os.path.join(os.path.dirname(__file__), "islands.shp")
+
 def test_rect():
   bbox = (0.4,1.6,-0.6,0.6)
-  shp='islands.shp'
 
   min_edge_length = 2.e3  # h0
   max_edge_length = 10.e3
@@ -27,5 +28,3 @@ def test_rect():
   oFile = os.path.basename(sys.argv[0]).replace('.py','')
   pyplot.savefig(oFile+'.svg')
 
-
-test_rect() # DEBUG

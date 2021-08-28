@@ -1,3 +1,4 @@
+import os
 import pathlib
 import zipfile
 
@@ -7,6 +8,8 @@ import requests
 
 this_dir = pathlib.Path(__file__).resolve().parent
 
+url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
+filename = url.split("/")[-1]
 
 @pytest.mark.parametrize(
     "string,lineno",
@@ -14,18 +17,18 @@ this_dir = pathlib.Path(__file__).resolve().parent
         this_dir.parent / "README.md", syntax_filter="python", max_num_lines=100000
     ),
 )
+
+@pytest.mark.skipif(os.path.isfile(filename),reason="file '{:s}' exists".format(filename))
 def test_readme(string, lineno):
 
     # download
-    url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
-    filename = url.split("/")[-1]
     with open(filename, "wb") as f:
         r = requests.get(url)
         f.write(r.content)
 
     # un-compress
-    with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
-        zip_ref.extractall("gshhg-shp-2.3.7")
+    with zipfile.ZipFile(filename, "r") as zip_ref:
+        zip_ref.extractall(os.path.splitext(filename)[0])
 
     try:
         # https://stackoverflow.com/a/62851176/353337

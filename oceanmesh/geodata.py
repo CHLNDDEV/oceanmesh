@@ -130,6 +130,8 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     if verbose > 1:
         print("Classifying shoreline segments...")
 
+    _AREAMIN = minimum_area_mult * h0 ** 2
+
     if len(boubox) == 0:
       boubox = _create_boubox(bbox)
       boubox = numpy.asarray(boubox)
@@ -137,6 +139,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
       boubox = numpy.flipud(boubox)
 
     boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
+
   # Remove nan's (append again at end)
     isNaN = ( numpy.sum(numpy.isnan(boubox),axis=1)>0 )
     if any(isNaN):
@@ -154,48 +157,80 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
       inside = path.contains_points(poly[:-2])
       if all(inside):
         area = _poly_area(poly[:-2, 0], poly[:-2, 1])
-        if area < minimum_area_mult * h0 ** 2:
-          continue
-        inner = numpy.append(inner, poly, axis=0)
+        if area >= _AREAMIN:
+          inner = numpy.append(inner, poly, axis=0)
+
       elif any(inside):
       # Append polygon segment to mainland
         mainland = numpy.vstack((mainland,poly))
       # Clip polygon segment from boubox and regenerate path
-        outside = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
-        if any(outside):
-        # 1/4 Remove points outside from boubox
-          boubox = boubox[~outside,:]
-        # 2/4 Create a list of segments that are inside boubox (segment to add)
-          _isegs = _index_segments_to_list(numpy.where(inside)[0])
-        # 3/4 Loop though segments and find insertion indexes
-          for _iseg in _isegs:
-            _n = len(_iseg)
-            _pi = poly[:-2,:][_iseg,:]
-            i,j = _find_closest_index(boubox,_pi)
+        bboxOut = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
+        if any(bboxOut):
+          boubox = boubox[~bboxOut,:]
+          del(bboxOut)
 
-          # Because `outside` was removed from path, indexes i,j are expected
-          # to be neighbours. Make case for last to first index.
-            if abs(j-1)!=1 and j<i:
-              _pi = numpy.flipud(_pi)
-              i,j = _find_closest_index(boubox,_pi)
+        # Note, the first index of each polygon should be located
+        # outside boubox polygon (this is done in function _clip_polys)
+          if inside[0]:
+            raise ValueError('First index of and overlapping polygon is expected to be outside bounding box polygon.')
 
-            if i<j and i+1 != j:
-              _shift_by = 2
-              boubox = _shift_first_last(boubox,_shift_by)
-              i -= _shift_by
-              j = i+1
-              del(_shift_by)
+          j = 0  # first/last index (inside boubox)
+          k = 0
 
-            boubox = numpy.vstack((boubox[:j,:],_pi,boubox[j:,:]))
-            del(i,j,_pi)
+          for i in range(1,poly[:-2].shape[0]):
+            if j == 0 and inside[i]:
+              j = i
+              k = 0
+            elif k==0 and j>0 and (not inside[i]):
+              k = i
+              _pi = poly[:-2,:][j:k,:]
+              _piA = _poly_area(_pi[:,0],_pi[:,1])
+              _piL = _poly_length(_pi)
+              if _piA >= _AREAMIN and _piL>1.e-3:
+              # Insert segment
+                ij,dj =  _find_closest_index_length(boubox,_pi[0,:])
+                ik,dk =  _find_closest_index_length(boubox,_pi[-1,:])
+               #print('fi,la={:4d} {:4d}'.format(j,k),_pi[0,:],_pi[-1,:],\
+               #      'A,L={:.3f} {:.4f} boubox ij,ik= {:4d} {:4d} [{:d}]'.format(\
+               #      _piA,_piL,ij,ik,boubox.shape[0]-1))
 
-          del(_iseg,_isegs)
+                if ij<ik and ik-ij<10:
+                  boubox = numpy.vstack((boubox[:ij+1,:],_pi,boubox[ik:,:]))
+                elif ik<ij and ij-ik<10:
+                  _pi = numpy.flipud(_pi)
+                  boubox = numpy.vstack((boubox[:ik+1,:],_pi,boubox[ij:,:]))
+                elif ik==0 or ij==boubox.shape[0]-1:
+                  boubox = numpy.vstack((boubox,_pi))
+                elif ij==0 or ik==boubox.shape[0]-1:
+                  _pi = numpy.flipud(_pi)
+                  boubox = numpy.vstack((boubox,_pi))
+                elif ij<ik:
+                # Difference between indices suggests split of boundary polygon.
+                  boubox = numpy.vstack((boubox[ik,:],numpy.flipud(_pi),boubox[ij:,:]))
+                elif ij>ik:
+                  boubox = numpy.vstack((boubox[ij,:],_pi,boubox[ik:,:]))
+                elif ij==ik: # orphan polygon
+                  print('Warning, _classify_shoreline::orphan polygon circumference {:.3f}. Continue w/o.'.format(_piL))
+                  pass
+                else:   # complex case
+                  print('fi,la={:4d} {:4d}'.format(j,k),_pi[0,:],_pi[-1,:],\
+                        'A,L={:.3f} {:.4f} boubox ij,ik= {:4d} {:4d} [{:d}]'.format(\
+                        _piA,_piL,ij,ik,boubox.shape[0]-1))
+                  print('Warning, _classify_shoreline::case not implemented. Continue w/o.')
+
+              j = 0
+              k = 0
+
         # 4/4 Regenerate path
           path = mpltPath.Path(boubox)
-        del(outside)
+
+     #elif any(inside)
       del(inside)
 
-    boubox = numpy.append(boubox, [[nan, nan]], axis=0)
+   #for poly in polys
+
+    if not any( numpy.isnan(boubox[-1,:]) ):
+      boubox = numpy.append(boubox, [[nan, nan]], axis=0)
 
     return inner, mainland, boubox
 
@@ -247,19 +282,16 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
 
-#   numpy.set_printoptions(precision=3,suppress=True)  # DEBUG
-#   i=0                                                # DEBUG
     out = []
 
     for poly in polys:
       p = poly[:-1,:]
-#     if i in [1,2]:               # DEBUG
-#       p[:,0] += -.24             # DEBUG
 
       inside = path.contains_points(p)
 
       iRemove = []
 
+      _origin = None
       _keepLL = True
       _keepUL = True
       _keepLR = True
@@ -276,17 +308,27 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
               if _keepLL and px<bbox[0] and py<bbox[2]:   # is over lower-left
                 p[j,:] = [bbox[0],bbox[2]]
                 _keepLL = False
+                if _origin is None:  _origin = p[j,:]
               elif _keepUL and px<bbox[0] and bbox[3]<py: # is over upper-left
                 p[j,:] = [bbox[0],bbox[3]]
                 _keepUL = False
+                if _origin is None:  _origin = p[j,:]
               elif _keepLR and bbox[1]<px and py<bbox[2]: # is over lower-right
                 p[j,:] = [bbox[1],bbox[2]]
                 _keepLR = False
+                if _origin is None:  _origin = p[j,:]
               elif _keepUR and bbox[1]<px and bbox[3]<py: # is over upper-right
                 p[j,:] = [bbox[1],bbox[3]]
                 _keepUR = False
+                if _origin is None:  _origin = p[j,:]
               else:
                 iRemove.append(j)
+
+        if _origin is None:
+          for j in range(0,len(p)):
+            if not inside[j] and j not in iRemove:  # snap point to inflated domain bounding box
+              _origin = p[j,:]
+              break
 
        #print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
 
@@ -294,6 +336,10 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
         if len(iRemove)>0:
           p = numpy.delete(p,iRemove,axis=0)
           del(iRemove)
+
+        i,d =  _find_closest_index_length(p,_origin)
+        if i>0:
+          p = _shift_first_last(p,i)
 
         line = p
 
@@ -304,17 +350,6 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
           line = numpy.append(line, [[nan, nan]], axis=0)
 
         out.append(line)
-
-#     i+=1  #DEBUG
-
-    plg = _convert_to_array(out)          # DEBUG
-    import matplotlib.pyplot as pyplot    # DEBUG
-    pyplot.figure(1)                      # DEBUG
-    pyplot.clf()                          # DEBUG
-    pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
-    pyplot.plot(plg[:,0],plg[:,1],'-',color='gray')                    # DEBUG
-    pyplot.gca().axis('equal')            # DEBUG
-    pyplot.savefig('_clip_polys.svg')     # DEBUG
 
     return _convert_to_array(out)
 
@@ -363,6 +398,16 @@ def _index_segments_to_list(s):
 
     return _l
 
+def _find_closest_index_length(_p,_s):
+    """
+    Find closes coordinate array index (_p) and distance
+    based on coordinate pair given in _s.
+    """
+    d = (_p[:,0] - _s[0])**2 + (_p[:,1] - _s[1])**2
+    i = numpy.nanargmin(d)
+
+    return i,numpy.sqrt(d[i])
+
 
 def _find_closest_index(_p,_s):
     """
@@ -402,8 +447,8 @@ def _shift_first_last(_p,n=2):
     Move first and last point in array to a different array index.
     No NaN in array allowed.
     """
-    if n<1 or n>=_p.shape[0]-1:
-      raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n._p.shape[0]))
+    if n<1 or n>_p.shape[0]-1:
+      raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n,_p.shape[0]))
 
     if all(numpy.isclose(_p[0,:],_p[-1,:])):
       _a = _p[:-1,:]
@@ -417,6 +462,7 @@ def _shift_first_last(_p,n=2):
       raise IndexError('Checksum mismatch (unequal arrays circumferences).')
 
     return _arr
+
 def _make_segment(p0,p1,n):
 
     s = numpy.zeros((n,2))
@@ -573,7 +619,6 @@ class Shoreline(Geodata):
 
         polys = _densify(polys, self.h0, self.bbox, verbose)
 
-      # polys = _nth_simplify(polys, self.bbox, verbose)
         polys = _clip_polys(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(

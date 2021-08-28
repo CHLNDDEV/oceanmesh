@@ -4,14 +4,17 @@ import numpy
 import oceanmesh
 import shapefile
 
+
+shp0 = os.path.join(os.path.dirname(__file__), "ocean.shp")
+shp = os.path.join(os.path.dirname(__file__), "islands.shp")
+
 def test_circ():
-  shp='ocean.shp'
-  with shapefile.Reader(shp) as shpf:
+  with shapefile.Reader(shp0) as shpf:
     shapes = shpf.shapes()
     n = len(shapes)
     for shape in shapes:
       if n>1:
-        print('WARN, {:d} polygons in \'{:s}\'. Continue with item[0].'.format(n,os.path.basename(shp)))
+        print('WARN, {:d} polygons in \'{:s}\'. Continue with item[0].'.format(n,os.path.basename(shp0)))
         break
 
     circ = numpy.asarray(shape.points)
@@ -19,7 +22,6 @@ def test_circ():
     circ = numpy.append(circ, [[numpy.nan, numpy.nan]], axis=0)
 
   del(shapes,shape,shpf)
-  shp='islands.shp'
 
   min_edge_length = 2.e3  # h0
   max_edge_length = 10.e3
@@ -42,4 +44,3 @@ def test_circ():
   oFile = os.path.basename(sys.argv[0]).replace('.py','')
   pyplot.savefig(oFile+'.svg')
 
-test_circ()  # debug
