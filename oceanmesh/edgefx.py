@@ -11,6 +11,7 @@ __all__ = [
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
     "wavelength_sizing_function",
+    "create_multiscale",
 ]
 
 
@@ -200,3 +201,63 @@ def wavelength_sizing_function(
         grid.values[grid.values > max_edge_length] = max_edge_length
     grid.build_interpolant()
     return grid
+
+
+def create_multiscale(list_of_grids, verbose=True):
+    """Given a list of mesh size functions in a hiearcharcy
+    w.r.t. to minimum mesh size (largest -> smallest),
+    create a so-called multiscale mesh size function
+
+    Parameters
+    ----------
+    list_of_grids: a Python list
+        A list containing grids with resolution in decreasing order.
+    verbose: boolean, optional
+        Whether to write messages to the screen
+
+    Returns
+    -------
+    new_list_of_grids: a Python list
+        Same as input but with relatively finer grids projected and graded onto the relatively coarser ones.
+    minimum_edge_length: float
+        The minimum edge length in meters throughout the domain
+
+    """
+
+    new_list_of_grids = []
+    # loop through remaining sizing functions
+    for idx1, new_coarse in enumerate(list_of_grids[:-1]):
+        # project all finer onto coarse and enforce gradation
+        print(f"For sizing function #{idx1}")
+        for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
+            if verbose:
+                print(
+                    f"  Projecting sizing function #{idx1+1 + k} onto sizing function #{idx1}"
+                )
+            new_coarse = finer.project(new_coarse)
+            # enforce mesh size gradation
+            new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
+        new_list_of_grids.append(new_coarse)
+    # retain the finest
+    new_list_of_grids.append(list_of_grids[-1])
+
+    # debug
+    k = 0
+    for a, b in zip(list_of_grids, new_list_of_grids):
+        a.plot(show=False, filename=f"org{k}.png")
+        b.plot(show=False, filename=f"new{k}.png")
+        k += 1
+
+    # compute new minimum edge length to mesh with
+    minimum_edge_length = 99999
+    for func in new_list_of_grids:
+        minimum_edge_length = numpy.amin([func.dx, func.dy, minimum_edge_length])
+
+    # return the mesh size function to query during genertaion
+    def wrapper(qpts):
+        hmin = numpy.array([len(qpts)] * 9999)
+        for func in new_list_of_grids:
+            h = func.eval(qpts)
+            hmin = numpy.minimum(h, hmin)
+
+    return wrapper, minimum_edge_length

@@ -190,7 +190,7 @@ class Grid:
         ----
         In other words, in areas of overlap, grid1 values
         take precedence elsewhere grid2 values are retained. Grid3 has
-        dx and resolution of grid2.
+        dx, dy gridspacing resolution of grid2.
 
         Parameters
         ----------
@@ -220,12 +220,12 @@ class Grid:
             self.values,
             method="linear",
             bounds_error=False,
-            fill_value=self.fill,
+            fill_value=99999,
         )
         xg, yg = numpy.meshgrid(lon2, lat2, indexing="ij", sparse=True)
         new_values = fp((xg, yg))
         # where fill replace with grid2 values
-        new_values[new_values == self.fill] = grid2.values[new_values == self.fill]
+        new_values[new_values == 99999] = grid2.values[new_values == 99999]
         return Grid(
             bbox=grid2.bbox,
             dx=grid2.dx,
@@ -245,7 +245,7 @@ class Grid:
         ylabel=None,
         title=None,
         cbarlabel=None,
-        file_name=None,
+        filename=None,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -284,8 +284,8 @@ class Grid:
             ax.set_title(title)
         if hold is False and show:
             plt.show()
-        if file_name is not None:
-            plt.savefig(file_name)
+        if filename is not None:
+            plt.savefig(filename)
         return ax
 
     def build_interpolant(self):
