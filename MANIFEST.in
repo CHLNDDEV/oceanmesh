@@ -3,3 +3,5 @@ include tests/*
 
 include README.md LICENSE.txt
 global-include CMakeLists.txt
+include versioneer.py
+include oceanmesh/_version.py

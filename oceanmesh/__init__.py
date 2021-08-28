@@ -44,3 +44,6 @@ __all__ = [
     "simp_vol",
     "simp_qual",
 ]
+
+from . import _version
+__version__ = _version.get_versions()['version']

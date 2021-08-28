@@ -1,3 +1,4 @@
+import versioneer
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
 
@@ -20,9 +21,13 @@ ext_modules = [
     for fi, loc in zip(files, is_called)
 ]
 
+cmdclass = versioneer.get_cmdclass()
+cmdclass.update({"build_ext": build_ext})
+
 if __name__ == "__main__":
     setup(
-        cmdclass={"build_ext": build_ext},
+        cmdclass=cmdclass,
+        version=versioneer.get_version(),
         ext_modules=ext_modules,
         zip_safe=False,
     )
