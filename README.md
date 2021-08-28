@@ -120,6 +120,14 @@ Testing
 
 To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type `tox`. `tox` can be installed via pip.
 
+Versions
+========
+
+`oceanmesh` uses [versioneer](https://github.com/python-versioneer/python-versioneer). The version can be inspected through Python
+
+```
+python -c "import oceanmesh; print(oceanmesh.__version__)"
+```
 
 License
 =======
