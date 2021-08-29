@@ -11,7 +11,7 @@ __all__ = [
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
     "wavelength_sizing_function",
-    "create_multiscale_sizing_function",
+    "multiscale_sizing_function",
 ]
 
 
@@ -210,7 +210,7 @@ def wavelength_sizing_function(
     return grid
 
 
-def create_multiscale_sizing_function(list_of_grids, verbose=True):
+def multiscale_sizing_function(list_of_grids, verbose=True):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
     create a so-called multiscale mesh size function

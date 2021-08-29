@@ -2,9 +2,9 @@ from oceanmesh.clean import (delete_exterior_faces,
                              delete_faces_connected_to_one_face,
                              delete_interior_faces,
                              make_mesh_boundaries_traversable)
-from oceanmesh.edgefx import (create_multiscale_sizing_function,
-                              distance_sizing_function, enforce_mesh_gradation,
+from oceanmesh.edgefx import (distance_sizing_function, enforce_mesh_gradation,
                               enforce_mesh_size_bounds_elevation,
+                              multiscale_sizing_function,
                               wavelength_sizing_function)
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Geodata, Shoreline
@@ -17,7 +17,7 @@ from .mesh_generator import generate_mesh
 
 __all__ = [
     "compute_minimum",
-    "create_multiscale_sizing_function",
+    "multiscale_sizing_function",
     "delete_faces_connected_to_one_face",
     "make_mesh_boundaries_traversable",
     "enforce_mesh_size_bounds_elevation",
