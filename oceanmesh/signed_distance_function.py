@@ -37,7 +37,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         Contains a signed distance function with a bbox
 
     """
-    if verbose > 0:
+    if verbose:
         print("Building a signed distance function...")
     poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
     tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
@@ -99,13 +99,16 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
         sdfs.append(signed_distance_function(shoreline, verbose=False))
 
     def func(x):
+        import matplotlib.pyplot as plt
+
         # query all the sdfs
         dist = numpy.zeros(len(x)) + 1.0
-        print(len(x))
+        plt.plot(x[:, 0], x[:, 1], "kx")
         for sdf in sdfs:
             d_l, cond = sdf.eval(x, return_inside=True)
-            print(numpy.sum(cond))
             idx = numpy.argwhere(cond)
+            plt.plot(x[idx, 0], x[idx, 1], "rx")
+            plt.show()
             dist[idx] = d_l[idx]
         return dist
 
