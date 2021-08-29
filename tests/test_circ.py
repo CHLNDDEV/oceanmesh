@@ -32,7 +32,6 @@ def test_circ():
 
   points, cells = oceanmesh.generate_mesh(domain, edge_length)
 
-
   pyplot.figure(1)
   pyplot.clf()
   pyplot.triplot(points[:,0],points[:,1],cells,'-',lw=0.5,color='0.5')
@@ -40,7 +39,5 @@ def test_circ():
   pyplot.plot(shore.inner[:,0],shore.inner[:,1],'.',color='gray',markersize=2)
   pyplot.plot(shore.mainland[:,0],shore.mainland[:,1],'-',color='green',linewidth=.5)
   pyplot.gca().axis('equal')
-
-  oFile = os.path.basename(sys.argv[0]).replace('.py','')
-  pyplot.savefig(oFile+'.svg')
+  pyplot.show()
 

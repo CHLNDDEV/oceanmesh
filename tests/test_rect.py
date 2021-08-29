@@ -24,7 +24,5 @@ def test_rect():
   pyplot.plot(shore.inner[:,0],shore.inner[:,1],'.',color='gray',markersize=2)
   pyplot.plot(shore.mainland[:,0],shore.mainland[:,1],'-',color='green',linewidth=.5)
   pyplot.gca().axis('equal')
-
-  oFile = os.path.basename(sys.argv[0]).replace('.py','')
-  pyplot.savefig(oFile+'.svg')
+  pyplot.show()
 

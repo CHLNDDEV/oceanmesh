@@ -5,6 +5,7 @@ import matplotlib.path as mpltPath
 import numpy
 import numpy.linalg
 import shapefile
+import shapely.geometry
 from netCDF4 import Dataset
 from PIL import Image
 from PIL.TiffTags import TAGS
@@ -151,86 +152,63 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     mainland = numpy.empty(shape=(0, 2))
     mainland[:] = nan
 
-    polys = _convert_to_list(polys)
-    path = mpltPath.Path(boubox)
-    for poly in polys:
-      inside = path.contains_points(poly[:-2])
-      if all(inside):
-        area = _poly_area(poly[:-2, 0], poly[:-2, 1])
-        if area >= _AREAMIN:
-          inner = numpy.append(inner, poly, axis=0)
+    polyL = _convert_to_list(polys)
+    bSGP = shapely.geometry.Polygon(boubox)
 
-      elif any(inside):
+    for poly in polyL:
+      pSGP = shapely.geometry.Polygon(poly[:-2,:])
+      if bSGP.contains(pSGP):
+        if pSGP.area >= _AREAMIN:
+          inner = numpy.append(inner, poly, axis=0)
+      elif pSGP.overlaps(bSGP):
       # Append polygon segment to mainland
         mainland = numpy.vstack((mainland,poly))
       # Clip polygon segment from boubox and regenerate path
-        bboxOut = mpltPath.Path(poly[:-2,:]).contains_points(boubox)
-        if any(bboxOut):
-          boubox = boubox[~bboxOut,:]
-          del(bboxOut)
-
-        # Note, the first index of each polygon should be located
-        # outside boubox polygon (this is done in function _clip_polys)
-          if inside[0]:
-            raise ValueError('First index of and overlapping polygon is expected to be outside bounding box polygon.')
-
-          j = 0  # first/last index (inside boubox)
-          k = 0
-
-          for i in range(1,poly[:-2].shape[0]):
-            if j == 0 and inside[i]:
-              j = i
-              k = 0
-            elif k==0 and j>0 and (not inside[i]):
-              k = i
-              _pi = poly[:-2,:][j:k,:]
-              _piA = _poly_area(_pi[:,0],_pi[:,1])
-              _piL = _poly_length(_pi)
-              if _piA >= _AREAMIN and _piL>1.e-3:
-              # Insert segment
-                ij,dj =  _find_closest_index_length(boubox,_pi[0,:])
-                ik,dk =  _find_closest_index_length(boubox,_pi[-1,:])
-               #print('fi,la={:4d} {:4d}'.format(j,k),_pi[0,:],_pi[-1,:],\
-               #      'A,L={:.3f} {:.4f} boubox ij,ik= {:4d} {:4d} [{:d}]'.format(\
-               #      _piA,_piL,ij,ik,boubox.shape[0]-1))
-
-                if ij<ik and ik-ij<10:
-                  boubox = numpy.vstack((boubox[:ij+1,:],_pi,boubox[ik:,:]))
-                elif ik<ij and ij-ik<10:
-                  _pi = numpy.flipud(_pi)
-                  boubox = numpy.vstack((boubox[:ik+1,:],_pi,boubox[ij:,:]))
-                elif ik==0 or ij==boubox.shape[0]-1:
-                  boubox = numpy.vstack((boubox,_pi))
-                elif ij==0 or ik==boubox.shape[0]-1:
-                  _pi = numpy.flipud(_pi)
-                  boubox = numpy.vstack((boubox,_pi))
-                elif ij<ik:
-                # Difference between indices suggests split of boundary polygon.
-                  boubox = numpy.vstack((boubox[ik,:],numpy.flipud(_pi),boubox[ij:,:]))
-                elif ij>ik:
-                  boubox = numpy.vstack((boubox[ij,:],_pi,boubox[ik:,:]))
-                elif ij==ik: # orphan polygon
-                  print('Warning, _classify_shoreline::orphan polygon circumference {:.3f}. Continue w/o.'.format(_piL))
-                  pass
-                else:   # complex case
-                  print('fi,la={:4d} {:4d}'.format(j,k),_pi[0,:],_pi[-1,:],\
-                        'A,L={:.3f} {:.4f} boubox ij,ik= {:4d} {:4d} [{:d}]'.format(\
-                        _piA,_piL,ij,ik,boubox.shape[0]-1))
-                  print('Warning, _classify_shoreline::case not implemented. Continue w/o.')
-
-              j = 0
-              k = 0
-
-        # 4/4 Regenerate path
-          path = mpltPath.Path(boubox)
-
-     #elif any(inside)
-      del(inside)
+        bSGP = bSGP.difference(pSGP)
+       #if bSGP.geom_type == 'MultiPolygon':
+       #  for i,_b in enumerate(bSGP):
+       #    xy = numpy.asarray(_b.exterior.coords)
+       #    xy = numpy.vstack((xy,xy[0]))
+       #    import matplotlib.pyplot as pyplot    # DEBUG
+       #    pyplot.figure(1)                      # DEBUG
+       #    pyplot.clf()                          # DEBUG
+       #    pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
+       #    pyplot.plot(xy[:,0],xy[:,1],'-',color='green')                   # DEBUG
+       #    pyplot.gca().axis('equal')            # DEBUG
+       #    pyplot.title('{:s}.index({:d}) ({:.0f} {:.0f})'.format(bSGP.geom_type,i,_b.area,_b.length))
+       #    pyplot.show()
+       #  del(_b)
+       #elif bSGP.geom_type == 'Polygon':
+       #  xy = numpy.asarray(bSGP.exterior.coords)
+       #  xy = numpy.vstack((xy,xy[0]))
+       #  import matplotlib.pyplot as pyplot    # DEBUG
+       #  pyplot.figure(1)                      # DEBUG
+       #  pyplot.clf()                          # DEBUG
+       #  pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
+       #  pyplot.plot(xy[:,0],xy[:,1],'-',color='green')                   # DEBUG
+       #  pyplot.gca().axis('equal')            # DEBUG
+       #  pyplot.title('{:s} ({:.0f} {:.0f})'.format(bSGP.geom_type,bSGP.area,bSGP.length))
+       #  pyplot.show()
 
    #for poly in polys
 
-    if not any( numpy.isnan(boubox[-1,:]) ):
-      boubox = numpy.append(boubox, [[nan, nan]], axis=0)
+    if bSGP.geom_type == 'Polygon':
+      bSGP = [bSGP]
+
+    out = numpy.empty(shape=(0, 2))
+    for b in bSGP:
+      xy = numpy.asarray(b.exterior.coords)
+      xy = numpy.vstack((xy,xy[0]))
+      out = numpy.vstack((out,xy,[nan,nan]))
+
+    boubox = out
+    import matplotlib.pyplot as pyplot    # DEBUG
+    pyplot.figure(1)                      # DEBUG
+    pyplot.clf()                          # DEBUG
+    pyplot.plot(polys[:,0],polys[:,1],'-',color='gray',lw=0.7)         # DEBUG
+    pyplot.plot(boubox[:,0],boubox[:,1],'-',color='green')             # DEBUG
+    pyplot.gca().axis('equal')            # DEBUG
+    pyplot.savefig('_classify_shoreline.svg')
 
     return inner, mainland, boubox
 
@@ -265,13 +243,14 @@ def _smooth_shoreline(polys, N, verbose):
         out.append(tmp)
     return _convert_to_array(out)
 
-
 def _clip_polys(polys, bbox, verbose,delta=0.10):
     """Clip segments in `polys` that intersect with `bbox`.
     Clipped segments need to extend outside `bbox` to avoid
     false positive `all(inside)` cases. Solution here is to
     add a small offset `delta` to the `bbox`.
+    Dependencies: shapely.geometry and numpy
     """
+
     if verbose > 1:
         print("Collapsing polygon segments outside bbox...")
 
@@ -280,78 +259,42 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
     bbox = (bbox[0]-delta,bbox[1]+delta,bbox[2]-delta,bbox[3]+delta)
     boubox = numpy.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
-    polys = _convert_to_list(polys)
+    polyL = _convert_to_list(polys)
 
-    out = []
+    out = numpy.empty(shape=(0, 2))
 
-    for poly in polys:
-      p = poly[:-1,:]
+    b = shapely.geometry.Polygon(boubox)
 
-      inside = path.contains_points(p)
+    for poly in polyL:
+      p = shapely.geometry.Polygon(poly[:-1,:])
+      pi = p.intersection(b)
+      if b.contains(p):
+        out = numpy.vstack((out,poly))
+      elif not pi.is_empty:
+        if pi.geom_type == 'MultiPolygon':
+          for ppi in pi:
+            xy = numpy.asarray(ppi.exterior.coords)
+            xy = numpy.vstack((xy,xy[0]))
+            out = numpy.vstack((out,xy,[nan,nan]))
 
-      iRemove = []
+          del(ppi,xy)
 
-      _origin = None
-      _keepLL = True
-      _keepUL = True
-      _keepLR = True
-      _keepUR = True
+        elif pi.geom_type == 'Polygon':
+          xy = numpy.asarray(pi.exterior.coords)
+          xy = numpy.vstack((xy,xy[0]))
+          out = numpy.vstack((out,xy,[nan,nan]))
+          del(xy)
 
-      if all(inside):
-        out.append(poly)
-      elif any(inside):
-        for j in range(0,len(p)):
-          if not inside[j]:  # snap point to inflated domain bounding box
-            px = p[j,0]
-            py = p[j,1]
-            if not (bbox[0]<px and px<bbox[1]) or not (bbox[2]<py and py<bbox[3]):
-              if _keepLL and px<bbox[0] and py<bbox[2]:   # is over lower-left
-                p[j,:] = [bbox[0],bbox[2]]
-                _keepLL = False
-                if _origin is None:  _origin = p[j,:]
-              elif _keepUL and px<bbox[0] and bbox[3]<py: # is over upper-left
-                p[j,:] = [bbox[0],bbox[3]]
-                _keepUL = False
-                if _origin is None:  _origin = p[j,:]
-              elif _keepLR and bbox[1]<px and py<bbox[2]: # is over lower-right
-                p[j,:] = [bbox[1],bbox[2]]
-                _keepLR = False
-                if _origin is None:  _origin = p[j,:]
-              elif _keepUR and bbox[1]<px and bbox[3]<py: # is over upper-right
-                p[j,:] = [bbox[1],bbox[3]]
-                _keepUR = False
-                if _origin is None:  _origin = p[j,:]
-              else:
-                iRemove.append(j)
+      del(p,pi)
+   #import matplotlib.pyplot as pyplot    # DEBUG
+   #pyplot.figure(1)                      # DEBUG
+   #pyplot.clf()                          # DEBUG
+   #pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
+   #pyplot.plot(out[:,0],out[:,1],'-',color='green')                   # DEBUG
+   #pyplot.gca().axis('equal')            # DEBUG
+   #pyplot.savefig('_clip_polys2.svg')
 
-        if _origin is None:
-          for j in range(0,len(p)):
-            if not inside[j] and j not in iRemove:  # snap point to inflated domain bounding box
-              _origin = p[j,:]
-              break
-
-       #print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
-
-      # Remove colinear||duplicate vertices
-        if len(iRemove)>0:
-          p = numpy.delete(p,iRemove,axis=0)
-          del(iRemove)
-
-        i,d =  _find_closest_index_length(p,_origin)
-        if i>0:
-          p = _shift_first_last(p,i)
-
-        line = p
-
-      # Close polygon
-        if not all( numpy.isclose(line[0,:],line[-1,:]) ):
-          line = numpy.append(line, [line[0,:],[nan,nan]], axis=0)
-        else:
-          line = numpy.append(line, [[nan, nan]], axis=0)
-
-        out.append(line)
-
-    return _convert_to_array(out)
+    return out
 
 
 def _nth_simplify(polys, bbox, verbose):
@@ -387,41 +330,6 @@ def _nth_simplify(polys, bbox, verbose):
     return _convert_to_array(out)
 
 
-def _index_segments_to_list(s):
-    """
-    Split indexes that define segments to list of segments.
-    """
-    _l = []
-    _i = numpy.where(numpy.diff(s)>1)[0]+1
-    for _a in numpy.split(s,_i):
-      _l.append(_a)
-
-    return _l
-
-def _find_closest_index_length(_p,_s):
-    """
-    Find closes coordinate array index (_p) and distance
-    based on coordinate pair given in _s.
-    """
-    d = (_p[:,0] - _s[0])**2 + (_p[:,1] - _s[1])**2
-    i = numpy.nanargmin(d)
-
-    return i,numpy.sqrt(d[i])
-
-
-def _find_closest_index(_p,_s):
-    """
-    Find closes coordinate array index (_p) based on
-    coordinate pair given in _s.
-    """
-    d = (_p[:,0] - _s[0,0])**2 + (_p[:,1] - _s[0,1])**2
-    i = numpy.argmin(d)
-    d = (_p[:,0] - _s[-1,0])**2 + (_p[:,1] - _s[-1,1])**2
-    j = numpy.argmin(d)
-
-    return i,j
-
-
 def _is_path_ccw(_p):
     """Compute curve orientation from first two line segment of a polygon.
     Source: https://en.wikipedia.org/wiki/Curve_orientation
@@ -441,89 +349,6 @@ def _is_path_ccw(_p):
 
     return detO>0.
 
-
-def _shift_first_last(_p,n=2):
-    """
-    Move first and last point in array to a different array index.
-    No NaN in array allowed.
-    """
-    if n<1 or n>_p.shape[0]-1:
-      raise ValueError('Value for n={:d} out of bounds (0,{:d})'.format(n,_p.shape[0]))
-
-    if all(numpy.isclose(_p[0,:],_p[-1,:])):
-      _a = _p[:-1,:]
-    else:
-      _a = _p
-
-    _arr = numpy.vstack((_a[n:,:],_a[0:n,:],_a[n,:]))
-    _lenP = _poly_length(_p)
-    _lenA = _poly_length(_arr)
-    if not numpy.isclose(_lenP,_lenA):
-      raise IndexError('Checksum mismatch (unequal arrays circumferences).')
-
-    return _arr
-
-def _make_segment(p0,p1,n):
-
-    s = numpy.zeros((n,2))
-    s[:,0] = numpy.linspace(p0[0], p1[0], n)
-    s[:,1] = numpy.linspace(p0[1], p1[1], n)
-
-    return s
-
-def _intersect_segment(line,bbox):
-    """
-    Return point intersection of line of 2 points (numpy.array)
-    with bounding box (tuple: xmin,xmax,ymin,ymax).
-    Note: The solution presented here considers a special case, where
-          intersection with horizontal and vertical is found.
-
-    TODO: The general case would consider the solution to 2 linear
-          systems using the Cramer's rule. Consider the linear system
-            a1*x + b1*y = c1
-            a2*x + b2*y = c2
-          and assume (a1*b1 - b1*a2) is non-zero. The solution
-          (xi,yi) is found with Cramer's rule as
-            xi = (c1*b2 - b1*c2) / (a1*b2 - b1*a2)
-            yi = (a1*c2 - c1*a2) / (a1*b2 - b1*a2) .
-    """
-    box = (line[:,0].min(),line[:,0].max(),line[:,1].min(),line[:,1].max())
-
-    if numpy.isclose(line[1,0]-line[0,0], 0.):
-    # Special case: line segment is vertical
-      xi = line[0,0]
-      for j,yi in enumerate(bbox[2:]):
-        if box[2]<=yi and yi<=box[3]:
-          i = j+2
-          break
-        else:
-          xi = numpy.nan
-          yi = numpy.nan
-    else:
-    # Convert line segment to linear function y = mx + n
-      fit = numpy.zeros(2)
-      fit[0] = (line[1,1]-line[0,1]) / (line[1,0]-line[0,0])  # m
-      fit[1] = line[0,1] - (line[0,0]*fit[0])                 # n
-     #print('line: y = {:.3f}x {:+.3f}'.format(fit[0],fit[1]))
-
-      fit_xi = lambda y,p: (y-p[1]) / p[0]
-      fit_yi = lambda x,p: p[0]*x + p[1]
-
-      for i,lim in enumerate(bbox):
-        if i<2:
-         xi = lim;
-         yi = fit_yi(xi,fit)
-        elif i<4:
-         yi = lim
-         xi = fit_xi(yi,fit)
-
-        if box[0]<=xi and xi<=box[1] and box[2]<=yi and yi<=box[3]:
-          break
-        else:
-          xi = nan
-          yi = nan
-
-    return xi,yi,i
 
 
 # TODO: this should be called "Vector" and contain general methods for vector datasets
