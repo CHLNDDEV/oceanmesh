@@ -23,9 +23,7 @@ def _convert_to_array(lst):
 def _convert_to_list(arr):
     """Converts a nan-delimited Numpy array to a list of Numpy arrays"""
     a = numpy.insert(arr, 0, [[nan, nan]], axis=0)
-    tmp = [
-        a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))
-    ]
+    tmp = [a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))]
     return [numpy.append(a, [[nan, nan]], axis=0) for a in tmp]
 
 
@@ -274,9 +272,7 @@ class Shoreline(Geodata):
     represent irregular shoreline geometries.
     """
 
-    def __init__(
-        self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1
-    ):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
         super().__init__(bbox)
 
         self.shp = shp
@@ -314,9 +310,7 @@ class Shoreline(Geodata):
     @shp.setter
     def shp(self, filename):
         if not os.path.isfile(filename):
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), filename
-            )
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
         self.__shp = filename
 
     @property

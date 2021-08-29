@@ -56,8 +56,7 @@ def _parse_kwargs(kwargs):
             pass
         else:
             raise ValueError(
-                "Option %s with parameter %s not recognized "
-                % (key, kwargs[key])
+                "Option %s with parameter %s not recognized " % (key, kwargs[key])
             )
 
 
@@ -228,9 +227,7 @@ def _unpack_domain(domain, opts):
         bbox = opts["bbox"]
         fd = domain
     else:
-        raise ValueError(
-            "`domain` must be a function or a :class:`geometry` object"
-        )
+        raise ValueError("`domain` must be a function or a :class:`geometry` object")
     return fd, bbox
 
 
@@ -315,10 +312,7 @@ def _project_points_back(p, fd, deps):
 def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
     p = np.mgrid[
-        tuple(
-            slice(min, max + min_edge_length, min_edge_length)
-            for min, max in bbox
-        )
+        tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
