@@ -19,12 +19,26 @@ Functionality
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
 
-Questions?
-============
+Questions or problems
+======================
 
 Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-su1q3lh3-C_j6AIOQPrewqZnanhzN7g).
 
 Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or Dr. William Pringle (wpringle@anl.gov) with questions or concerns!
+
+Please include version information when posting bug reports.
+`oceanmesh` uses [versioneer](https://github.com/python-versioneer/python-versioneer).
+
+The version can be inspected through Python
+```
+python -c "import oceanmesh; print(oceanmesh.__version__)"
+```
+or through
+```
+python setup.py version
+```
+in the working directory.
+
 
 Installation
 ============
@@ -80,7 +94,6 @@ from oceanmesh import (
 # Download and load the GSHHS shoreline
 url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
 filename = url.split("/")[-1]
-print(filename)
 with open(filename, "wb") as f:
     r = requests.get(url)
     f.write(r.content)
@@ -119,15 +132,6 @@ Testing
 ============
 
 To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type `tox`. `tox` can be installed via pip.
-
-Versions
-========
-
-`oceanmesh` uses [versioneer](https://github.com/python-versioneer/python-versioneer). The version can be inspected through Python
-
-```
-python -c "import oceanmesh; print(oceanmesh.__version__)"
-```
 
 License
 =======

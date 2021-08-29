@@ -14,8 +14,8 @@ class Domain:
         self.bbox = bbox
         self.domain = domain
 
-    def eval(self, x):
-        return self.domain(x)
+    def eval(self, x, **kwargs):
+        return self.domain(x, **kwargs)
 
 
 def signed_distance_function(shoreline, verbose=True, flip=0):
@@ -27,6 +27,9 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     ----------
     shoreline: a :class:`Shoreline` object
         The processed shapefile data from :class:`geodata`
+    verbose:
+    flip:
+    return_inside:
 
     Returns
     -------
@@ -43,7 +46,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
 
-    def func(x):
+    def func(x, return_inside=False):
         # Initialize d with some positive number larger than geps
         dist = numpy.zeros(len(x)) + 1.0
         # are points inside the boubox?
@@ -58,7 +61,10 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         if flip:
             cond = ~cond
         dist = (-1) ** (cond) * d
-        return dist
+        if return_inside:
+            return dist, cond
+        else:
+            return dist
 
     return Domain(shoreline.bbox, func)
 
@@ -90,10 +96,17 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
     # build all SDF for each shoreline object
     sdfs = []
     for shoreline in shorelines:
-        sdfs.apend(signed_distance_function(shoreline, verbose))
+        sdfs.append(signed_distance_function(shoreline, verbose=False))
 
     def func(x):
         # query all the sdfs
+        dist = numpy.zeros(len(x)) + 1.0
+        print(len(x))
         for sdf in sdfs:
-            print("wip")
-        return 0
+            d_l, cond = sdf.eval(x, return_inside=True)
+            print(numpy.sum(cond))
+            idx = numpy.argwhere(cond)
+            dist[idx] = d_l[idx]
+        return dist
+
+    return Domain(shorelines[0].bbox, func)
