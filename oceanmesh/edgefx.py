@@ -11,11 +11,11 @@ __all__ = [
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
     "wavelength_sizing_function",
-    "create_multiscale",
+    "create_multiscale_sizing_function",
 ]
 
 
-def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=1):
+def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
     """Enforce mesh size bounds as a function of elevation
 
     Parameters
@@ -68,7 +68,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=1):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, verbose=1):
+def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -108,7 +108,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=1):
 
 
 def distance_sizing_function(
-    shoreline, rate=0.15, max_edge_length=None, verbose=1, coarsen=1
+    shoreline, rate=0.15, max_edge_length=None, verbose=True, coarsen=1
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
 
@@ -156,7 +156,7 @@ def wavelength_sizing_function(
     wl=10,
     min_edgelength=None,
     max_edge_length=None,
-    verbose=1,
+    verbose=True,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
@@ -203,7 +203,7 @@ def wavelength_sizing_function(
     return grid
 
 
-def create_multiscale(list_of_grids, verbose=True):
+def create_multiscale_sizing_function(list_of_grids, verbose=True):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
     create a so-called multiscale mesh size function
@@ -217,12 +217,15 @@ def create_multiscale(list_of_grids, verbose=True):
 
     Returns
     -------
-    new_list_of_grids: a Python list
-        Same as input but with relatively finer grids projected and graded onto the relatively coarser ones.
+    grid: a :class:`Grid` object
+        A sizing function that takes a point and returns a value
     minimum_edge_length: float
         The minimum edge length in meters throughout the domain
 
     """
+    err = "grid objects must appear in order of descending dx spacing"
+    for i, grid in enumerate(list_of_grids[:-1]):
+        assert grid.dx >= list_of_grids[i + 1].dx, err
 
     new_list_of_grids = []
     # loop through remaining sizing functions
@@ -236,29 +239,30 @@ def create_multiscale(list_of_grids, verbose=True):
                     f"  Projecting sizing function #{idx1+1 + k} onto sizing function #{idx1}"
                 )
             new_coarse = finer.project(new_coarse)
-            # enforce mesh size gradation
+            # enforce mesh size gradation w/ the projected data
             new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
         new_list_of_grids.append(new_coarse)
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])
 
     # debug
-    k = 0
-    for a, b in zip(list_of_grids, new_list_of_grids):
-        a.plot(show=False, filename=f"org{k}.png")
-        b.plot(show=False, filename=f"new{k}.png")
-        k += 1
+    # k = 0
+    # for a, b in zip(list_of_grids, new_list_of_grids):
+    #    a.plot(show=False, filename=f"org{k}.png")
+    #    b.plot(show=False, filename=f"new{k}.png")
+    #    k += 1
 
     # compute new minimum edge length to mesh with
-    minimum_edge_length = 99999
+    minimum_edge_length = 999999
     for func in new_list_of_grids:
         minimum_edge_length = numpy.amin([func.dx, func.dy, minimum_edge_length])
 
     # return the mesh size function to query during genertaion
     def wrapper(qpts):
-        hmin = numpy.array([len(qpts)] * 9999)
+        hmin = numpy.array([len(qpts)] * 999999)
         for func in new_list_of_grids:
             h = func.eval(qpts)
             hmin = numpy.minimum(h, hmin)
+        return hmin
 
     return wrapper, minimum_edge_length

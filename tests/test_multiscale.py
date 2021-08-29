@@ -42,6 +42,6 @@ def test_multiscale_sizing_function():
     edge_length3 = om.distance_sizing_function(shore3, max_edge_length=500)
 
     el_org = [edge_length1, edge_length2, edge_length3]
-    el_new, minimum_edge_length = om.create_multiscale(el_org)
+    el_new, minimum_edge_length = om.create_multiscale_sizing_function(el_org)
 
     assert minimum_edge_length * 111e3 == 250
