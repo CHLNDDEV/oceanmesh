@@ -201,7 +201,7 @@ gradient_limit(py::array_t<int, py::array::c_style | py::array::forcecast> dims,
                       ));
 }
 
-PYBIND11_MODULE(HamiltonJacobi, m) {
+PYBIND11_MODULE(_HamiltonJacobi, m) {
 
   m.doc() = "pybind11 module for gradient limiting a scalar field";
 
