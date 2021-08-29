@@ -98,9 +98,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     if gradation > 1.0:
         warnings.warn("Parameter `gradation` is set excessively high (> 1.0)")
     if verbose:
-        print(
-            f"Enforcing mesh size gradation of {gradation} decimal percent..."
-        )
+        print(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
     if grid.dx != grid.dy:
@@ -142,9 +140,7 @@ def distance_sizing_function(
     """
     if verbose > 0:
         print("Building a distance sizing function...")
-    grid = Grid(
-        bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0
-    )
+    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0)
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
@@ -267,9 +263,7 @@ def create_multiscale_sizing_function(list_of_grids, verbose=True):
     # compute new minimum edge length to mesh with
     minimum_edge_length = 999999
     for func in new_list_of_grids:
-        minimum_edge_length = numpy.amin(
-            [func.dx, func.dy, minimum_edge_length]
-        )
+        minimum_edge_length = numpy.amin([func.dx, func.dy, minimum_edge_length])
 
     # return the mesh size function to query during genertaion
     def wrapper(qpts):

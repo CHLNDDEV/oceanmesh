@@ -4,7 +4,7 @@ from inpoly import inpoly2
 
 from . import edges
 
-__all__ = ["signed_distance_function", "Domain"]
+__all__ = ["multiscale_signed_distance_function", "signed_distance_function", "Domain"]
 
 nan = numpy.nan
 
@@ -18,7 +18,43 @@ class Domain:
         return self.domain(x)
 
 
-def signed_distance_function(shoreline, verbose=1, flip=0):
+def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
+    """Takes a list of `shoreline` objects and calculates a signed distance function from it.
+        This functionis queried every meshing iteration.
+
+    Parameters
+    ----------
+    shorelines: a list of :class:`Shoreline` objects
+        Each item in the list is processed from :class:`geodata`
+    flips: a list of booleans, optional
+        Each boolean corresponds to the objects in shorelines
+
+    Returns
+    -------
+    domain: a :class:`Domain` object
+        A signed distance function representing the domain
+    """
+    if verbose:
+        print("Building a multiscale signed distance function...")
+    assert isinstance(shorelines, list), "shorelines is not a list"
+    assert len(shorelines) > 1, "Use signed_distance_function instead"
+    if flips is not None:
+        assert isinstance(flips, list)
+        assert len(flips) == len(shorelines)
+
+    # build all SDF for each shoreline object
+    sdfs = []
+    for shoreline in shorelines:
+        sdfs.apend(signed_distance_function(shoreline, verbose))
+
+    def func(x):
+        # query all the sdfs
+        for sdf in sdfs:
+            print("wip")
+        return 0
+
+
+def signed_distance_function(shoreline, verbose=True, flip=0):
     """Takes a `shoreline` object containing segments representing islands and mainland boundaries
     and calculates a signed distance function with it (assuming the polygons are all closed).
     This function is queried every meshing iteration.
@@ -37,9 +73,7 @@ def signed_distance_function(shoreline, verbose=1, flip=0):
     if verbose > 0:
         print("Building a signed distance function...")
     poly = numpy.vstack((shoreline.inner, shoreline.mainland, shoreline.boubox))
-    tree = scipy.spatial.cKDTree(
-        poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False
-    )
+    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
 
     boubox = shoreline.boubox
