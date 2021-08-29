@@ -155,7 +155,9 @@ def make_mesh_boundaries_traversable(
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        faces = delete_exterior_faces(vertices, faces, min_disconnected_area, verbose)
+        faces = delete_exterior_faces(
+            vertices, faces, min_disconnected_area, verbose
+        )
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         faces, _ = delete_interior_faces(vertices, faces, verbose)
@@ -203,7 +205,8 @@ def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
         t1 = np.delete(t1, nflag == 1, axis=0)
         if verbose > 1:
             print(
-                f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh"
+                f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the"
+                " main mesh"
             )
 
         # Calculate the remaining area
@@ -251,7 +254,9 @@ def delete_interior_faces(vertices, faces, verbose):
             del_face_idx.append(conn_faces[idx])
 
     if verbose > 1:
-        print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
+        print(
+            f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh"
+        )
     faces = np.delete(faces, del_face_idx, 0)
 
     return faces, del_face_idx
@@ -333,6 +338,7 @@ def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
             break
     if verbose > 0:
         print(
-            f"Deleted {int(start_len - len(faces))} faces after {int(count)} iterations"
+            f"Deleted {int(start_len - len(faces))} faces after"
+            f" {int(count)} iterations"
         )
     return vertices, faces

@@ -33,7 +33,9 @@ def test_irregular_domain():
 
     domain = om.signed_distance_function(shore)
 
-    points, cells = om.generate_mesh(domain, edge_length, verbose=2, max_iter=50)
+    points, cells = om.generate_mesh(
+        domain, edge_length, verbose=2, max_iter=50
+    )
 
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
 

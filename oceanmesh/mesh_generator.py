@@ -56,7 +56,8 @@ def _parse_kwargs(kwargs):
             pass
         else:
             raise ValueError(
-                "Option %s with parameter %s not recognized " % (key, kwargs[key])
+                "Option %s with parameter %s not recognized "
+                % (key, kwargs[key])
             )
 
 
@@ -159,8 +160,8 @@ def generate_mesh(domain, edge_length, **kwargs):
     assert N > 0, "No vertices to mesh with!"
 
     print_msg1(
-        "Commencing mesh generation with %d vertices will perform %i iterations."
-        % (N, max_iter),
+        "Commencing mesh generation with %d vertices will perform %i"
+        " iterations." % (N, max_iter),
     )
 
     for count in range(max_iter):
@@ -197,8 +198,8 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Show the user some progress so they know something is happening
         maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
         print_msg2(
-            "Iteration #%d, max movement is %f, there are %d vertices and %d cells"
-            % (count + 1, maxdp, len(p), len(t)),
+            "Iteration #%d, max movement is %f, there are %d vertices and %d"
+            " cells" % (count + 1, maxdp, len(p), len(t)),
         )
 
         end = time.time()
@@ -227,7 +228,9 @@ def _unpack_domain(domain, opts):
         bbox = opts["bbox"]
         fd = domain
     else:
-        raise ValueError("`domain` must be a function or a :class:`geometry` object")
+        raise ValueError(
+            "`domain` must be a function or a :class:`geometry` object"
+        )
     return fd, bbox
 
 
@@ -312,7 +315,10 @@ def _project_points_back(p, fd, deps):
 def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
     p = np.mgrid[
-        tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
+        tuple(
+            slice(min, max + min_edge_length, min_edge_length)
+            for min, max in bbox
+        )
     ].astype(float)
     p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points

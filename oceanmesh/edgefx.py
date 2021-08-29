@@ -2,8 +2,8 @@ import warnings
 
 import numpy
 import skfmm
-
 from _HamiltonJacobi import gradient_limit
+
 from .grid import Grid
 
 __all__ = [
@@ -40,16 +40,23 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
     lon, lat = grid.create_grid()
     tmpz = dem.eval((lon, lat))
     for i, bound in enumerate(bounds):
-        assert (
-            len(bound) == 4
-        ), "Bounds must be specified  as a list with [min_mesh_size, max_mesh_size, min_elevation_bound, max_elevation_bound]"
+        assert len(bound) == 4, (
+            "Bounds must be specified  as a list with [min_mesh_size,"
+            " max_mesh_size, min_elevation_bound, max_elevation_bound]"
+        )
         min_h, max_h, min_z, max_z = bound
         # for now do this crude conversion
         min_h /= 111e3
         max_h /= 111e3
         # sanity checks
-        error_sz = f"For bound number {i} the maximum size bound {max_h} is smaller than the minimum size bound {min_h}"
-        error_elev = f"For bound number {i} the maximum elevation bound {max_z} is smaller than the minimum elevation bound {min_z}"
+        error_sz = (
+            f"For bound number {i} the maximum size bound {max_h} is smaller"
+            f" than the minimum size bound {min_h}"
+        )
+        error_elev = (
+            f"For bound number {i} the maximum elevation bound {max_z} is"
+            f" smaller than the minimum elevation bound {min_z}"
+        )
         assert min_h < max_h, error_sz
         assert min_z < max_z, error_elev
         # get grid values to enforce the bounds
@@ -91,7 +98,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     if gradation > 1.0:
         warnings.warn("Parameter `gradation` is set excessively high (> 1.0)")
     if verbose:
-        print(f"Enforcing mesh size gradation of {gradation} decimal percent...")
+        print(
+            f"Enforcing mesh size gradation of {gradation} decimal percent..."
+        )
 
     elen = grid.dx
     if grid.dx != grid.dy:
@@ -133,7 +142,9 @@ def distance_sizing_function(
     """
     if verbose > 0:
         print("Building a distance sizing function...")
-    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0)
+    grid = Grid(
+        bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0
+    )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
@@ -236,7 +247,8 @@ def create_multiscale_sizing_function(list_of_grids, verbose=True):
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
             if verbose:
                 print(
-                    f"  Projecting sizing function #{idx1+1 + k} onto sizing function #{idx1}"
+                    f"  Projecting sizing function #{idx1+1 + k} onto sizing"
+                    f" function #{idx1}"
                 )
             new_coarse = finer.project(new_coarse)
             # enforce mesh size gradation w/ the projected data
@@ -255,7 +267,9 @@ def create_multiscale_sizing_function(list_of_grids, verbose=True):
     # compute new minimum edge length to mesh with
     minimum_edge_length = 999999
     for func in new_list_of_grids:
-        minimum_edge_length = numpy.amin([func.dx, func.dy, minimum_edge_length])
+        minimum_edge_length = numpy.amin(
+            [func.dx, func.dy, minimum_edge_length]
+        )
 
     # return the mesh size function to query during genertaion
     def wrapper(qpts):

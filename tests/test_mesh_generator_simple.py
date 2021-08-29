@@ -9,7 +9,9 @@ def test_mesh_generator_rectangle():
 
     def drectangle(p, x1, x2, y1, y2):
         min = np.minimum
-        return -min(min(min(-y1 + p[:, 1], y2 - p[:, 1]), -x1 + p[:, 0]), x2 - p[:, 0])
+        return -min(
+            min(min(-y1 + p[:, 1], y2 - p[:, 1]), -x1 + p[:, 0]), x2 - p[:, 0]
+        )
 
     def domain(x):
         return drectangle(x, *bbox)
