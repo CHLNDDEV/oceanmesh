@@ -165,32 +165,6 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
         mainland = numpy.vstack((mainland,poly))
       # Clip polygon segment from boubox and regenerate path
         bSGP = bSGP.difference(pSGP)
-       #if bSGP.geom_type == 'MultiPolygon':
-       #  for i,_b in enumerate(bSGP):
-       #    xy = numpy.asarray(_b.exterior.coords)
-       #    xy = numpy.vstack((xy,xy[0]))
-       #    import matplotlib.pyplot as pyplot    # DEBUG
-       #    pyplot.figure(1)                      # DEBUG
-       #    pyplot.clf()                          # DEBUG
-       #    pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
-       #    pyplot.plot(xy[:,0],xy[:,1],'-',color='green')                   # DEBUG
-       #    pyplot.gca().axis('equal')            # DEBUG
-       #    pyplot.title('{:s}.index({:d}) ({:.0f} {:.0f})'.format(bSGP.geom_type,i,_b.area,_b.length))
-       #    pyplot.show()
-       #  del(_b)
-       #elif bSGP.geom_type == 'Polygon':
-       #  xy = numpy.asarray(bSGP.exterior.coords)
-       #  xy = numpy.vstack((xy,xy[0]))
-       #  import matplotlib.pyplot as pyplot    # DEBUG
-       #  pyplot.figure(1)                      # DEBUG
-       #  pyplot.clf()                          # DEBUG
-       #  pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
-       #  pyplot.plot(xy[:,0],xy[:,1],'-',color='green')                   # DEBUG
-       #  pyplot.gca().axis('equal')            # DEBUG
-       #  pyplot.title('{:s} ({:.0f} {:.0f})'.format(bSGP.geom_type,bSGP.area,bSGP.length))
-       #  pyplot.show()
-
-   #for poly in polys
 
     if bSGP.geom_type == 'Polygon':
       bSGP = [bSGP]
@@ -201,16 +175,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
       xy = numpy.vstack((xy,xy[0]))
       out = numpy.vstack((out,xy,[nan,nan]))
 
-    boubox = out
-    import matplotlib.pyplot as pyplot    # DEBUG
-    pyplot.figure(1)                      # DEBUG
-    pyplot.clf()                          # DEBUG
-    pyplot.plot(polys[:,0],polys[:,1],'-',color='gray',lw=0.7)         # DEBUG
-    pyplot.plot(boubox[:,0],boubox[:,1],'-',color='green')             # DEBUG
-    pyplot.gca().axis('equal')            # DEBUG
-    pyplot.savefig('_classify_shoreline.svg')
-
-    return inner, mainland, boubox
+    return inner, mainland, out
 
 
 def _chaikins_corner_cutting(coords, refinements=5):
@@ -286,13 +251,6 @@ def _clip_polys(polys, bbox, verbose,delta=0.10):
           del(xy)
 
       del(p,pi)
-   #import matplotlib.pyplot as pyplot    # DEBUG
-   #pyplot.figure(1)                      # DEBUG
-   #pyplot.clf()                          # DEBUG
-   #pyplot.plot(boubox0[:,0],boubox0[:,1],'-+',color='r',markersize=4) # DEBUG
-   #pyplot.plot(out[:,0],out[:,1],'-',color='green')                   # DEBUG
-   #pyplot.gca().axis('equal')            # DEBUG
-   #pyplot.savefig('_clip_polys2.svg')
 
     return out
 
