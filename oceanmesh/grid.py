@@ -9,8 +9,7 @@ def compute_minimum(edge_lengths):
     # project all edge_lengths onto the grid of the first one
     base_edge_length = edge_lengths[0]
     edge_lengths = [
-        edge_length.project(base_edge_length)
-        for edge_length in edge_lengths[1::]
+        edge_length.project(base_edge_length) for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
     minimum_values = numpy.minimum.reduce(
@@ -210,9 +209,7 @@ class Grid:
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
         x2min, x2max, y2min, y2max = self.bbox
-        overlap = (
-            x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
-        )
+        overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         if overlap is False:
             raise ValueError("Grid objects do not overlap.")
         lon1, lat1 = self.create_vectors()
