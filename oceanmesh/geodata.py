@@ -166,10 +166,12 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
       # Clip polygon segment from boubox and regenerate path
         bSGP = bSGP.difference(pSGP)
 
-    if bSGP.geom_type == 'Polygon':
-      bSGP = [bSGP]
-
     out = numpy.empty(shape=(0, 2))
+
+    if bSGP.geom_type == 'Polygon':
+      bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
+
+  # MultiPolygon members can be accessed via iterator protocol using `in`.
     for b in bSGP:
       xy = numpy.asarray(b.exterior.coords)
       xy = numpy.vstack((xy,xy[0]))
