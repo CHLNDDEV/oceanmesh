@@ -250,17 +250,27 @@ def _clip_polys_2(polys, bbox, verbose, delta=0.10):
                 if not inside[j]:  # snap point to inflated domain bounding box
                     px = p[j, 0]
                     py = p[j, 1]
-                    if not (bbox[0] < px and px < bbox[1]) or not (bbox[2] < py and py < bbox[3]):
-                        if _keepLL and px < bbox[0] and py < bbox[2]:    # is over lower-left
+                    if not (bbox[0] < px and px < bbox[1]) or not (
+                        bbox[2] < py and py < bbox[3]
+                    ):
+                        if (
+                            _keepLL and px < bbox[0] and py < bbox[2]
+                        ):  # is over lower-left
                             p[j, :] = [bbox[0], bbox[2]]
                             _keepLL = False
-                        elif _keepUL and px < bbox[0] and bbox[3] < py:  # is over upper-left
+                        elif (
+                            _keepUL and px < bbox[0] and bbox[3] < py
+                        ):  # is over upper-left
                             p[j, :] = [bbox[0], bbox[3]]
                             _keepUL = False
-                        elif _keepLR and bbox[1] < px and py < bbox[2]:  # is over lower-right
+                        elif (
+                            _keepLR and bbox[1] < px and py < bbox[2]
+                        ):  # is over lower-right
                             p[j, :] = [bbox[1], bbox[2]]
                             _keepLR = False
-                        elif _keepUR and bbox[1] < px and bbox[3] < py:  # is over upper-right
+                        elif (
+                            _keepUR and bbox[1] < px and bbox[3] < py
+                        ):  # is over upper-right
                             p[j, :] = [bbox[1], bbox[3]]
                             _keepUR = False
                         else:
@@ -270,7 +280,7 @@ def _clip_polys_2(polys, bbox, verbose, delta=0.10):
             # Remove colinear||duplicate vertices
             if len(iRemove) > 0:
                 p = numpy.delete(p, iRemove, axis=0)
-                del(iRemove)
+                del iRemove
 
             line = p
 
@@ -311,15 +321,19 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
             mp = [mp]
         else:
             if verbose > 0:
-                print('Warning, polygon', shapely.validation.explain_validity(mp), 'Try to make valid.')
-            mp = mp.buffer(1.e-5)  # Apply 1 metre buffer
+                print(
+                    "Warning, polygon",
+                    shapely.validation.explain_validity(mp),
+                    "Try to make valid.",
+                )
+            mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
         for p in mp:
             pi = p.intersection(b)
             if b.contains(p):
                 out = numpy.vstack((out, poly))
             elif not pi.is_empty:
                 # assert(pi.geom_type,'MultiPolygon')
-                if pi.geom_type == 'Polygon':
+                if pi.geom_type == "Polygon":
                     pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
 
                 for ppi in pi:
@@ -327,9 +341,9 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
                     xy = numpy.vstack((xy, xy[0]))
                     out = numpy.vstack((out, xy, [nan, nan]))
 
-                del(ppi, xy)
-            del(pi)
-        del(p, mp)
+                del (ppi, xy)
+            del pi
+        del (p, mp)
 
     return out
 
