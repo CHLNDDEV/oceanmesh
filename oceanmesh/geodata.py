@@ -114,7 +114,7 @@ def _poly_length(coords):
     else:
         c = numpy.vstack((coords, coords[0, :]))
 
-    return numpy.sum(numpy.sqrt(numpy.sum(numpy.diff(c, axis=0)**2, axis=1)))
+    return numpy.sum(numpy.sqrt(numpy.sum(numpy.diff(c, axis=0) ** 2, axis=1)))
 
 
 def _is_overlapping(bbox1, bbox2):
@@ -145,10 +145,10 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
 
     # Remove nan's (append again at end)
-    isNaN = (numpy.sum(numpy.isnan(boubox), axis=1) > 0)
+    isNaN = numpy.sum(numpy.isnan(boubox), axis=1) > 0
     if any(isNaN):
         boubox = numpy.delete(boubox, isNaN, axis=0)
-    del(isNaN)
+    del isNaN
 
     inner = numpy.empty(shape=(0, 2))
     inner[:] = nan
@@ -171,7 +171,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
 
     out = numpy.empty(shape=(0, 2))
 
-    if bSGP.geom_type == 'Polygon':
+    if bSGP.geom_type == "Polygon":
         bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
 
     # MultiPolygon members can be accessed via iterator protocol using `in`.
@@ -371,20 +371,20 @@ def _is_path_ccw(_p):
     """Compute curve orientation from first two line segment of a polygon.
     Source: https://en.wikipedia.org/wiki/Curve_orientation
     """
-    detO = 0.
+    detO = 0.0
     O3 = numpy.ones((3, 3))
 
     i = 0
-    while ((i + 3 < _p.shape[0]) and numpy.isclose(detO, 0.)):
+    while (i + 3 < _p.shape[0]) and numpy.isclose(detO, 0.0):
         # Colinear vectors detected. Try again with next 3 indices.
-        O3[:, 1:] = _p[i:(i + 3), :]
+        O3[:, 1:] = _p[i : (i + 3), :]
         detO = numpy.linalg.det(O3)
         i += 1
 
-    if numpy.isclose(detO, 0.):
-        raise RuntimeError('Cannot determine orientation from colinear path.')
+    if numpy.isclose(detO, 0.0):
+        raise RuntimeError("Cannot determine orientation from colinear path.")
 
-    return detO > 0.
+    return detO > 0.0
 
 
 # TODO: this should be called "Vector" and contain general methods for vector datasets
@@ -460,8 +460,12 @@ class Shoreline(Geodata):
             _boubox = numpy.asarray(bbox)
             if not _is_path_ccw(_boubox):
                 _boubox = numpy.flipud(_boubox)
-            bbox = (numpy.nanmin(_boubox[:, 0]), numpy.nanmax(_boubox[:, 0]),
-                    numpy.nanmin(_boubox[:, 1]), numpy.nanmax(_boubox[:, 1]))
+            bbox = (
+                numpy.nanmin(_boubox[:, 0]),
+                numpy.nanmax(_boubox[:, 0]),
+                numpy.nanmin(_boubox[:, 1]),
+                numpy.nanmax(_boubox[:, 1]),
+            )
 
         super().__init__(bbox)
 
