@@ -42,4 +42,5 @@ def test_edgefx_elevation_bounds():
     edge_length = om.enforce_mesh_size_bounds_elevation(edge_length, dem, bounds)
     edge_length.plot()
 
+
 test_edgefx()
