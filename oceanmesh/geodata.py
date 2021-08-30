@@ -3,7 +3,10 @@ import os
 
 import matplotlib.path as mpltPath
 import numpy
+import numpy.linalg
 import shapefile
+import shapely.geometry
+import shapely.validation
 from netCDF4 import Dataset
 from PIL import Image
 from PIL.TiffTags import TAGS
@@ -28,7 +31,7 @@ def _convert_to_list(arr):
 
 
 def _create_boubox(bbox):
-    """Create a bounding box from domain extents `bbox`."""
+    """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
     if isinstance(bbox, tuple):
         xmin, xmax, ymin, ymax = bbox
         return [
@@ -104,6 +107,16 @@ def _poly_area(x, y):
     )
 
 
+def _poly_length(coords):
+    """Calculates circumference of a polygon"""
+    if all(numpy.isclose(coords[0, :], coords[-1, :])):
+        c = coords
+    else:
+        c = numpy.vstack((coords, coords[0, :]))
+
+    return numpy.sum(numpy.sqrt(numpy.sum(numpy.diff(c, axis=0) ** 2, axis=1)))
+
+
 def _is_overlapping(bbox1, bbox2):
     """Determines if two axis-aligned boxes intersect"""
     x1min, x1max, y1min, y1max = bbox1
@@ -111,38 +124,63 @@ def _is_overlapping(bbox1, bbox2):
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
-def _classify_shoreline(bbox, polys, h0, minimum_area_mult, verbose):
+def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
+    (3) `boubox` polygon array is will be clipped by segments contained by `mainland`.
     """
     if verbose > 1:
         print("Classifying shoreline segments...")
 
-    boubox = _create_boubox(bbox)
+    _AREAMIN = minimum_area_mult * h0 ** 2
+
+    if len(boubox) == 0:
+        boubox = _create_boubox(bbox)
+        boubox = numpy.asarray(boubox)
+    elif not _is_path_ccw(boubox):
+        boubox = numpy.flipud(boubox)
+
+    boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
+
+    # Remove nan's (append again at end)
+    isNaN = numpy.sum(numpy.isnan(boubox), axis=1) > 0
+    if any(isNaN):
+        boubox = numpy.delete(boubox, isNaN, axis=0)
+    del isNaN
 
     inner = numpy.empty(shape=(0, 2))
     inner[:] = nan
     mainland = numpy.empty(shape=(0, 2))
     mainland[:] = nan
 
-    polys = _convert_to_list(polys)
-    path = mpltPath.Path(boubox)
-    for poly in polys:
-        inside = path.contains_points(poly[:-2])
-        if all(inside):
-            area = _poly_area(poly[:-2, 0], poly[:-2, 1])
-            if area < minimum_area_mult * h0 ** 2:
-                continue
-            inner = numpy.append(inner, poly, axis=0)
-        elif any(inside):
-            mainland = numpy.append(mainland, poly, axis=0)
+    polyL = _convert_to_list(polys)
+    bSGP = shapely.geometry.Polygon(boubox)
 
-    boubox = _densify(numpy.array(boubox), h0 / 2, bbox, radius=0.1)
-    boubox = numpy.append(boubox, [[nan, nan]], axis=0)
+    for poly in polyL:
+        pSGP = shapely.geometry.Polygon(poly[:-2, :])
+        if bSGP.contains(pSGP):
+            if pSGP.area >= _AREAMIN:
+                inner = numpy.append(inner, poly, axis=0)
+        elif pSGP.overlaps(bSGP):
+            # Append polygon segment to mainland
+            mainland = numpy.vstack((mainland, poly))
+            # Clip polygon segment from boubox and regenerate path
+            bSGP = bSGP.difference(pSGP)
 
-    return inner, mainland, boubox
+    out = numpy.empty(shape=(0, 2))
+
+    if bSGP.geom_type == "Polygon":
+        bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
+
+    # MultiPolygon members can be accessed via iterator protocol using `in`.
+    for b in bSGP:
+        xy = numpy.asarray(b.exterior.coords)
+        xy = numpy.vstack((xy, xy[0]))
+        out = numpy.vstack((out, xy, [nan, nan]))
+
+    return inner, mainland, out
 
 
 def _chaikins_corner_cutting(coords, refinements=5):
@@ -176,11 +214,145 @@ def _smooth_shoreline(polys, N, verbose):
     return _convert_to_array(out)
 
 
+def _clip_polys_2(polys, bbox, verbose, delta=0.10):
+    """Clip segments in `polys` that intersect with `bbox`.
+    Clipped segments need to extend outside `bbox` to avoid
+    false positive `all(inside)` cases. Solution here is to
+    add a small offset `delta` to the `bbox`.
+    """
+    if verbose > 1:
+        print("Collapsing polygon segments outside bbox...")
+
+    # Inflate bounding box to allow clipped segment to overshoot original box.
+    bbox = (bbox[0] - delta, bbox[1] + delta, bbox[2] - delta, bbox[3] + delta)
+    boubox = numpy.asarray(_create_boubox(bbox))
+    path = mpltPath.Path(boubox)
+    polys = _convert_to_list(polys)
+
+    out = []
+
+    for poly in polys:
+        p = poly[:-1, :]
+
+        inside = path.contains_points(p)
+
+        iRemove = []
+
+        _keepLL = True
+        _keepUL = True
+        _keepLR = True
+        _keepUR = True
+
+        if all(inside):
+            out.append(poly)
+        elif any(inside):
+            for j in range(0, len(p)):
+                if not inside[j]:  # snap point to inflated domain bounding box
+                    px = p[j, 0]
+                    py = p[j, 1]
+                    if not (bbox[0] < px and px < bbox[1]) or not (
+                        bbox[2] < py and py < bbox[3]
+                    ):
+                        if (
+                            _keepLL and px < bbox[0] and py < bbox[2]
+                        ):  # is over lower-left
+                            p[j, :] = [bbox[0], bbox[2]]
+                            _keepLL = False
+                        elif (
+                            _keepUL and px < bbox[0] and bbox[3] < py
+                        ):  # is over upper-left
+                            p[j, :] = [bbox[0], bbox[3]]
+                            _keepUL = False
+                        elif (
+                            _keepLR and bbox[1] < px and py < bbox[2]
+                        ):  # is over lower-right
+                            p[j, :] = [bbox[1], bbox[2]]
+                            _keepLR = False
+                        elif (
+                            _keepUR and bbox[1] < px and bbox[3] < py
+                        ):  # is over upper-right
+                            p[j, :] = [bbox[1], bbox[3]]
+                            _keepUR = False
+                        else:
+                            iRemove.append(j)
+
+            # print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
+            # Remove colinear||duplicate vertices
+            if len(iRemove) > 0:
+                p = numpy.delete(p, iRemove, axis=0)
+                del iRemove
+
+            line = p
+
+            # Close polygon
+            if not all(numpy.isclose(line[0, :], line[-1, :])):
+                line = numpy.append(line, [line[0, :], [nan, nan]], axis=0)
+            else:
+                line = numpy.append(line, [[nan, nan]], axis=0)
+
+            out.append(line)
+
+    return _convert_to_array(out)
+
+
+def _clip_polys(polys, bbox, verbose, delta=0.10):
+    """Clip segments in `polys` that intersect with `bbox`.
+    Clipped segments need to extend outside `bbox` to avoid
+    false positive `all(inside)` cases. Solution here is to
+    add a small offset `delta` to the `bbox`.
+    Dependencies: shapely.geometry and numpy
+    """
+
+    if verbose > 1:
+        print("Collapsing polygon segments outside bbox...")
+
+    # Inflate bounding box to allow clipped segment to overshoot original box.
+    bbox = (bbox[0] - delta, bbox[1] + delta, bbox[2] - delta, bbox[3] + delta)
+    boubox = numpy.asarray(_create_boubox(bbox))
+    polyL = _convert_to_list(polys)
+
+    out = numpy.empty(shape=(0, 2))
+
+    b = shapely.geometry.Polygon(boubox)
+
+    for poly in polyL:
+        mp = shapely.geometry.Polygon(poly[:-2, :])
+        if mp.is_valid:
+            mp = [mp]
+        else:
+            if verbose > 0:
+                print(
+                    "Warning, polygon",
+                    shapely.validation.explain_validity(mp),
+                    "Try to make valid.",
+                )
+            mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
+        for p in mp:
+            pi = p.intersection(b)
+            if b.contains(p):
+                out = numpy.vstack((out, poly))
+            elif not pi.is_empty:
+                # assert(pi.geom_type,'MultiPolygon')
+                if pi.geom_type == "Polygon":
+                    pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
+
+                for ppi in pi:
+                    xy = numpy.asarray(ppi.exterior.coords)
+                    xy = numpy.vstack((xy, xy[0]))
+                    out = numpy.vstack((out, xy, [nan, nan]))
+
+                del (ppi, xy)
+            del pi
+        del (p, mp)
+
+    return out
+
+
 def _nth_simplify(polys, bbox, verbose):
     """Collapse segments in `polys` outside of `bbox`"""
     if verbose > 1:
         print("Collapsing segments outside bbox...")
-    boubox = _create_boubox(bbox)
+    boubox = numpy.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
     out = []
@@ -194,7 +366,7 @@ def _nth_simplify(polys, bbox, verbose):
             else:  # pt is outside of domain
                 bd = min(
                     j + 50, len(inside) - 1
-                )  # collapses 200 pts to 1 vertex (arbitary)
+                )  # collapses 50 pts to 1 vertex (arbitary)
                 exte = min(50, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
                     line = numpy.append(line, [poly[j, :]], axis=0)
@@ -205,9 +377,31 @@ def _nth_simplify(polys, bbox, verbose):
             j += 1
         line = numpy.append(line, [[nan, nan]], axis=0)
         out.append(line)
+
     return _convert_to_array(out)
 
 
+def _is_path_ccw(_p):
+    """Compute curve orientation from first two line segment of a polygon.
+    Source: https://en.wikipedia.org/wiki/Curve_orientation
+    """
+    detO = 0.0
+    O3 = numpy.ones((3, 3))
+
+    i = 0
+    while (i + 3 < _p.shape[0]) and numpy.isclose(detO, 0.0):
+        # Colinear vectors detected. Try again with next 3 indices.
+        O3[:, 1:] = _p[i : (i + 3), :]
+        detO = numpy.linalg.det(O3)
+        i += 1
+
+    if numpy.isclose(detO, 0.0):
+        raise RuntimeError("Cannot determine orientation from colinear path.")
+
+    return detO > 0.0
+
+
+# TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
     """
     Geographical data class that handles geographical data describing
@@ -273,6 +467,20 @@ class Shoreline(Geodata):
     """
 
     def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+
+        if isinstance(bbox, tuple):
+            _boubox = numpy.asarray(_create_boubox(bbox))
+        else:
+            _boubox = numpy.asarray(bbox)
+            if not _is_path_ccw(_boubox):
+                _boubox = numpy.flipud(_boubox)
+            bbox = (
+                numpy.nanmin(_boubox[:, 0]),
+                numpy.nanmax(_boubox[:, 0]),
+                numpy.nanmin(_boubox[:, 1]),
+                numpy.nanmax(_boubox[:, 1]),
+            )
+
         super().__init__(bbox)
 
         self.shp = shp
@@ -280,7 +488,7 @@ class Shoreline(Geodata):
         self.inner = []
         self.outer = []
         self.mainland = []
-        self.boubox = []
+        self.boubox = _boubox
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
@@ -290,18 +498,11 @@ class Shoreline(Geodata):
 
         polys = _densify(polys, self.h0, self.bbox, verbose)
 
-        polys = _nth_simplify(polys, self.bbox, verbose)
+        polys = _clip_polys(polys, self.bbox, verbose)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, polys, self.h0 / 2, self.minimum_area_mult, verbose
+            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose
         )
-        if not isinstance(bbox, tuple):
-            self.bbox = (
-                numpy.amin(self.bbox[:, 0]),
-                numpy.amax(self.bbox[:, 0]),
-                numpy.amin(self.bbox[:, 1]),
-                numpy.amax(self.bbox[:, 1]),
-            )
 
     @property
     def shp(self):
@@ -407,7 +608,7 @@ class Shoreline(Geodata):
 
 
 def _extract_bounds(lons, lats, bbox):
-    """Extract the indices of the subregion"""
+    """Extract the indexes of the subregion"""
     # bounds (from DEM)
     blol, blou = numpy.amin(lons), numpy.amax(lons)
     blal, blau = numpy.amin(lats), numpy.amax(lats)

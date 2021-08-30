@@ -5,7 +5,7 @@ from oceanmesh import Shoreline, distance_sizing_function
 
 
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
-fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
 
 def test_edgefx():
