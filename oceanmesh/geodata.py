@@ -6,6 +6,7 @@ import numpy
 import numpy.linalg
 import shapefile
 import shapely.geometry
+import shapely.validation
 from netCDF4 import Dataset
 from PIL import Image
 from PIL.TiffTags import TAGS
@@ -213,6 +214,77 @@ def _smooth_shoreline(polys, N, verbose):
     return _convert_to_array(out)
 
 
+def _clip_polys_2(polys, bbox, verbose, delta=0.10):
+    """Clip segments in `polys` that intersect with `bbox`.
+    Clipped segments need to extend outside `bbox` to avoid
+    false positive `all(inside)` cases. Solution here is to
+    add a small offset `delta` to the `bbox`.
+    """
+    if verbose > 1:
+        print("Collapsing polygon segments outside bbox...")
+
+    # Inflate bounding box to allow clipped segment to overshoot original box.
+    bbox = (bbox[0] - delta, bbox[1] + delta, bbox[2] - delta, bbox[3] + delta)
+    boubox = numpy.asarray(_create_boubox(bbox))
+    path = mpltPath.Path(boubox)
+    polys = _convert_to_list(polys)
+
+    out = []
+
+    for poly in polys:
+        p = poly[:-1, :]
+
+        inside = path.contains_points(p)
+
+        iRemove = []
+
+        _keepLL = True
+        _keepUL = True
+        _keepLR = True
+        _keepUR = True
+
+        if all(inside):
+            out.append(poly)
+        elif any(inside):
+            for j in range(0, len(p)):
+                if not inside[j]:  # snap point to inflated domain bounding box
+                    px = p[j, 0]
+                    py = p[j, 1]
+                    if not (bbox[0] < px and px < bbox[1]) or not (bbox[2] < py and py < bbox[3]):
+                        if _keepLL and px < bbox[0] and py < bbox[2]:    # is over lower-left
+                            p[j, :] = [bbox[0], bbox[2]]
+                            _keepLL = False
+                        elif _keepUL and px < bbox[0] and bbox[3] < py:  # is over upper-left
+                            p[j, :] = [bbox[0], bbox[3]]
+                            _keepUL = False
+                        elif _keepLR and bbox[1] < px and py < bbox[2]:  # is over lower-right
+                            p[j, :] = [bbox[1], bbox[2]]
+                            _keepLR = False
+                        elif _keepUR and bbox[1] < px and bbox[3] < py:  # is over upper-right
+                            p[j, :] = [bbox[1], bbox[3]]
+                            _keepUR = False
+                        else:
+                            iRemove.append(j)
+
+            # print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
+            # Remove colinear||duplicate vertices
+            if len(iRemove) > 0:
+                p = numpy.delete(p, iRemove, axis=0)
+                del(iRemove)
+
+            line = p
+
+            # Close polygon
+            if not all(numpy.isclose(line[0, :], line[-1, :])):
+                line = numpy.append(line, [line[0, :], [nan, nan]], axis=0)
+            else:
+                line = numpy.append(line, [[nan, nan]], axis=0)
+
+            out.append(line)
+
+    return _convert_to_array(out)
+
+
 def _clip_polys(polys, bbox, verbose, delta=0.10):
     """Clip segments in `polys` that intersect with `bbox`.
     Clipped segments need to extend outside `bbox` to avoid
@@ -234,23 +306,30 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
     b = shapely.geometry.Polygon(boubox)
 
     for poly in polyL:
-        p = shapely.geometry.Polygon(poly[:-1, :])
-        pi = p.intersection(b)
-        if b.contains(p):
-            out = numpy.vstack((out, poly))
-        elif not pi.is_empty:
-            # assert(pi.geom_type,'MultiPolygon')
-            if pi.geom_type == 'Polygon':
-                pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
+        mp = shapely.geometry.Polygon(poly[:-2, :])
+        if mp.is_valid:
+            mp = [mp]
+        else:
+            if verbose > 0:
+                print('Warning, polygon', shapely.validation.explain_validity(mp), 'Try to make valid.')
+            mp = mp.buffer(1.e-5)  # Apply 1 metre buffer
+        for p in mp:
+            pi = p.intersection(b)
+            if b.contains(p):
+                out = numpy.vstack((out, poly))
+            elif not pi.is_empty:
+                # assert(pi.geom_type,'MultiPolygon')
+                if pi.geom_type == 'Polygon':
+                    pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
 
-            for ppi in pi:
-                xy = numpy.asarray(ppi.exterior.coords)
-                xy = numpy.vstack((xy, xy[0]))
-                out = numpy.vstack((out, xy, [nan, nan]))
+                for ppi in pi:
+                    xy = numpy.asarray(ppi.exterior.coords)
+                    xy = numpy.vstack((xy, xy[0]))
+                    out = numpy.vstack((out, xy, [nan, nan]))
 
-            del(ppi, xy)
-
-        del(p, pi)
+                del(ppi, xy)
+            del(pi)
+        del(p, mp)
 
     return out
 

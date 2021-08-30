@@ -5,7 +5,7 @@ from oceanmesh import Shoreline, distance_sizing_function
 
 
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
-fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
 
 def test_edgefx():
@@ -41,5 +41,3 @@ def test_edgefx_elevation_bounds():
     bounds = [[2000.0, 3000.0, -10, -5], [1000.0, 1500.0, -5, -1]]
     edge_length = om.enforce_mesh_size_bounds_elevation(edge_length, dem, bounds)
     edge_length.plot()
-
-test_edgefx()
