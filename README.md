@@ -19,12 +19,23 @@ Functionality
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
 
+Citing
+======
+
+The Python version of the algorithm does not yet have a citation; however, similar algorithms and ideas are shared between both version.
+
+```
+[1] - Roberts, K. J., Pringle, W. J., and Westerink, J. J., 2019.
+      OceanMesh2D 1.0: MATLAB-based software for two-dimensional unstructured mesh generation in coastal ocean modeling,
+      Geoscientific Model Development, 12, 1847-1868. https://doi.org/10.5194/gmd-12-1847-2019.
+```
+
 Questions or problems
 ======================
 
 Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-su1q3lh3-C_j6AIOQPrewqZnanhzN7g).
 
-Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or Dr. William Pringle (wpringle@anl.gov) with questions or concerns!
+Otherwise please reach out to Dr. Keith Roberts (keithrbt0@gmail.com) with questions or concerns!
 
 Please include version information when posting bug reports.
 `oceanmesh` uses [versioneer](https://github.com/python-versioneer/python-versioneer).

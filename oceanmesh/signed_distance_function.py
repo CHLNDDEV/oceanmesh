@@ -4,7 +4,12 @@ from inpoly import inpoly2
 
 from . import edges
 
-__all__ = ["multiscale_signed_distance_function", "signed_distance_function", "Domain"]
+__all__ = [
+    "multiscale_signed_distance_function",
+    "signed_distance_function",
+    "Domain",
+    "MultiscaleDomain",
+]
 
 nan = numpy.nan
 
@@ -16,6 +21,11 @@ class Domain:
 
     def eval(self, x, **kwargs):
         return self.domain(x, **kwargs)
+
+
+class MultiscaleDomain(Domain):
+    def __init__(self, bboxes, domains):
+        super().__init__(bboxes, domains)
 
 
 def signed_distance_function(shoreline, verbose=True, flip=0):
@@ -99,17 +109,12 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
         sdfs.append(signed_distance_function(shoreline, verbose=False))
 
     def func(x):
-        import matplotlib.pyplot as plt
-
         # query all the sdfs
         dist = numpy.zeros(len(x)) + 1.0
-        plt.plot(x[:, 0], x[:, 1], "kx")
         for sdf in sdfs:
             d_l, cond = sdf.eval(x, return_inside=True)
             idx = numpy.argwhere(cond)
-            plt.plot(x[idx, 0], x[idx, 1], "rx")
-            plt.show()
             dist[idx] = d_l[idx]
         return dist
 
-    return Domain(shorelines[0].bbox, func)
+    return Domain([shoreline.bbox for shoreline in shorelines], func)

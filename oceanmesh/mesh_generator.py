@@ -2,12 +2,12 @@ import time
 
 import numpy as np
 import scipy.sparse as spsparse
-
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
+
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain
+from .signed_distance_function import Domain, MultiscaleDomain
 
 __all__ = ["generate_mesh"]
 
@@ -60,6 +60,11 @@ def _parse_kwargs(kwargs):
             )
 
 
+def _check_bbox(bbox):
+    assert isinstance(bbox, tuple), "`bbox` must be a tuple"
+    assert int(len(bbox) / 2), "`dim` must be 2"
+
+
 def generate_mesh(domain, edge_length, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to a
         sizing function `edge_length` and signed distance function.
@@ -74,7 +79,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         See below
 
     :Keyword Arguments:
-        * *bbox* (``tuple``) --
+        * *bbox* (``tuple`` or ``list of tuples``) --
             Bounding box containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
         * *nscreen* (``float``) --
             Output to the screen `nscreen` timestep. (default==1)
@@ -90,8 +95,8 @@ def generate_mesh(domain, edge_length, **kwargs):
             The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
-        * *min_edge_length* (``float``) --
-            The minimum element size in the domain. Taken from `domain` normally.
+        * *min_edge_length* (``float`` or ``list of floats``) --
+            The minimum element size in the domain. Required for `MultiscaleDomain`.
 
 
     Returns
@@ -102,6 +107,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         mesh connectivity table.
 
     """
+    _DIM = 2
     opts = {
         "max_iter": 50,
         "seed": 0,
@@ -127,32 +133,44 @@ def generate_mesh(domain, edge_length, **kwargs):
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
-    if not isinstance(bbox, tuple):
-        raise ValueError("`bbox` must be a tuple")
+    if isinstance(bbox, list):
+        _bbox = []
+        for _b in bbox:
+            _check_bbox(_b)
+            _b = np.array(_b).reshape(-1, 2)
+            _bbox.append(_b)
+        # update to a list of numpy arrays
+        bbox = _bbox
+    else:
+        _check_bbox(bbox)
+        bbox = np.array(bbox).reshape(-1, 2)
 
-    dim = int(len(bbox) / 2)
-    if dim != 2:
-        raise ValueError("`dim` must be 2")
+    if isinstance(min_edge_length, list):
+        for _h0 in min_edge_length:
+            assert _h0 > 0, "`min_edge_length` must be > 0"
+    else:
+        assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
-    bbox = np.array(bbox).reshape(-1, 2)
-
-    if min_edge_length < 0:
-        raise ValueError("`min_edge_length` must be > 0")
-
-    if opts["max_iter"] < 0:
-        raise ValueError("`max_iter` must be > 0")
+    assert opts["max_iter"] > 0, "`max_iter` must be > 0"
     max_iter = opts["max_iter"]
 
     np.random.seed(opts["seed"])
 
-    L0mult = 1 + 0.4 / 2 ** (dim - 1)
+    L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.20
-    geps = 1e-1 * min_edge_length
-    deps = np.sqrt(np.finfo(np.double).eps) * min_edge_length
+    geps = 1e-1 * np.amin(min_edge_length)
+    deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
 
-    pfix, nfix = _unpack_pfix(dim, opts)
+    pfix, nfix = _unpack_pfix(_DIM, opts)
 
-    p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
+    # Multiscale domain
+    if isinstance(bbox, list):
+        _p = []
+        for _b, _h0 in zip(bbox, min_edge_length):
+            _p.append(_generate_initial_points(_h0, geps, _b, fh, fd, pfix))
+        p = np.concatenate(_p, axis=0)
+    else:
+        p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
 
     N = p.shape[0]
 
@@ -220,14 +238,16 @@ def _unpack_sizing(edge_length, opts):
 
 
 def _unpack_domain(domain, opts):
-    if isinstance(domain, Domain):
+    if isinstance(domain, (Domain, MultiscaleDomain)):
         bbox = domain.bbox
         fd = domain.eval
     elif callable(domain):
         bbox = opts["bbox"]
         fd = domain
     else:
-        raise ValueError("`domain` must be a function or a :class:`geometry` object")
+        raise ValueError(
+            "`domain` must be a function or a :class:`signed_distance_function object"
+        )
     return fd, bbox
 
 

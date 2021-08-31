@@ -226,8 +226,8 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
     -------
     grid: a :class:`Grid` object
         A sizing function that takes a point and returns a value
-    minimum_edge_length: float
-        The minimum edge length in meters throughout the domain
+    minimum_edge_lengths: list
+        The minimum edge length in meters in the multiscale domain
 
     """
     err = "grid objects must appear in order of descending dx spacing"
@@ -253,24 +253,17 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])
 
-    # debug
-    # k = 0
-    # for a, b in zip(list_of_grids, new_list_of_grids):
-    #    a.plot(show=False, filename=f"org{k}.png")
-    #    b.plot(show=False, filename=f"new{k}.png")
-    #    k += 1
-
     # compute new minimum edge length to mesh with
-    minimum_edge_length = 999999
-    for func in new_list_of_grids:
-        minimum_edge_length = numpy.amin([func.dx, func.dy, minimum_edge_length])
+    minimum_edge_lengths = []
+    for grid in new_list_of_grids:
+        minimum_edge_lengths.append(grid.hmin)
 
     # return the mesh size function to query during genertaion
     def wrapper(qpts):
-        hmin = numpy.array([len(qpts)] * 999999)
+        hmin = numpy.array([99999] * len(qpts))
         for func in new_list_of_grids:
             h = func.eval(qpts)
             hmin = numpy.minimum(h, hmin)
         return hmin
 
-    return wrapper, minimum_edge_length
+    return wrapper, minimum_edge_lengths
