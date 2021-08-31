@@ -215,22 +215,24 @@ class Grid:
         lon1, lat1 = self.create_vectors()
         lon2, lat2 = grid2.create_vectors()
         # take data from grid1 --> grid2
-        fp = RegularGridInterpolator(
-            (lon1, lat1),
-            self.values,
+        fp2 = RegularGridInterpolator(
+            (lon2, lat2),
+            grid2.values,
             method="linear",
             bounds_error=False,
             fill_value=99999,
         )
-        xg, yg = numpy.meshgrid(lon2, lat2, indexing="ij", sparse=True)
-        new_values = fp((xg, yg))
-        # where fill replace with grid2 values
-        new_values[new_values == 99999] = grid2.values[new_values == 99999]
+        # build grid for base
+        xg, yg = numpy.meshgrid(lon1, lat1, indexing="ij", sparse=True)
+        # interpolate the second onto the first
+        new_values = fp2((xg, yg))
+        # where the fill value is, replace it with was previously there
+        new_values[new_values == 99999] = self.values[new_values == 99999]
         return Grid(
-            bbox=grid2.bbox,
-            dx=grid2.dx,
-            dy=grid2.dy,
-            hmin=numpy.amin(new_values),
+            bbox=self.bbox,
+            dx=self.dx,
+            dy=self.dy,
+            hmin=self.dx,  # numpy.amin(new_values),
             values=new_values,
         )
 

@@ -111,10 +111,14 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
     def func(x):
         # query all the sdfs
         dist = numpy.zeros(len(x)) + 1.0
-        for sdf in sdfs:
+        for k, sdf in enumerate(sdfs[:-1]):
             d_l, cond = sdf.eval(x, return_inside=True)
             idx = numpy.argwhere(cond)
             dist[idx] = d_l[idx]
+            for sdf2 in sdfs[k + 1 :]:
+                _, cond = sdf2.eval(x, return_inside=True)
+                idx = numpy.argwhere(cond)
+                dist[idx] *= -1  # make inner domains outside
         return dist
 
     return Domain([shoreline.bbox for shoreline in shorelines], func)

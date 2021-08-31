@@ -246,9 +246,10 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
                     f"  Projecting sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
-            new_coarse = finer.project(new_coarse)
+            new_coarse = new_coarse.project(finer)
             # enforce mesh size gradation w/ the projected data
             new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
+            new_coarse.build_interpolant()
         new_list_of_grids.append(new_coarse)
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])
