@@ -56,7 +56,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
 
-    def func(x, return_inside=False):
+    def func(x, box_vec=None):
         # Initialize d with some positive number larger than geps
         dist = numpy.zeros(len(x)) + 1.0
         # are points inside the boubox?
@@ -71,10 +71,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         if flip:
             cond = ~cond
         dist = (-1) ** (cond) * d
-        if return_inside:
-            return dist, cond
-        else:
-            return dist
+        return dist
 
     return Domain(shoreline.bbox, func)
 
@@ -104,21 +101,43 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
         assert len(flips) == len(shorelines)
 
     # build all SDF for each shoreline object
-    sdfs = []
+    _sdfs = []
     for shoreline in shorelines:
-        sdfs.append(signed_distance_function(shoreline, verbose=False))
+        _sdfs.append(signed_distance_function(shoreline, verbose=False))
 
-    def func(x):
-        # query all the sdfs
-        dist = numpy.zeros(len(x)) + 1.0
-        for k, sdf in enumerate(sdfs[:-1]):
-            d_l, cond = sdf.eval(x, return_inside=True)
-            idx = numpy.argwhere(cond)
-            dist[idx] = d_l[idx]
-            for sdf2 in sdfs[k + 1 :]:
-                _, cond = sdf2.eval(x, return_inside=True)
-                idx = numpy.argwhere(cond)
-                dist[idx] *= -1  # make inner domains outside
-        return dist
+    def func(x, box_vec=None):
+
+        if box_vec is None:
+            box_vec = [*range(len(shorelines))]
+
+        # initialize to large value
+        sdist = numpy.zeros(len(x)) + 1.0
+
+        # query the sdfs based on box_vec
+        for box_num in box_vec:
+            _shoreline = shorelines[box_num]
+            # first determine the array `inside`
+            if box_num > 0:
+                _boubox = _shoreline.boubox
+                e_box = edges.get_poly_edges(_boubox)
+                inside, _ = inpoly2(x, _boubox, e_box)
+            else:
+                # by design all the points are inside
+                inside = numpy.ones(len(x), dtype=bool)
+
+            # all the nested domains are `outside`.
+            for box_num2 in range(box_num + 1, len(shorelines)):
+                _boubox = shorelines[box_num2].boubox
+                e_box = edges.get_poly_edges(_boubox)
+                inside2, _ = inpoly2(x, _boubox, e_box)
+                inside[inside2] = False
+
+            # for the points inside the box, calculate the nearest distance to
+            if numpy.sum(inside) > 0:
+                d_l = _sdfs[box_num].eval(x[inside, :])
+
+            sdist[inside] = d_l
+
+        return sdist
 
     return Domain([shoreline.bbox for shoreline in shorelines], func)

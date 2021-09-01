@@ -166,8 +166,11 @@ def generate_mesh(domain, edge_length, **kwargs):
     # Multiscale domain
     if isinstance(bbox, list):
         _p = []
-        for _b, _h0 in zip(bbox, min_edge_length):
-            _p.append(_generate_initial_points(_h0, geps, _b, fh, fd, pfix))
+        for index, (_b, _h0) in enumerate(zip(bbox, min_edge_length)):
+            # in this loop, we only compute the SDF for the index'ed SDF
+            _p.append(
+                _generate_initial_points(_h0, geps, _b, fh, fd, pfix, index=index)
+            )
         p = np.concatenate(_p, axis=0)
     else:
         p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
@@ -329,14 +332,14 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
+def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, index=None):
     """Create initial distribution in bounding box (equilateral triangles)"""
     p = np.mgrid[
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
 
-    p = p[fd(p) < geps]  # Keep only d<0 points
+    p = p[fd(p, box_vec=[index]) < geps]  # Keep only d<0 points
     r0 = fh(p)
     r0m = np.min(r0[r0 > 0])
     return np.vstack(
