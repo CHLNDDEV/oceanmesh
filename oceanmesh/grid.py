@@ -3,6 +3,8 @@ import numpy
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
+_FILL = None  # 999999
+
 
 def compute_minimum(edge_lengths):
     """Determine the minimum of all edge lengths in the domain"""
@@ -53,7 +55,7 @@ class Grid:
 
     """
 
-    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, fill=None):
+    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, fill=_FILL):
         if dy is None:
             dy = dx
         self.bbox = bbox
@@ -182,7 +184,7 @@ class Grid:
         dist, idx = tree.query(points, k=1)
         return numpy.unravel_index(idx, lon.shape)
 
-    def project(self, grid2):
+    def project(self, grid2, fill=_FILL):
         """Projects linearly self.values onto :class`Grid` grid2 forming a new
         :class:`Grid` object grid3.
 
@@ -196,6 +198,9 @@ class Grid:
         ----------
         grid2: :obj:`Grid`
             A :obj:`Grid` with `values`.
+
+        fill: numerical value, optional
+            The value placed outside the extent of the interp.
 
         Returns
         -------
@@ -220,20 +225,21 @@ class Grid:
             grid2.values,
             method="linear",
             bounds_error=False,
-            fill_value=99999,
+            fill_value=999999,
         )
         # build grid for base
         xg, yg = numpy.meshgrid(lon1, lat1, indexing="ij", sparse=True)
         # interpolate the second onto the first
         new_values = fp2((xg, yg))
         # where the fill value is, replace it with was previously there
-        new_values[new_values == 99999] = self.values[new_values == 99999]
+        new_values[new_values == 999999] = self.values[new_values == 999999]
         return Grid(
             bbox=self.bbox,
             dx=self.dx,
             dy=self.dy,
             hmin=self.dx,  # numpy.amin(new_values),
             values=new_values,
+            fill=fill,
         )
 
     def plot(

@@ -44,7 +44,6 @@ def _parse_kwargs(kwargs):
             "nscreen",
             "max_iter",
             "seed",
-            "perform_checks",
             "pfix",
             "points",
             "domain",
@@ -80,15 +79,13 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     :Keyword Arguments:
         * *bbox* (``tuple`` or ``list of tuples``) --
-            Bounding box containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
+            Bounding box(es) containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
         * *nscreen* (``float``) --
             Output to the screen `nscreen` timestep. (default==1)
         * *max_iter* (``float``) --
             Maximum number of meshing iterations. (default==50)
         * *seed* (``float`` or ``int``) --
             Psuedo-random seed to initialize meshing points. (default==0)
-        * *perform_checks* (`boolean`) --
-            Whether or not to perform mesh linting/mesh cleanup. (default==False)
         * *pfix* (`array-like`) --
             An array of points to constrain in the mesh. (default==None)
         * *axis* (`int`) --
@@ -111,7 +108,6 @@ def generate_mesh(domain, edge_length, **kwargs):
     opts = {
         "max_iter": 50,
         "seed": 0,
-        "perform_checks": False,
         "pfix": None,
         "points": None,
         "verbose": 1,
@@ -133,7 +129,9 @@ def generate_mesh(domain, edge_length, **kwargs):
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
+    _MULTISCALE = False
     if isinstance(bbox, list):
+        _MULTISCALE = True
         _bbox = []
         for _b in bbox:
             _check_bbox(_b)
@@ -145,7 +143,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         _check_bbox(bbox)
         bbox = np.array(bbox).reshape(-1, 2)
 
-    if isinstance(min_edge_length, list):
+    if _MULTISCALE:
         for _h0 in min_edge_length:
             assert _h0 > 0, "`min_edge_length` must be > 0"
     else:
@@ -164,7 +162,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     pfix, nfix = _unpack_pfix(_DIM, opts)
 
     # Multiscale domain
-    if isinstance(bbox, list):
+    if _MULTISCALE:
         _p = []
         for index, (_b, _h0) in enumerate(zip(bbox, min_edge_length)):
             # in this loop, we only compute the SDF for the index'ed SDF
@@ -338,7 +336,6 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, index=No
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
-
     p = p[fd(p, box_vec=[index]) < geps]  # Keep only d<0 points
     r0 = fh(p)
     r0m = np.min(r0[r0 > 0])

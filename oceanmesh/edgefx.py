@@ -224,7 +224,7 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
 
     Returns
     -------
-    grid: a :class:`Grid` object
+    grid: a function
         A sizing function that takes a point and returns a value
     minimum_edge_lengths: list
         The minimum edge length in meters in the multiscale domain
@@ -251,6 +251,10 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
             new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
             new_coarse.build_interpolant()
         new_list_of_grids.append(new_coarse)
+
+    list_of_grids[-1].fill = 999999
+    list_of_grids[-1].build_interpolant()
+
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])
 
@@ -260,11 +264,11 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
         minimum_edge_lengths.append(grid.hmin)
 
     # return the mesh size function to query during genertaion
-    def wrapper(qpts):
-        hmin = numpy.array([99999] * len(qpts))
-        for func in new_list_of_grids:
-            h = func.eval(qpts)
-            hmin = numpy.minimum(h, hmin)
+    def eval(qpts):
+        hmin = numpy.array([999999] * len(qpts))
+        for grid in new_list_of_grids:
+            _hmin = grid.eval(qpts)
+            hmin = numpy.min(numpy.column_stack([_hmin, hmin]), axis=1)
         return hmin
 
-    return wrapper, minimum_edge_lengths
+    return eval, minimum_edge_lengths

@@ -19,8 +19,8 @@ class Domain:
         self.bbox = bbox
         self.domain = domain
 
-    def eval(self, x, **kwargs):
-        return self.domain(x, **kwargs)
+    def eval(self, *args, **kwargs):
+        return self.domain(*args, **kwargs)
 
 
 class MultiscaleDomain(Domain):

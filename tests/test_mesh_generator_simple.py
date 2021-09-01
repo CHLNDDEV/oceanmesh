@@ -1,5 +1,4 @@
 import numpy as np
-
 from oceanmesh import generate_mesh, simp_vol
 
 
@@ -11,7 +10,7 @@ def test_mesh_generator_rectangle():
         min = np.minimum
         return -min(min(min(-y1 + p[:, 1], y2 - p[:, 1]), -x1 + p[:, 0]), x2 - p[:, 0])
 
-    def domain(x):
+    def domain(x, **kwargs):
         return drectangle(x, *bbox)
 
     def edge_length(p):
