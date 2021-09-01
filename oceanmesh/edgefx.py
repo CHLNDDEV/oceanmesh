@@ -246,12 +246,19 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
                     f"  Projecting sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
-            new_coarse = new_coarse.project(finer)
+            # outermost domain can extrapolate
+            if idx1 == 0:
+                new_coarse = new_coarse.project(finer, fill=None)
+            # inner most domains will return fill outside of domain
+            else:
+                new_coarse = new_coarse.project(finer, fill=999999)
             # enforce mesh size gradation w/ the projected data
             new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
+            # recreate the interpolant
             new_coarse.build_interpolant()
         new_list_of_grids.append(new_coarse)
 
+    # finest grid needs to return fill value outside domain
     list_of_grids[-1].fill = 999999
     list_of_grids[-1].build_interpolant()
 
@@ -264,6 +271,7 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
         minimum_edge_lengths.append(grid.hmin)
 
     # return the mesh size function to query during genertaion
+    # only keep the minimum value over all grids
     def eval(qpts):
         hmin = numpy.array([999999] * len(qpts))
         for grid in new_list_of_grids:
