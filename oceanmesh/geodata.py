@@ -45,7 +45,9 @@ def _create_boubox(bbox):
 
 
 def _create_ranges(start, stop, N, endpoint=True):
-    """Vectorized alternative to numpy.linspace"""
+    """Vectorized alternative to numpy.linspace
+    https://stackoverflow.com/questions/40624409/vectorized-numpy-linspace-for-multiple-start-and-stop-values
+    """
     if endpoint == 1:
         divisor = N - 1
     else:
@@ -59,8 +61,8 @@ def _densify(poly, maxdiff, bbox, radius=0):
     that are greater than a `maxdiff` (degrees) apart
     """
     boubox = _create_boubox(bbox)
-    path = mpltPath.Path(boubox)
-    inside = path.contains_points(poly, radius=radius)
+    path = mpltPath.Path(boubox, closed=True)
+    inside = path.contains_points(poly, radius=0.01)  # add a small radius
 
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
@@ -567,12 +569,12 @@ class Shoreline(Geodata):
             ax.axis("equal")
 
         if len(self.mainland) != 0:
-            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
+            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "kx-")
             flg1 = True
         if len(self.inner) != 0:
-            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
+            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "rx-")
             flg2 = True
-        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "g-")
+        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "gx-")
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
