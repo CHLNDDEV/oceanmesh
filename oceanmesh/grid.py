@@ -3,6 +3,7 @@ import numpy
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
+# controls extrapolation behavior.
 _FILL = None  # 999999
 
 
@@ -184,7 +185,7 @@ class Grid:
         dist, idx = tree.query(points, k=1)
         return numpy.unravel_index(idx, lon.shape)
 
-    def project(self, grid2, fill=_FILL):
+    def project(self, grid2):
         """Projects linearly self.values onto :class`Grid` grid2 forming a new
         :class:`Grid` object grid3.
 
@@ -198,9 +199,6 @@ class Grid:
         ----------
         grid2: :obj:`Grid`
             A :obj:`Grid` with `values`.
-
-        fill: numerical value, optional
-            The value placed outside the extent of the interp.
 
         Returns
         -------
@@ -237,9 +235,9 @@ class Grid:
             bbox=self.bbox,
             dx=self.dx,
             dy=self.dy,
-            hmin=self.dx,  # numpy.amin(new_values),
+            hmin=self.dx,
             values=new_values,
-            fill=fill,
+            fill=self.fill,
         )
 
     def plot(

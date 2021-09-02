@@ -109,7 +109,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     cell_size = cell_size.flatten("F")
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = numpy.reshape(tmp, (sz[0], sz[1]), "F")
-    grid_limited = Grid(bbox=grid.bbox, dx=grid.dx, values=tmp, hmin=grid.hmin)
+    grid_limited = Grid(
+        bbox=grid.bbox, dx=grid.dx, values=tmp, hmin=grid.hmin, fill=grid.fill
+    )
     grid_limited.build_interpolant()
     return grid_limited
 
@@ -237,25 +239,28 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
     new_list_of_grids = []
     # loop through remaining sizing functions
     for idx1, new_coarse in enumerate(list_of_grids[:-1]):
-        # project all finer onto coarse and enforce gradation
         if verbose:
             print(f"For sizing function #{idx1}")
+        # project all finer nests onto coarse func and enforce gradation rate
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
             if verbose:
                 print(
                     f"  Projecting sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
-            # outermost domain can extrapolate
-            if idx1 == 0:
-                new_coarse = new_coarse.project(finer, fill=None)
-            # inner most domains will return fill outside of domain
-            else:
-                new_coarse = new_coarse.project(finer, fill=999999)
-            # enforce mesh size gradation w/ the projected data
-            new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
-            # recreate the interpolant
-            new_coarse.build_interpolant()
+            new_coarse = new_coarse.project(finer)
+
+        # enforce mesh size gradation w/ the projected data
+        new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
+        if idx1 == 0:
+            # base sizing funcs extraps everywhere
+            new_coarse.fill = None
+        else:
+            # nest sizing funcs do not extrap
+            new_coarse.fill = 999999
+        # recreate the interpolant
+        new_coarse.build_interpolant()
+        # append it to list
         new_list_of_grids.append(new_coarse)
 
     # finest grid needs to return fill value outside domain
@@ -271,10 +276,10 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
         minimum_edge_lengths.append(grid.hmin)
 
     # return the mesh size function to query during genertaion
-    # only keep the minimum value over all grids
+    # NB: only keep the minimum value over all grids
     def eval(qpts):
         hmin = numpy.array([999999] * len(qpts))
-        for grid in new_list_of_grids:
+        for i, grid in enumerate(new_list_of_grids):
             _hmin = grid.eval(qpts)
             hmin = numpy.min(numpy.column_stack([_hmin, hmin]), axis=1)
         return hmin

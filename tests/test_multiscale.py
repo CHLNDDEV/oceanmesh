@@ -1,9 +1,10 @@
 import os
 
+import meshio
 import numpy as np
 import oceanmesh as om
 
-fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_f_L1.shp")
 
 
 def test_multiscale_sizing_function():
@@ -47,7 +48,23 @@ def test_multiscale_sizing_function():
     shore3 = om.Shoreline(fname, bbox3, min_edge_length3)
     edge_length3 = om.distance_sizing_function(shore3, max_edge_length=500)
 
+    shore_ms = om.multiscale_signed_distance_function([shore1, shore2, shore3])
+
     el_org = [edge_length1, edge_length2, edge_length3]
-    el_new, minimum_edge_length = om.multiscale_sizing_function(el_org)
-    for m, t in zip(minimum_edge_length, [1e3, 500, 250]):
+    el_ms, min_edge_lengths = om.multiscale_sizing_function(el_org)
+    for m, t in zip(min_edge_lengths, [1e3, 500, 250]):
         assert (m * 111e3) == t
+
+    points, cells = om.generate_mesh(
+        domain=shore_ms,
+        edge_length=el_ms,
+        min_edge_length=min_edge_lengths,
+        verbose=2,
+    )
+
+    meshio.write_points_cells(
+        "simple_new_york3.vtk",
+        points,
+        [("triangle", cells)],
+        file_format="vtk",
+    )

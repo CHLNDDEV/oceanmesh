@@ -136,7 +136,7 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
             if numpy.sum(inside) > 0:
                 d_l = _sdfs[box_num].eval(x[inside, :])
 
-            sdist[inside] = d_l
+                sdist[inside] = d_l
 
         return sdist
 

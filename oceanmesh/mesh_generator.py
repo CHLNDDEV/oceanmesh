@@ -169,6 +169,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             _p.append(
                 _generate_initial_points(_h0, geps, _b, fh, fd, pfix, index=index)
             )
+            np.savetxt(f"rejec{index}.points", _p[index], delimiter=",")
         p = np.concatenate(_p, axis=0)
     else:
         p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
@@ -313,7 +314,6 @@ def _remove_triangles_outside(p, t, fd, geps):
 
 def _project_points_back(p, fd, deps):
     """Project points outsidt the domain back within"""
-
     d = fd(p)
     ix = d > 0  # Find points outside (d>0)
     if ix.any():
@@ -338,7 +338,7 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, index=No
     p = p.reshape(2, -1).T
     p = p[fd(p, box_vec=[index]) < geps]  # Keep only d<0 points
     r0 = fh(p)
-    r0m = np.min(r0[r0 > 0])
+    r0m = min_edge_length  # np.min(r0[r0 > 0])
     return np.vstack(
         (
             pfix,
