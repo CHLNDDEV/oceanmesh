@@ -155,7 +155,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
-    delta_t = 0.20
+    delta_t = 0.10
     geps = 1e-1 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
 
@@ -169,7 +169,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             _p.append(
                 _generate_initial_points(_h0, geps, _b, fh, fd, pfix, index=index)
             )
-            np.savetxt(f"rejec{index}.points", _p[index], delimiter=",")
+            # np.savetxt(f"init{index}.points", _p[index], delimiter=',')
         p = np.concatenate(_p, axis=0)
     else:
         p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
@@ -267,13 +267,12 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
     L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     hbars = fh(p[bars].sum(1) / 2)
-    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
-    F = L0 - L
-    F[F < 0] = 0  # Bar forces (scalars)
+    L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
+    LN = L / L0
+    F = (1 - LN ** 4) * np.exp(-(LN ** 4)) / LN
     Fvec = (
-        F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
+        F[:, None] / LN[:, None].dot(np.ones((1, 2))) * barvec
     )  # Bar forces (x,y components)
-
     Ftot = _dense(
         bars[:, [0] * 2 + [1] * 2],
         np.repeat([list(range(2)) * 2], len(F), axis=0),
