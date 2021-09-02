@@ -207,14 +207,12 @@ class Grid:
 
         """
         # is grid2 even a grid object?
-        if not isinstance(grid2, Grid):
-            raise ValueError("Both objects must be grids.")
+        assert isinstance(grid2, Grid), "Both objects must be grids."
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
         x2min, x2max, y2min, y2max = self.bbox
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
-        if overlap is False:
-            raise ValueError("Grid objects do not overlap.")
+        assert overlap, "Grid objects do not overlap."
         lon1, lat1 = self.create_vectors()
         lon2, lat2 = grid2.create_vectors()
         # take data from grid1 --> grid2

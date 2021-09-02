@@ -3,7 +3,9 @@ import warnings
 import numpy
 import skfmm
 from _HamiltonJacobi import gradient_limit
+from inpoly import inpoly2
 
+from . import edges
 from .grid import Grid
 
 __all__ = [
@@ -150,11 +152,19 @@ def distance_sizing_function(
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-    grid.values = shoreline.h0 + dis * rate
-
+    tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
-        grid.values[grid.values > max_edge_length] = max_edge_length
+        tmp[tmp > max_edge_length] = max_edge_length
+
+    # mask the values outside the boubox
+    qpts = numpy.column_stack((lon.flatten(), lat.flatten()))
+    e = edges.get_poly_edges(shoreline.boubox)
+    in_boubox, _ = inpoly2(qpts, shoreline.boubox, e)
+    mask_indices = grid.find_indices(qpts[in_boubox, :], lon, lat)
+    mask = numpy.ones((grid.nx, grid.ny), dtype=bool)
+    mask[mask_indices] = False
+    grid.values = numpy.ma.array(tmp, mask=mask)
 
     grid.build_interpolant()
     return grid
