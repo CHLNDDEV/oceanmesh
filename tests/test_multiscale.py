@@ -1,10 +1,10 @@
 import os
 
-import meshio
+# import meshio
 import numpy as np
 import oceanmesh as om
 
-fname = os.path.join(os.path.dirname(__file__), "GSHHS_f_L1.shp")
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_l_L1.shp")
 
 
 def test_multiscale_sizing_function():
@@ -62,9 +62,10 @@ def test_multiscale_sizing_function():
         verbose=2,
     )
 
-    meshio.write_points_cells(
-        "simple_new_york3.vtk",
-        points,
-        [("triangle", cells)],
-        file_format="vtk",
-    )
+
+#    meshio.write_points_cells(
+#        "simple_new_york3.vtk",
+#        points,
+#        [("triangle", cells)],
+#        file_format="vtk",
+#    )
