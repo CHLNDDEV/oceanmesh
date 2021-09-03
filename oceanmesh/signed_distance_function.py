@@ -2,7 +2,7 @@ import numpy
 import scipy.spatial
 from inpoly import inpoly2
 
-from . import edges
+from . import Shoreline, edges
 
 __all__ = [
     "multiscale_signed_distance_function",
@@ -49,6 +49,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     """
     if verbose:
         print("Building a signed distance function...")
+    assert isinstance(shoreline, Shoreline), "shoreline is not a `Shoreline` object"
     poly = numpy.vstack((shoreline.inner, shoreline.boubox))
     tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
@@ -95,10 +96,9 @@ def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
     if verbose:
         print("Building a multiscale signed distance function...")
     assert isinstance(shorelines, list), "shorelines is not a list"
-    assert len(shorelines) > 1, "Use signed_distance_function instead"
+    assert len(shorelines) > 1, "Use `signed_distance_function` instead"
     if flips is not None:
-        assert isinstance(flips, list)
-        assert len(flips) == len(shorelines)
+        assert isinstance(flips, list) and len(flips) == len(shorelines)
 
     # build all SDF for each shoreline object
     _sdfs = []

@@ -283,7 +283,7 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
     # compute new minimum edge length to mesh with
     minimum_edge_lengths = []
     for grid in new_list_of_grids:
-        minimum_edge_lengths.append(grid.hmin)
+        minimum_edge_lengths.append(numpy.amin(grid.values))
 
     # return the mesh size function to query during genertaion
     # NB: only keep the minimum value over all grids

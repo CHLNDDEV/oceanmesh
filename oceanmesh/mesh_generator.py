@@ -216,6 +216,7 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Show the user some progress so they know something is happening
         maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
+
         print_msg2(
             "Iteration #%d, max movement is %f, there are %d vertices and %d"
             " cells" % (count + 1, maxdp, len(p), len(t)),
@@ -337,7 +338,7 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, index=No
     p = p.reshape(2, -1).T
     p = p[fd(p, box_vec=[index]) < geps]  # Keep only d<0 points
     r0 = fh(p)
-    r0m = min_edge_length  # np.min(r0[r0 > 0])
+    r0m = np.min(r0[r0 > min_edge_length])
     return np.vstack(
         (
             pfix,

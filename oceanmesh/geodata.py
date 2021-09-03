@@ -403,7 +403,6 @@ def _is_path_ccw(_p):
     return detO > 0.0
 
 
-# TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
     """
     Geographical data class that handles geographical data describing
