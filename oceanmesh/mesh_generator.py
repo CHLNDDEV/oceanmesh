@@ -16,14 +16,14 @@ from .signed_distance_function import (Domain,
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
 
-def plot_mesh(points, cells, count=0, show=True):
+def plot_mesh(points, cells, count=0, show=True, pause=0.2):
     triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
     plt.triplot(triang)
     plt.gca().set_aspect("equal", adjustable="box")
     plt.title(f"Iteration {count}")
     if show:
         plt.show(block=False)
-        plt.pause(0.2)
+        plt.pause(pause)
         plt.close()
 
 
@@ -129,10 +129,10 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     _p = np.concatenate(_p, axis=0)
 
     # merge the two domains together
+    print("--> Blending the domains...")
     _p, _c = generate_mesh(
         union, master_edge_length, min_edge_length=global_minimum, points=_p, **kwargs
     )
-    plot_mesh(_p, _c)
     return _p, _c
 
 
@@ -259,7 +259,7 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
-            p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
+            p, t, _ = fix_mesh(p, t, dim=_DIM, delete_unused=True)
             print_msg1("Termination reached...maximum number of iterations.")
             return p, t
 
@@ -424,7 +424,7 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     p = p.reshape(2, -1).T
     p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
-    r0m = np.min(r0[r0 > min_edge_length])
+    r0m = np.min(r0[r0 >= min_edge_length])
     return np.vstack(
         (
             pfix,

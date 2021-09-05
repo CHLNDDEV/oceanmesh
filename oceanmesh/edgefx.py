@@ -282,6 +282,7 @@ def multiscale_sizing_function(
                 grid.extrapolate = True
             else:
                 grid.extrapolate = False
+            grid.build_interpolant()
             _hmin = grid.eval(qpts)
             hmin = numpy.min(numpy.column_stack([_hmin, hmin]), axis=1)
         return hmin

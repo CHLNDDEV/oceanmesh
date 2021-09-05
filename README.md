@@ -137,8 +137,58 @@ meshio.write_points_cells(
 )
 ```
 
-See the `testing/` folder for more inspiration.
 
+Areas of finer refinement can be incorporated seamlessy by using `generate_multiscale_mesh` and passing lists of signed distance functions and edge length functions. The sizing transistions between nests are handled automatically (but can be customized).
+
+```python
+import meshio
+import numpy as np
+
+import oceanmesh as om
+
+fname1 = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+
+bbox1, min_edge_length1 = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+
+bbox2, min_edge_length2 = (
+    np.array(
+        [
+            [-74.25, 40.5],
+            [-73.75, 40.55],
+            [-73.75, 41],
+            [-74, 41],
+            [-74.25, 40.5],
+        ]
+    ),
+    95.0,
+)
+
+
+s1 = om.Shoreline(fname1, bbox1, min_edge_length1)
+sdf1 = om.signed_distance_function(s1)
+el1 = om.distance_sizing_function(s1, max_edge_length=5e3)
+
+s2 = om.Shoreline(fname1, bbox2, min_edge_length2)
+sdf2 = om.signed_distance_function(s2)
+el2 = om.distance_sizing_function(s2)
+
+points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2], verbose=0)
+
+# remove degenerate mesh faces and other common problems in the mesh
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+
+
+meshio.write_points_cells(
+    "multiscale_new_york.vtk",
+    points,
+    [("triangle", cells)],
+    file_format="vtk",
+)
+```
+
+See the `testing/` folder for more inspiration.
 Testing
 ============
 

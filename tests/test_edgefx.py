@@ -3,7 +3,6 @@ import os
 import oceanmesh as om
 from oceanmesh import Shoreline, distance_sizing_function
 
-
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
@@ -20,12 +19,12 @@ def test_edgefx():
 
     dis2 = distance_sizing_function(shore2)
 
-    dis3 = dis2.project(dis1)
+    dis3 = dis2.interpolate_to(dis1)
 
     ax = dis3.plot(hold=True)
     shore1.plot(ax)
 
-    dis4 = dis1.project(dis2)
+    dis4 = dis1.interpolate_to(dis2)
     ax = dis4.plot(hold=False)
 
 
