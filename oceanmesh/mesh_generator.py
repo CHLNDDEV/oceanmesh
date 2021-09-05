@@ -1,15 +1,30 @@
 import time
 
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import numpy as np
 import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
+from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, MultiscaleDomain
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
-__all__ = ["generate_mesh"]
+__all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
+
+
+def plot_mesh(points, cells, count=0, show=True):
+    triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
+    plt.triplot(triang)
+    plt.gca().set_aspect("equal", adjustable="box")
+    plt.title(f"Iteration {count}")
+    if show:
+        plt.show(block=False)
+        plt.pause(0.2)
+        plt.close()
 
 
 def silence(func):
@@ -51,6 +66,8 @@ def _parse_kwargs(kwargs):
             "bbox",
             "verbose",
             "min_edge_length",
+            "index",
+            "plot",
         }:
             pass
         else:
@@ -62,6 +79,61 @@ def _parse_kwargs(kwargs):
 def _check_bbox(bbox):
     assert isinstance(bbox, tuple), "`bbox` must be a tuple"
     assert int(len(bbox) / 2), "`dim` must be 2"
+
+
+def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
+    r"""Generate a 2D triangular mesh using callbacks to several
+    sizing functions `edge_lengths` and several signed distance functions
+    See the kwargs for `generate_mesh`.
+    """
+    assert (
+        len(signed_distance_functions) > 1 and len(edge_lengths) > 1
+    ), "This function takes a list of domains and sizing functions"
+    assert len(signed_distance_functions) == len(
+        edge_lengths
+    ), "The same number of domains must be passed as sizing functions"
+    opts = {
+        "max_iter": 50,
+        "seed": 0,
+        "pfix": None,
+        "points": None,
+        "verbose": 1,
+        "min_edge_length": None,
+        "plot": 999999,
+    }
+    opts.update(kwargs)
+    _parse_kwargs(kwargs)
+
+    # create multiscale sizing function
+    master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
+        edge_lengths, verbose=False
+    )
+    union, nests = multiscale_signed_distance_function(
+        signed_distance_functions, verbose=False
+    )
+    _p = []
+    _c = []
+    global_minimum = 9999
+    for domain_number, (sdf, edge_length) in enumerate(
+        zip(nests, edge_lengths_smoothed)
+    ):
+        print(f"--> Building domain #{domain_number}")
+        global_minimum = np.amin([global_minimum, edge_length.hmin])
+        _tmpp, _tmpc = generate_mesh(
+            sdf,
+            edge_length,
+            **kwargs,
+        )
+        _p.append(_tmpp)
+
+    _p = np.concatenate(_p, axis=0)
+
+    # merge the two domains together
+    _p, _c = generate_mesh(
+        union, master_edge_length, min_edge_length=global_minimum, points=_p, **kwargs
+    )
+    plot_mesh(_p, _c)
+    return _p, _c
 
 
 def generate_mesh(domain, edge_length, **kwargs):
@@ -112,6 +184,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "points": None,
         "verbose": 1,
         "min_edge_length": None,
+        "plot": 999999,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -129,25 +202,10 @@ def generate_mesh(domain, edge_length, **kwargs):
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
-    _MULTISCALE = False
-    if isinstance(bbox, list):
-        _MULTISCALE = True
-        _bbox = []
-        for _b in bbox:
-            _check_bbox(_b)
-            _b = np.array(_b).reshape(-1, 2)
-            _bbox.append(_b)
-        # update to a list of numpy arrays
-        bbox = _bbox
-    else:
-        _check_bbox(bbox)
-        bbox = np.array(bbox).reshape(-1, 2)
+    _check_bbox(bbox)
+    bbox = np.array(bbox).reshape(-1, 2)
 
-    if _MULTISCALE:
-        for _h0 in min_edge_length:
-            assert _h0 > 0, "`min_edge_length` must be > 0"
-    else:
-        assert min_edge_length > 0, "`min_edge_length` must be > 0"
+    assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
     assert opts["max_iter"] > 0, "`max_iter` must be > 0"
     max_iter = opts["max_iter"]
@@ -161,18 +219,17 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
 
-    # Multiscale domain
-    if _MULTISCALE:
-        _p = []
-        for index, (_b, _h0) in enumerate(zip(bbox, min_edge_length)):
-            # in this loop, we only compute the SDF for the index'ed SDF
-            _p.append(
-                _generate_initial_points(_h0, geps, _b, fh, fd, pfix, index=index)
-            )
-            # np.savetxt(f"init{index}.points", _p[index], delimiter=',')
-        p = np.concatenate(_p, axis=0)
+    if opts["points"] is None:
+        p = _generate_initial_points(
+            min_edge_length,
+            geps,
+            bbox,
+            fh,
+            fd,
+            pfix,
+        )
     else:
-        p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
+        p = opts["points"]
 
     N = p.shape[0]
 
@@ -195,6 +252,10 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
+
+        # plot the mesh every count iterations
+        if count % opts["plot"] == 0 and count != 0:
+            plot_mesh(p, t, count=count)
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
@@ -241,7 +302,7 @@ def _unpack_sizing(edge_length, opts):
 
 
 def _unpack_domain(domain, opts):
-    if isinstance(domain, (Domain, MultiscaleDomain)):
+    if isinstance(domain, Domain):
         bbox = domain.bbox
         fd = domain.eval
     elif callable(domain):
@@ -260,6 +321,31 @@ def _get_bars(t):
     return unique_edges(bars)
 
 
+# Persson-Strang
+# def _compute_forces(p, t, fh, min_edge_length, L0mult):
+#    """Compute the forces on each edge based on the sizing function"""
+#    N = p.shape[0]
+#    bars = _get_bars(t)
+#    barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
+#    L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
+#    L[L == 0] = np.finfo(float).eps
+#    hbars = fh(p[bars].sum(1) / 2)
+#    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
+#    F = L0 - L
+#    F[F < 0] = 0  # Bar forces (scalars)
+#    Fvec = (
+#        F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
+#    )  # Bar forces (x,y components)
+#    Ftot = _dense(
+#        bars[:, [0] * 2 + [1] * 2],
+#        np.repeat([list(range(2)) * 2], len(F), axis=0),
+#        np.hstack((Fvec, -Fvec)),
+#        shape=(N, 2),
+#    )
+#    return Ftot
+
+
+# Bossen-Heckbert
 def _compute_forces(p, t, fh, min_edge_length, L0mult):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
@@ -330,13 +416,13 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, index=None):
+def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     """Create initial distribution in bounding box (equilateral triangles)"""
     p = np.mgrid[
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
-    p = p[fd(p, box_vec=[index]) < geps]  # Keep only d<0 points
+    p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
     r0m = np.min(r0[r0 > min_edge_length])
     return np.vstack(
@@ -359,10 +445,11 @@ def _unpack_pfix(dim, opts):
     if opts["pfix"] is not None:
         pfix = np.array(opts["pfix"], dtype="d")
         nfix = len(pfix)
-        print(
-            "Constraining " + str(nfix) + " fixed points..",
-            flush=True,
-        )
+        if opts["verbose"]:
+            print(
+                "Constraining " + str(nfix) + " fixed points..",
+                flush=True,
+            )
     return pfix, nfix
 
 

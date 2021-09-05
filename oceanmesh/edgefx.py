@@ -3,9 +3,7 @@ import warnings
 import numpy
 import skfmm
 from _HamiltonJacobi import gradient_limit
-from inpoly import inpoly2
 
-from . import edges
 from .grid import Grid
 
 __all__ = [
@@ -112,17 +110,20 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = numpy.reshape(tmp, (sz[0], sz[1]), "F")
     grid_limited = Grid(
-        bbox=grid.bbox, dx=grid.dx, values=tmp, hmin=grid.hmin, fill=grid.fill
+        bbox=grid.bbox,
+        dx=grid.dx,
+        values=tmp,
+        hmin=grid.hmin,
+        extrapolate=grid.extrapolate,
     )
     grid_limited.build_interpolant()
     return grid_limited
 
 
 def distance_sizing_function(
-    shoreline, rate=0.15, max_edge_length=None, verbose=True, coarsen=1
+    shoreline, rate=0.15, max_edge_length=None, verbose=1, coarsen=1
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
-
     Parameters
     ----------
     shoreline: :class:`Shoreline`
@@ -135,16 +136,19 @@ def distance_sizing_function(
         Whether to write messages to the screen
     coarsen: integer, optional
         Downsample the grid by a constant factor in x and y axes
-
     Returns
     -------
     :class:`Grid` object
         A sizing function that takes a point and returns a value
-
     """
     if verbose > 0:
         print("Building a distance sizing function...")
-    grid = Grid(bbox=shoreline.bbox, dx=shoreline.h0 * coarsen, hmin=shoreline.h0)
+    grid = Grid(
+        bbox=shoreline.bbox,
+        dx=shoreline.h0 * coarsen,
+        hmin=shoreline.h0,
+        extrapolate=True,
+    )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
@@ -152,19 +156,11 @@ def distance_sizing_function(
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-    tmp = shoreline.h0 + dis * rate
+    grid.values = shoreline.h0 + dis * rate
+
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
-        tmp[tmp > max_edge_length] = max_edge_length
-
-    # mask the values outside the boubox
-    qpts = numpy.column_stack((lon.flatten(), lat.flatten()))
-    e = edges.get_poly_edges(shoreline.boubox)
-    in_boubox, _ = inpoly2(qpts, shoreline.boubox, e)
-    mask_indices = grid.find_indices(qpts[in_boubox, :], lon, lat)
-    mask = numpy.ones((grid.nx, grid.ny), dtype=bool)
-    mask[mask_indices] = False
-    grid.values = numpy.ma.array(tmp, mask=mask)
+        grid.values[grid.values > max_edge_length] = max_edge_length
 
     grid.build_interpolant()
     return grid
@@ -208,7 +204,7 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy)
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True)
     tmpz[numpy.abs(tmpz) < 1] = 1
     grid.values = period * numpy.sqrt(grav * numpy.abs(tmpz)) / wl
     grid.values /= 111e3  # transform to degrees
@@ -222,7 +218,9 @@ def wavelength_sizing_function(
     return grid
 
 
-def multiscale_sizing_function(list_of_grids, verbose=True):
+def multiscale_sizing_function(
+    list_of_grids, p=3, nnear=28, blend_width=20, verbose=True
+):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
     create a so-called multiscale mesh size function
@@ -236,10 +234,10 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
 
     Returns
     -------
-    grid: a function
-        A sizing function that takes a point and returns a value
-    minimum_edge_lengths: list
-        The minimum edge length in meters in the multiscale domain
+    func: a function
+        The global sizing funcion defined over the union of all domains
+    new_list_of_grids: a list of  function
+        A list of sizing function that takes a point and returns a value
 
     """
     err = "grid objects must appear in order of descending dx spacing"
@@ -251,47 +249,41 @@ def multiscale_sizing_function(list_of_grids, verbose=True):
     for idx1, new_coarse in enumerate(list_of_grids[:-1]):
         if verbose:
             print(f"For sizing function #{idx1}")
-        # project all finer nests onto coarse func and enforce gradation rate
+        # interpolate all finer nests onto coarse func and enforce gradation rate
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
             if verbose:
                 print(
-                    f"  Projecting sizing function #{idx1+1 + k} onto sizing"
+                    f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
-            new_coarse = new_coarse.project(finer)
+            finer.extrapolate = False
+            new_coarse = finer.blend_into(
+                new_coarse, blend_width=blend_width, p=p, nnear=nnear
+            )
+            new_coarse.extrapolate = True
 
-        # enforce mesh size gradation w/ the projected data
-        new_coarse = enforce_mesh_gradation(new_coarse, verbose=0)
-        if idx1 == 0:
-            # base sizing funcs extraps everywhere
-            new_coarse.fill = None
-        else:
-            # nest sizing funcs do not extrap
-            new_coarse.fill = 999999
         # recreate the interpolant
         new_coarse.build_interpolant()
         # append it to list
         new_list_of_grids.append(new_coarse)
 
-    # finest grid needs to return fill value outside domain
-    list_of_grids[-1].fill = 999999
+    list_of_grids[-1].extrapolate = True
     list_of_grids[-1].build_interpolant()
 
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])
 
-    # compute new minimum edge length to mesh with
-    minimum_edge_lengths = []
-    for grid in new_list_of_grids:
-        minimum_edge_lengths.append(numpy.amin(grid.values))
-
     # return the mesh size function to query during genertaion
     # NB: only keep the minimum value over all grids
-    def eval(qpts):
+    def func(qpts):
         hmin = numpy.array([999999] * len(qpts))
         for i, grid in enumerate(new_list_of_grids):
+            if i == 0:
+                grid.extrapolate = True
+            else:
+                grid.extrapolate = False
             _hmin = grid.eval(qpts)
             hmin = numpy.min(numpy.column_stack([_hmin, hmin]), axis=1)
         return hmin
 
-    return eval, minimum_edge_lengths
+    return func, new_list_of_grids

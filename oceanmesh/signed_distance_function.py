@@ -1,4 +1,7 @@
-import numpy
+import random
+
+import matplotlib.pyplot as plt
+import numpy as np
 import scipy.spatial
 from inpoly import inpoly2
 
@@ -8,10 +11,65 @@ __all__ = [
     "multiscale_signed_distance_function",
     "signed_distance_function",
     "Domain",
-    "MultiscaleDomain",
+    "Union",
+    "Difference",
+    "Intersection",
 ]
 
-nan = numpy.nan
+nan = np.nan
+
+
+def _generate_samples(bbox, dim, N):
+    N = int(N)
+    points = []
+    _xrange = (bbox[0] - 0.01, bbox[1] + 0.01)
+    _yrange = (bbox[2] - 0.01, bbox[3] + 0.01)
+    if dim == 2:
+        points.append(
+            [
+                (
+                    random.uniform(*_xrange),
+                    random.uniform(*_yrange),
+                )
+                for i in range(N)
+            ]
+        )
+    elif dim == 3:
+        _zrange = (bbox[4] - 0.01, bbox[5] + 0.01)
+        points.append(
+            [
+                (
+                    random.uniform(*_xrange),
+                    random.uniform(*_yrange),
+                    random.uniform(*_zrange),
+                )
+                for i in range(N)
+            ]
+        )
+    points = np.asarray(points)
+    points = points.reshape(-1, dim)
+    return points
+
+
+def _plot(geo, filename=None, samples=10000):
+    p = _generate_samples(geo.bbox, 2, N=samples)
+    d = geo.eval(p)
+    ix = np.logical_and(d > -0.01, d < 0.01)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    im = ax.scatter(p[ix, 0], p[ix, 1], p[ix, 0] * 0.0, c=d[ix], marker=".", s=5.0)
+    ax.set_xlabel("X-axis")
+    ax.set_ylabel("Y-axis")
+    plt.title("Approximate 0-level set")
+    fig.colorbar(im, ax=ax)
+    im.set_clim(-0.1, 0.1)
+    ax.set_aspect("auto")
+
+    if filename is None:
+        plt.show()
+    else:
+        plt.savefig(filename)
 
 
 class Domain:
@@ -22,10 +80,49 @@ class Domain:
     def eval(self, *args, **kwargs):
         return self.domain(*args, **kwargs)
 
+    def plot(self, filename=None, samples=10000):
+        _plot(self, filename=None, samples=samples)
 
-class MultiscaleDomain(Domain):
-    def __init__(self, bboxes, domains):
-        super().__init__(bboxes, domains)
+
+def _compute_bbox(domains):
+    bbox = (
+        min(d.bbox[0] for d in domains),
+        max(d.bbox[1] for d in domains),
+        min(d.bbox[2] for d in domains),
+        max(d.bbox[3] for d in domains),
+    )
+    return bbox
+
+
+class Union(Domain):
+    def __init__(self, domains):
+        bbox = _compute_bbox(domains)
+        super().__init__(bbox, domains)
+
+    def eval(self, x):
+        d = [d.eval(x) for d in self.domain]
+        return np.minimum.reduce(d)
+
+
+class Intersection(Domain):
+    def __init__(self, domains):
+        bbox = _compute_bbox(domains)
+        super().__init__(bbox, domains)
+
+    def eval(self, x):
+        d = [d.eval(x) for d in self.domain]
+        return np.maximum.reduce(d)
+
+
+class Difference(Domain):
+    def __init__(self, domains):
+        bbox = _compute_bbox(domains)
+        super().__init__(bbox, domains)
+
+    def eval(self, x):
+        return np.maximum.reduce(
+            [-d.eval(x) if n > 0 else d.eval(x) for n, d in enumerate(self.domain)]
+        )
 
 
 def signed_distance_function(shoreline, verbose=True, flip=0):
@@ -49,17 +146,17 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     """
     if verbose:
         print("Building a signed distance function...")
-    assert isinstance(shoreline, Shoreline), "shoreline is not a `Shoreline` object"
-    poly = numpy.vstack((shoreline.inner, shoreline.boubox))
-    tree = scipy.spatial.cKDTree(poly[~numpy.isnan(poly[:, 0]), :], balanced_tree=False)
+    assert isinstance(shoreline, Shoreline), "shoreline is not a Shoreline object"
+    poly = np.vstack((shoreline.inner, shoreline.boubox))
+    tree = scipy.spatial.cKDTree(poly[~np.isnan(poly[:, 0]), :], balanced_tree=False)
     e = edges.get_poly_edges(poly)
 
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
 
-    def func(x, box_vec=None):
+    def func(x):
         # Initialize d with some positive number larger than geps
-        dist = numpy.zeros(len(x)) + 1.0
+        dist = np.zeros(len(x)) + 1.0
         # are points inside the boubox?
         in_boubox, _ = inpoly2(x, boubox, e_box)
         # are points inside the shoreline?
@@ -68,7 +165,7 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         d, _ = tree.query(x, k=1)
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
-        cond = numpy.logical_and(in_shoreline, in_boubox)
+        cond = np.logical_and(in_shoreline, in_boubox)
         if flip:
             cond = ~cond
         dist = (-1) ** (cond) * d
@@ -77,67 +174,33 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
     return Domain(shoreline.bbox, func)
 
 
-def multiscale_signed_distance_function(shorelines, verbose=True, flips=None):
-    """Takes a list of `shoreline` objects and calculates a signed distance function from it.
-        This functionis queried every meshing iteration.
+def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
+    """Takes a list of :class:`signed_distance_function` objects and calculates a signed distance
+        function from each one.
 
     Parameters
     ----------
-    shorelines: a list of :class:`Shoreline` objects
-        Each item in the list is processed from :class:`geodata`
-    flips: a list of booleans, optional
-        Each boolean corresponds to the objects in shorelines
+    signed_distance_functions: a list of `signed_distance_function` objects
 
     Returns
     -------
-    domain: a :class:`Domain` object
-        A signed distance function representing the domain
+    union: a :class:`Union` object
+        The union of all signed distance functions
+    nests: a list of `Difference` objects
+        All inner domains are differenced from the domain above.
+
     """
     if verbose:
         print("Building a multiscale signed distance function...")
-    assert isinstance(shorelines, list), "shorelines is not a list"
-    assert len(shorelines) > 1, "Use `signed_distance_function` instead"
-    if flips is not None:
-        assert isinstance(flips, list) and len(flips) == len(shorelines)
+    assert isinstance(
+        signed_distance_functions, list
+    ), "`signed_distance_function` is not a list"
+    assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
 
-    # build all SDF for each shoreline object
-    _sdfs = []
-    for shoreline in shorelines:
-        _sdfs.append(signed_distance_function(shoreline, verbose=False))
+    union = Union(signed_distance_functions)
 
-    def func(x, box_vec=None):
+    nests = []
+    for ix1, sdf_base in enumerate(signed_distance_functions):
+        nests.append(Difference([sdf_base, *signed_distance_functions[ix1 + 1 :]]))
 
-        if box_vec is None:
-            box_vec = [*range(len(shorelines))]
-
-        # initialize to large value
-        sdist = numpy.zeros(len(x)) + 1.0
-
-        # query the sdfs based on box_vec
-        for box_num in box_vec:
-            _shoreline = shorelines[box_num]
-            # first determine the array `inside`
-            if box_num > 0:
-                _boubox = _shoreline.boubox
-                e_box = edges.get_poly_edges(_boubox)
-                inside, _ = inpoly2(x, _boubox, e_box)
-            else:
-                # by design all the points are inside
-                inside = numpy.ones(len(x), dtype=bool)
-
-            # all the nested domains are `outside`.
-            for box_num2 in range(box_num + 1, len(shorelines)):
-                _boubox = shorelines[box_num2].boubox
-                e_box = edges.get_poly_edges(_boubox)
-                inside2, _ = inpoly2(x, _boubox, e_box)
-                inside[inside2] = False
-
-            # for the points inside the box, calculate the nearest distance to
-            if numpy.sum(inside) > 0:
-                d_l = _sdfs[box_num].eval(x[inside, :])
-
-                sdist[inside] = d_l
-
-        return sdist
-
-    return Domain([shoreline.bbox for shoreline in shorelines], func)
+    return union, nests
