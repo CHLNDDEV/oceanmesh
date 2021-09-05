@@ -1,3 +1,4 @@
+import math
 import random
 
 import matplotlib.pyplot as plt
@@ -14,9 +15,23 @@ __all__ = [
     "Union",
     "Difference",
     "Intersection",
+    "create_circle",
 ]
 
 nan = np.nan
+
+
+def create_circle(center, radius):
+    stepSize = 0.1
+    positions = []
+    t = 0
+    while t < 2 * math.pi:
+        positions.append(
+            (radius * math.cos(t) + center[0], radius * math.sin(t) + center[1])
+        )
+        t += stepSize
+
+    return np.array(positions)
 
 
 def _generate_samples(bbox, dim, N):
