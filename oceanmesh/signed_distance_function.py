@@ -26,8 +26,8 @@ nan = np.nan
 
 # def parallelize(func):
 #    def wrapper(cls, x):
+#        pts = np.array_split(x, cpu_count())
 #        with Pool(processes=cpu_count()) as p:
-#            pts = np.array_split(x, cpu_count())
 #            res = p.starmap(
 #                wrapper,
 #                [(cls, pt) for pt in pts],
@@ -106,9 +106,9 @@ def _plot(geo, filename=None, samples=10000):
 
 
 class Domain:
-    def __init__(self, bbox, domain):
+    def __init__(self, bbox, func):
         self.bbox = bbox
-        self.domain = domain
+        self.domain = func
 
     # @parallelize
     def eval(self, x):
@@ -159,18 +159,15 @@ class Difference(Domain):
         )
 
 
-def signed_distance_function(shoreline, verbose=True, flip=0):
+def signed_distance_function(shoreline, verbose=True):
     """Takes a `shoreline` object containing segments representing islands and mainland boundaries
     and calculates a signed distance function with it (assuming the polygons are all closed).
-    This function is queried every meshing iteration.
+    The returned function `func` becomes a bound method of the :class:`Domain and `is queried every meshing iteration.
 
     Parameters
     ----------
     shoreline: a :class:`Shoreline` object
         The processed shapefile data from :class:`geodata`
-    verbose:
-    flip:
-    return_inside:
 
     Returns
     -------
@@ -202,8 +199,6 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
         cond = np.logical_and(in_shoreline, in_boubox)
-        if flip:
-            cond = ~cond
         dist = (-1) ** (cond) * d
         return dist
 

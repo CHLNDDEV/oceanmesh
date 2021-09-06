@@ -10,7 +10,8 @@ from _fast_geometry import unique_edges
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -421,13 +422,14 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
-    p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
     r0m = np.min(r0[r0 >= min_edge_length])
+    p = p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2]
+    p = p[fd(p) < geps]  # Keep only d<0 points
     return np.vstack(
         (
             pfix,
-            p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2],
+            p,
         )
     )
 
