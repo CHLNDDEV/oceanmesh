@@ -110,8 +110,6 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     union, nests = multiscale_signed_distance_function(
         signed_distance_functions, verbose=False
     )
-    print(nests)
-    quit()
     _p = []
     global_minimum = 9999
     for domain_number, (sdf, edge_length) in enumerate(
