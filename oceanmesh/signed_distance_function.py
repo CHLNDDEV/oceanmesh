@@ -8,6 +8,9 @@ from inpoly import inpoly2
 
 from . import Shoreline, edges
 
+# from multiprocess import Pool, cpu_count
+
+
 __all__ = [
     "multiscale_signed_distance_function",
     "signed_distance_function",
@@ -19,6 +22,21 @@ __all__ = [
 ]
 
 nan = np.nan
+
+
+# def parallelize(func):
+#    def wrapper(cls, x):
+#        with Pool(processes=cpu_count()) as p:
+#            pts = np.array_split(x, cpu_count())
+#            res = p.starmap(
+#                wrapper,
+#                [(cls, pt) for pt in pts],
+#            )
+#        p.join()
+#        result = np.concatenate(list(res), axis=0)
+#        return result
+#
+#    return wrapper
 
 
 def create_circle(center, radius):
@@ -92,8 +110,9 @@ class Domain:
         self.bbox = bbox
         self.domain = domain
 
-    def eval(self, *args, **kwargs):
-        return self.domain(*args, **kwargs)
+    # @parallelize
+    def eval(self, x):
+        return self.domain(x)
 
     def plot(self, filename=None, samples=10000):
         _plot(self, filename=None, samples=samples)
@@ -163,7 +182,9 @@ def signed_distance_function(shoreline, verbose=True, flip=0):
         print("Building a signed distance function...")
     assert isinstance(shoreline, Shoreline), "shoreline is not a Shoreline object"
     poly = np.vstack((shoreline.inner, shoreline.boubox))
-    tree = scipy.spatial.cKDTree(poly[~np.isnan(poly[:, 0]), :], balanced_tree=False)
+    tree = scipy.spatial.cKDTree(
+        poly[~np.isnan(poly[:, 0]), :], balanced_tree=False, leafsize=50
+    )
     e = edges.get_poly_edges(poly)
 
     boubox = shoreline.boubox

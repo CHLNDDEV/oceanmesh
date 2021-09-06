@@ -10,7 +10,8 @@ from _fast_geometry import unique_edges
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -65,7 +66,6 @@ def _parse_kwargs(kwargs):
             "bbox",
             "verbose",
             "min_edge_length",
-            "index",
             "plot",
         }:
             pass
@@ -110,8 +110,9 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     union, nests = multiscale_signed_distance_function(
         signed_distance_functions, verbose=False
     )
+    print(nests)
+    quit()
     _p = []
-    _c = []
     global_minimum = 9999
     for domain_number, (sdf, edge_length) in enumerate(
         zip(nests, edge_lengths_smoothed)
@@ -128,11 +129,11 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     _p = np.concatenate(_p, axis=0)
 
     # merge the two domains together
-    print("--> Blending the domains...")
-    _p, _c = generate_mesh(
+    print("--> Blending the domains together...")
+    _p, _t = generate_mesh(
         union, master_edge_length, min_edge_length=global_minimum, points=_p, **kwargs
     )
-    return _p, _c
+    return _p, _t
 
 
 def generate_mesh(domain, edge_length, **kwargs):
@@ -163,9 +164,11 @@ def generate_mesh(domain, edge_length, **kwargs):
             The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
-        * *min_edge_length* (``float`` or ``list of floats``) --
-            The minimum element size in the domain. Required for `MultiscaleDomain`.
-
+            If `verbose`==2 all messages are displayed.
+        * *min_edge_length* (``float``) --
+            The minimum element size in the domain.
+        * *plot* (``int``) --
+            The mesh is visualized every `plot` meshing iterations.
 
     Returns
     -------

@@ -291,9 +291,6 @@ class Grid:
 
         _hmin = np.amin(_vals[ask_index])
         _coarse_w_fine.hmin = _hmin
-        # print(np.amin(_vals[ask_index]))
-        # plt.scatter(_pts[ask_index, 0], _pts[ask_index, 1], c=_vals[ask_index])
-        # plt.show()
         # put it back
         _coarse_w_fine.values = _vals.reshape(*_coarse_w_fine.values.shape)
         return _coarse_w_fine
