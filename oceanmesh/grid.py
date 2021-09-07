@@ -245,7 +245,26 @@ class Grid:
         )
 
     def blend_into(self, coarse, blend_width=10, p=1, nnear=6, eps=0.0):
-        """Blend self.Grid into the coarse one so values transition smoothly"""
+        """Blend self.values into the values of the coarse grid one so that the
+           values transition smoothly. The kwargs control the blending procedure.
+
+        Parameters
+        ----------
+        coarse: :class:`Grid`
+        blend_width: int, optional
+            The width of the padding in number of grid points
+        p: int, optional
+            The polynomial order in the distance weighting scheme
+        nnear: int, optional
+            The number of nearest points to use to interpolate each point
+        eps: float, optional
+            Points less than `eps` are considered the same point
+
+        Returns
+        -------
+        _coarse_w_fine: :class:`Grid`
+            The coarse grid with the finer grid interpolated and blended.
+        """
         _FILL = -99999  # uncommon value
         if not isinstance(coarse, Grid):
             raise ValueError("Object must be Grid.")

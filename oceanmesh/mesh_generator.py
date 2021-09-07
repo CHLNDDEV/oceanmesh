@@ -7,10 +7,13 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
+from .clean import (delete_faces_connected_to_one_face,
+                    make_mesh_boundaries_traversable)
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -66,6 +69,10 @@ def _parse_kwargs(kwargs):
             "verbose",
             "min_edge_length",
             "plot",
+            "blend_width",
+            "blend_polynomial",
+            "blend_max_iter",
+            "blend_nnear",
         }:
             pass
         else:
@@ -98,21 +105,21 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
         "verbose": 1,
         "min_edge_length": None,
         "plot": 999999,
+        "blend_width": 5000,
+        "blend_polynomial": 2,
+        "blend_max_iter": 10,
+        "blend_nnear": 256,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
-    # create multiscale sizing function
     master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
         edge_lengths,
         verbose=False,
-        blend_width=10000,
-        nnear=128,
-        p=2,
+        blend_width=opts["blend_width"],
+        nnear=opts["blend_nnear"],
+        p=opts["blend_polynomial"],
     )
-    # for el in edge_lengths_smoothed:
-    #    el.plot()
-
     union, nests = multiscale_signed_distance_function(
         signed_distance_functions, verbose=False
     )
@@ -128,6 +135,10 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
             edge_length,
             **kwargs,
         )
+        # clean up before saving
+        _tmpp, _tmpc = make_mesh_boundaries_traversable(_tmpp, _tmpc, verbose=False)
+        _tmpp, _tmpc = delete_faces_connected_to_one_face(_tmpp, _tmpc, verbose=False)
+
         _p.append(_tmpp)
 
     _p = np.concatenate(_p, axis=0)
@@ -139,7 +150,7 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
         master_edge_length,
         min_edge_length=global_minimum,
         points=_p,
-        max_iter=20,
+        max_iter=opts["blend_max_iter"],
         **kwargs,
     )
     return _p, _t
@@ -225,7 +236,7 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.10
-    geps = 1e-1 * np.amin(min_edge_length)
+    geps = 1e-3 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)

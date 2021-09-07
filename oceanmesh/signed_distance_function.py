@@ -217,20 +217,31 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     -------
     union: a :class:`Union` object
         The union of all signed distance functions
-    nests: a list of `Difference` objects
-        All inner domains are differenced from the domain above.
+    nests: a list of :class:`Difference` objects
+        All inner domains are set differenced from the domain it nests.
 
     """
     if verbose:
         print("Building a multiscale signed distance function...")
-    assert isinstance(
-        signed_distance_functions, list
-    ), "`signed_distance_function` is not a list"
+    msg = "`signed_distance_functions` is not a list"
+    assert isinstance(signed_distance_functions, list), msg
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
 
-    nests = []
-    for ix1, sdf_base in enumerate(signed_distance_functions):
-        nests.append(Difference([sdf_base, *signed_distance_functions[ix1 + 1 :]]))
+    # remove any overlap with the coarse domain inside the nests
+    i = 1
+    for _ in range(len(signed_distance_functions[1:])):
+        signed_distance_functions[i] = Difference(
+            [signed_distance_functions[i], *signed_distance_functions[: i - 1]]
+        )
+        i += 1
 
-    union = Union(nests)
+    nests = []
+    for i, sdf in enumerate(signed_distance_functions):
+        nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
+
+    signed_distance_functions[0] = Difference(
+        [signed_distance_functions[0], *signed_distance_functions[: i - 1]]
+    )
+
+    union = Union(signed_distance_functions)
     return union, nests
