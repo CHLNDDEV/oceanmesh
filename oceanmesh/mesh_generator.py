@@ -7,13 +7,11 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
-from .clean import (delete_faces_connected_to_one_face,
-                    make_mesh_boundaries_traversable)
+from .clean import delete_faces_connected_to_one_face, make_mesh_boundaries_traversable
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import (Domain,
-                                       multiscale_signed_distance_function)
+from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
