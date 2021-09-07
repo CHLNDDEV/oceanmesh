@@ -219,7 +219,7 @@ def wavelength_sizing_function(
 
 
 def multiscale_sizing_function(
-    list_of_grids, p=3, nnear=28, blend_width=20, verbose=True
+    list_of_grids, p=3, nnear=28, blend_width=1000, verbose=True
 ):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
@@ -229,6 +229,12 @@ def multiscale_sizing_function(
     ----------
     list_of_grids: a Python list
         A list containing grids with resolution in decreasing order.
+    p: int, optional
+        use 1 / distance**p weights nearer points more, farther points less.
+    nnear: int, optional
+        how many nearest neighbors should one take to perform IDW interp?
+    blend_width: float, optional
+        The width of the blending zone between nests in meters
     verbose: boolean, optional
         Whether to write messages to the screen
 
@@ -256,9 +262,11 @@ def multiscale_sizing_function(
                     f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
+            _dx = finer.dx * 111e3
+            _blend_width = int(numpy.floor(blend_width / _dx))
             finer.extrapolate = False
             new_coarse = finer.blend_into(
-                new_coarse, blend_width=blend_width, p=p, nnear=nnear
+                new_coarse, blend_width=_blend_width, p=p, nnear=nnear
             )
             new_coarse.extrapolate = True
 

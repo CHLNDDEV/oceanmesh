@@ -62,14 +62,15 @@ def _densify(poly, maxdiff, bbox, radius=0):
     """
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox, closed=True)
-    inside = path.contains_points(poly, radius=0.01)  # add a small radius
-
+    inside = path.contains_points(poly, radius=0.1)  # add a small radius
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
     dlat = numpy.abs(lat[1:] - lat[:-1])
     dlon = numpy.abs(lon[1:] - lon[:-1])
     nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
     nin[~inside[1:]] = 0  # no need to densify outside of bbox please
+    # handle negative values
+    nin[nin < 0] = 0
     sumnin = numpy.nansum(nin)
     if sumnin == 0:
         return numpy.hstack((lon[:, None], lat[:, None]))

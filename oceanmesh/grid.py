@@ -224,9 +224,10 @@ class Grid:
             _FILL = None
         else:
             _FILL = -999
+        _nx, _ny = self.values.shape
         # take data from grid1 --> grid2
         fp = RegularGridInterpolator(
-            (lon1, lat1),
+            (lon1[:_nx], lat1[:_ny]),
             self.values,
             method=method,
             bounds_error=False,

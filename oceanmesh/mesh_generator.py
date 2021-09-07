@@ -16,7 +16,7 @@ from .signed_distance_function import (Domain,
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
 
-def plot_mesh(points, cells, count=0, show=True, pause=0.2):
+def plot_mesh(points, cells, count=0, show=True, pause=999):
     triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
     plt.triplot(triang)
     plt.gca().set_aspect("equal", adjustable="box")
@@ -105,8 +105,15 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
 
     # create multiscale sizing function
     master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
-        edge_lengths, verbose=False
+        edge_lengths,
+        verbose=False,
+        blend_width=10000,
+        nnear=128,
+        p=2,
     )
+    # for el in edge_lengths_smoothed:
+    #    el.plot()
+
     union, nests = multiscale_signed_distance_function(
         signed_distance_functions, verbose=False
     )
@@ -129,7 +136,12 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     # merge the two domains together
     print("--> Blending the domains together...")
     _p, _t = generate_mesh(
-        union, master_edge_length, min_edge_length=global_minimum, points=_p, **kwargs
+        union,
+        master_edge_length,
+        min_edge_length=global_minimum,
+        points=_p,
+        max_iter=20,
+        **kwargs,
     )
     return _p, _t
 
@@ -255,7 +267,7 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # plot the mesh every count iterations
         if count % opts["plot"] == 0 and count != 0:
-            plot_mesh(p, t, count=count)
+            plot_mesh(p, t, count=count, pause=0.2)
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):

@@ -228,10 +228,9 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     ), "`signed_distance_function` is not a list"
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
 
-    union = Union(signed_distance_functions)
-
     nests = []
     for ix1, sdf_base in enumerate(signed_distance_functions):
         nests.append(Difference([sdf_base, *signed_distance_functions[ix1 + 1 :]]))
 
+    union = Union(nests)
     return union, nests
