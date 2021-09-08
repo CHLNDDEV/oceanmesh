@@ -411,8 +411,8 @@ def _dense(Ix, J, S, shape=None, dtype=None):
 def _remove_triangles_outside(p, t, fd, geps):
     """Remove vertices outside the domain"""
     pmid = p[t].sum(1) / 3  # Compute centroids
-    #plt.scatter(pmid[:, 0], pmid[:, 1], c=fd(pmid))
-    #plt.show()
+    # plt.scatter(pmid[:, 0], pmid[:, 1], c=fd(pmid))
+    # plt.show()
     return t[fd(pmid) < -geps]  # Keep interior triangles
 
 
