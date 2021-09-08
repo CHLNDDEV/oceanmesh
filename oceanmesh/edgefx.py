@@ -159,8 +159,12 @@ def distance_sizing_function(
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
     if len(points) > 0:
-        in_boubox, _ = inpoly2(points, boubox, e_box)
-        points = points[in_boubox]
+        try:
+            in_boubox, _ = inpoly2(points, boubox, e_box)
+            points = points[in_boubox]
+        except (Exception,):
+            ...
+
     # find location of points on grid
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0

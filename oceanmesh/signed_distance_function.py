@@ -8,9 +8,6 @@ from inpoly import inpoly2
 
 from . import Shoreline, edges
 
-# from multiprocess import Pool, cpu_count
-
-
 __all__ = [
     "multiscale_signed_distance_function",
     "signed_distance_function",
@@ -22,21 +19,6 @@ __all__ = [
 ]
 
 nan = np.nan
-
-
-# def parallelize(func):
-#    def wrapper(cls, x):
-#        pts = np.array_split(x, cpu_count())
-#        with Pool(processes=cpu_count()) as p:
-#            res = p.starmap(
-#                wrapper,
-#                [(cls, pt) for pt in pts],
-#            )
-#        p.join()
-#        result = np.concatenate(list(res), axis=0)
-#        return result
-#
-#    return wrapper
 
 
 def create_circle(center, radius):
@@ -96,7 +78,7 @@ def _plot(geo, filename=None, samples=100000):
     ax.set_ylabel("Y-axis")
     plt.title("Approximate 0-level set")
     fig.colorbar(im, ax=ax)
-    im.set_clim(-0.1, 0.1)
+    im.set_clim(-0.001, 0.001)
     ax.set_aspect("auto")
 
     if filename is None:
@@ -110,7 +92,6 @@ class Domain:
         self.bbox = bbox
         self.domain = func
 
-    # @parallelize
     def eval(self, x):
         return self.domain(x)
 

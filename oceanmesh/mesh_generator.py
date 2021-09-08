@@ -7,11 +7,13 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
-from .clean import delete_faces_connected_to_one_face, make_mesh_boundaries_traversable
+from .clean import (delete_faces_connected_to_one_face,
+                    make_mesh_boundaries_traversable)
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -84,15 +86,35 @@ def _check_bbox(bbox):
     assert int(len(bbox) / 2), "`dim` must be 2"
 
 
-def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
+def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to several
     sizing functions `edge_lengths` and several signed distance functions
     See the kwargs for `generate_mesh`.
+
+    Parameters
+    ----------
+    domains: A list of function objects.
+        A list of functions that takes a point and returns the signed nearest distance to the domain boundary Ω.
+    edge_lengths: A function object.
+        A list of functions that can evalulate a point and return a mesh size.
+    \**kwargs:
+        See below for kwargs in addition to the ones available for `generate_mesh`
+
+    :Keyword Arguments:
+        * *blend_width* (``float``) --
+                The width of the element size transition region between nest and parent
+        * *blend_polynomial* (``int``) --
+                The rate of transition scales with 1/dist^blend_polynomial
+        * *blend_max_iter* (``int``) --
+                The number of mesh generation iterations to blend the nest and parent.
+        * *blend_nnear* (``int``) --
+                The number of nearest neighbors in the IDW interpolation.
+
     """
     assert (
-        len(signed_distance_functions) > 1 and len(edge_lengths) > 1
+        len(domains) > 1 and len(edge_lengths) > 1
     ), "This function takes a list of domains and sizing functions"
-    assert len(signed_distance_functions) == len(
+    assert len(domains) == len(
         edge_lengths
     ), "The same number of domains must be passed as sizing functions"
     opts = {
@@ -118,9 +140,7 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
         nnear=opts["blend_nnear"],
         p=opts["blend_polynomial"],
     )
-    union, nests = multiscale_signed_distance_function(
-        signed_distance_functions, verbose=False
-    )
+    union, nests = multiscale_signed_distance_function(domains, verbose=False)
     _p = []
     global_minimum = 9999
     for domain_number, (sdf, edge_length) in enumerate(
@@ -147,6 +167,7 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
         max_iter=opts["blend_max_iter"],
         **kwargs,
     )
+
     return _p, _t
 
 
@@ -164,23 +185,19 @@ def generate_mesh(domain, edge_length, **kwargs):
         See below
 
     :Keyword Arguments:
-        * *bbox* (``tuple`` or ``list of tuples``) --
-            Bounding box(es) containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
-        * *nscreen* (``float``) --
-            Output to the screen `nscreen` timestep. (default==1)
+        * *bbox* (``tuple``) --
+            Bounding box containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
         * *max_iter* (``float``) --
             Maximum number of meshing iterations. (default==50)
         * *seed* (``float`` or ``int``) --
             Psuedo-random seed to initialize meshing points. (default==0)
         * *pfix* (`array-like`) --
             An array of points to constrain in the mesh. (default==None)
-        * *axis* (`int`) --
-            The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
             If `verbose`==2 all messages are displayed.
         * *min_edge_length* (``float``) --
-            The minimum element size in the domain.
+            The minimum element size in the domain. REQUIRED IF NOT USING :class:`edge_length`
         * *plot* (``int``) --
             The mesh is visualized every `plot` meshing iterations.
 
@@ -231,7 +248,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.10
     geps = 1e-3 * np.amin(min_edge_length)
-    deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
+    deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
 
@@ -411,8 +428,6 @@ def _dense(Ix, J, S, shape=None, dtype=None):
 def _remove_triangles_outside(p, t, fd, geps):
     """Remove vertices outside the domain"""
     pmid = p[t].sum(1) / 3  # Compute centroids
-    # plt.scatter(pmid[:, 0], pmid[:, 1], c=fd(pmid))
-    # plt.show()
     return t[fd(pmid) < -geps]  # Keep interior triangles
 
 

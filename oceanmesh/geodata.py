@@ -468,7 +468,7 @@ class Shoreline(Geodata):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=1.0, verbose=1):
 
         if isinstance(bbox, tuple):
             _boubox = numpy.asarray(_create_boubox(bbox))
