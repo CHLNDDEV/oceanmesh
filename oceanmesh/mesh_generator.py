@@ -130,11 +130,7 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     ):
         print(f"--> Building domain #{domain_number}")
         global_minimum = np.amin([global_minimum, edge_length.hmin])
-        _tmpp, _tmpc = generate_mesh(
-            sdf,
-            edge_length,
-            **kwargs,
-        )
+        _tmpp, _tmpc = generate_mesh(sdf, edge_length, **kwargs)
         # clean up before saving
         _tmpp, _tmpc = make_mesh_boundaries_traversable(_tmpp, _tmpc, verbose=False)
         _tmpp, _tmpc = delete_faces_connected_to_one_face(_tmpp, _tmpc, verbose=False)
@@ -146,8 +142,8 @@ def generate_multiscale_mesh(signed_distance_functions, edge_lengths, **kwargs):
     # merge the two domains together
     print("--> Blending the domains together...")
     _p, _t = generate_mesh(
-        union,
-        master_edge_length,
+        domain=union,
+        edge_length=master_edge_length,
         min_edge_length=global_minimum,
         points=_p,
         max_iter=opts["blend_max_iter"],
@@ -237,7 +233,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.10
     geps = 1e-3 * np.amin(min_edge_length)
-    deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
+    deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
 
@@ -417,6 +413,8 @@ def _dense(Ix, J, S, shape=None, dtype=None):
 def _remove_triangles_outside(p, t, fd, geps):
     """Remove vertices outside the domain"""
     pmid = p[t].sum(1) / 3  # Compute centroids
+    #plt.scatter(pmid[:, 0], pmid[:, 1], c=fd(pmid))
+    #plt.show()
     return t[fd(pmid) < -geps]  # Keep interior triangles
 
 

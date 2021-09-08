@@ -84,14 +84,14 @@ def _generate_samples(bbox, dim, N):
     return points
 
 
-def _plot(geo, filename=None, samples=10000):
+def _plot(geo, filename=None, samples=100000):
     p = _generate_samples(geo.bbox, 2, N=samples)
     d = geo.eval(p)
-    ix = np.logical_and(d > -0.01, d < 0.01)
+    ix = np.logical_and(d > -0.0001, d < 0.0001)
 
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-    im = ax.scatter(p[ix, 0], p[ix, 1], p[ix, 0] * 0.0, c=d[ix], marker=".", s=5.0)
+    ax = fig.add_subplot(111)  # , projection="3d")
+    im = ax.scatter(p[ix, 0], p[ix, 1], c=d[ix], marker=".", s=5.0)
     ax.set_xlabel("X-axis")
     ax.set_ylabel("Y-axis")
     plt.title("Approximate 0-level set")
@@ -195,7 +195,7 @@ def signed_distance_function(shoreline, verbose=True):
         # are points inside the shoreline?
         in_shoreline, _ = inpoly2(x, poly, e)
         # compute dist to shoreline
-        d, _ = tree.query(x, k=1)
+        d, _ = tree.query(x, k=1, workers=-1)
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
         cond = np.logical_and(in_shoreline, in_boubox)
@@ -207,7 +207,7 @@ def signed_distance_function(shoreline, verbose=True):
 
 def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
     """Takes a list of :class:`signed_distance_function` objects and calculates a signed distance
-        function from each one.
+        function from each one
 
     Parameters
     ----------
@@ -218,7 +218,7 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     union: a :class:`Union` object
         The union of all signed distance functions
     nests: a list of :class:`Difference` objects
-        All inner domains are set differenced from the domain it nests.
+        All inner domains are set differenced from the domain(s) they nest(s).
 
     """
     if verbose:
@@ -227,21 +227,10 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     assert isinstance(signed_distance_functions, list), msg
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
 
-    # remove any overlap with the coarse domain inside the nests
-    i = 1
-    for _ in range(len(signed_distance_functions[1:])):
-        signed_distance_functions[i] = Difference(
-            [signed_distance_functions[i], *signed_distance_functions[: i - 1]]
-        )
-        i += 1
-
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
         nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
 
-    signed_distance_functions[0] = Difference(
-        [signed_distance_functions[0], *signed_distance_functions[: i - 1]]
-    )
+    union = Union(nests)
 
-    union = Union(signed_distance_functions)
     return union, nests

@@ -11,6 +11,7 @@ def test_edgefx():
 
     bbox1 = (-75.0, -70.0, 38.0, 42.0)
     shore1 = Shoreline(fname, bbox1, 1000.0)
+    shore1.plot()
 
     dis1 = distance_sizing_function(shore1)
 
@@ -18,6 +19,7 @@ def test_edgefx():
     shore2 = Shoreline(fname, bbox2, 100.0)
 
     dis2 = distance_sizing_function(shore2)
+    dis2.extrapolate = False
 
     dis3 = dis2.interpolate_to(dis1)
 

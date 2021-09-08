@@ -126,6 +126,13 @@ class Grid:
             return
         self.__values = data[: self.nx, : self.ny]
 
+    @staticmethod
+    def get_border(self, arr):
+        """Get the border values of a 2D array"""
+        return np.concatenate(
+            [arr[0, :-1], arr[:-1, -1], arr[-1, ::-1], arr[-2:0:-1, 0]], axis=0
+        )
+
     def create_vectors(self):
         """Build coordinate vectors
 
@@ -189,7 +196,7 @@ class Grid:
         if tree is None:
             lonlat = np.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
-        dist, idx = tree.query(points, k=1)
+        dist, idx = tree.query(points, k=1, workers=-1)
         return np.unravel_index(idx, lon.shape)
 
     def interpolate_to(self, grid2, method="linear"):
@@ -224,10 +231,9 @@ class Grid:
             _FILL = None
         else:
             _FILL = -999
-        _nx, _ny = self.values.shape
         # take data from grid1 --> grid2
         fp = RegularGridInterpolator(
-            (lon1[:_nx], lat1[:_ny]),
+            (lon1, lat1),
             self.values,
             method=method,
             bounds_error=False,
@@ -247,7 +253,6 @@ class Grid:
     def blend_into(self, coarse, blend_width=10, p=1, nnear=6, eps=0.0):
         """Blend self.values into the values of the coarse grid one so that the
            values transition smoothly. The kwargs control the blending procedure.
-
         Parameters
         ----------
         coarse: :class:`Grid`
@@ -259,7 +264,6 @@ class Grid:
             The number of nearest points to use to interpolate each point
         eps: float, optional
             Points less than `eps` are considered the same point
-
         Returns
         -------
         _coarse_w_fine: :class:`Grid`
@@ -313,6 +317,7 @@ class Grid:
         _coarse_w_fine.hmin = _hmin
         # put it back
         _coarse_w_fine.values = _vals.reshape(*_coarse_w_fine.values.shape)
+
         return _coarse_w_fine
 
     def plot(
@@ -352,7 +357,7 @@ class Grid:
             self.values[:-1:coarsen, :-1:coarsen],
             vmin=vmin,
             vmax=vmax,
-            shading="auto",
+            shading="flat",
         )
         cbar = plt.colorbar(c)
         if cbarlabel is not None:

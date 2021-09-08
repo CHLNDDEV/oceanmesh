@@ -3,7 +3,9 @@ import warnings
 import numpy
 import skfmm
 from _HamiltonJacobi import gradient_limit
+from inpoly import inpoly2
 
+from . import edges
 from .grid import Grid
 
 __all__ = [
@@ -153,11 +155,17 @@ def distance_sizing_function(
     phi = numpy.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
     points = numpy.vstack((shoreline.inner, shoreline.mainland))
+    # remove shoreline components outside the shoreline.boubox
+    boubox = shoreline.boubox
+    e_box = edges.get_poly_edges(boubox)
+    if len(points) > 0:
+        in_boubox, _ = inpoly2(points, boubox, e_box)
+        points = points[in_boubox]
+    # find location of points on grid
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     grid.values = shoreline.h0 + dis * rate
-
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
         grid.values[grid.values > max_edge_length] = max_edge_length
