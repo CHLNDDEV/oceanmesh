@@ -83,7 +83,7 @@ Build a simple mesh around New York, United States with a minimum element size o
 
 **Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
 
-![NewYorkMesh](https://user-images.githubusercontent.com/18619644/132705743-fb05c705-fff9-4f26-9485-0c4fd09facda.png)
+![new_york](https://user-images.githubusercontent.com/18619644/132709756-1759ef99-f810-4edc-9710-66226e851a50.png)
 
 
 ```python
