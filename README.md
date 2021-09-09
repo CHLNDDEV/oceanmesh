@@ -13,11 +13,11 @@ Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
 Functionality
 =============
 
-
-* A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a succesful numerical simulations with the developed model.
+* A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
+
 
 Citing
 ======
@@ -86,7 +86,6 @@ Build a simple mesh around New York, United States with a minimum element size o
 ![NewYorkMesh](https://user-images.githubusercontent.com/18619644/132705743-fb05c705-fff9-4f26-9485-0c4fd09facda.png)
 
 
-
 ```python
 
 import pathlib
@@ -129,11 +128,13 @@ points, cells = make_mesh_boundaries_traversable(points, cells)
 
 points, cells = delete_faces_connected_to_one_face(points, cells)
 
-points, cells = delete_boundary_faces(points, cells)
+# remove low quality boundary elements less than 15%
+points, cells = delete_boundary_faces(points, cells, min_qual=0.15)
 
+# apply a Laplacian smoother
 points, cells = laplacian2(points, cells)
 
-# write it with meshio
+# write the mesh with meshio
 meshio.write_points_cells(
     "simple_new_york.vtk",
     points,
@@ -145,9 +146,11 @@ meshio.write_points_cells(
 
 Areas of finer refinement can be incorporated seamlessly by using `generate_multiscale_mesh`. In this case, the user passes lists of signed distance and edge length functions. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM simulations.
 
+![new_york_multiscale](https://user-images.githubusercontent.com/18619644/132708885-57357ade-be98-4692-a964-5b5f30d9a9f7.png)
+
+
 ```python
 import meshio
-import numpy as np
 
 import oceanmesh as om
 
@@ -155,19 +158,7 @@ fname1 = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
 bbox1, min_edge_length1 = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 
-bbox2, min_edge_length2 = (
-    np.array(
-        [
-            [-74.25, 40.5],
-            [-73.75, 40.55],
-            [-73.75, 41],
-            [-74, 41],
-            [-74.25, 40.5],
-        ]
-    ),
-    95.0,
-)
-
+bbox2, min_edge_length2 = (-74.85, -73.75, 40.4, 41), 50.0
 
 s1 = om.Shoreline(fname1, bbox1, min_edge_length1)
 sdf1 = om.signed_distance_function(s1)
@@ -177,13 +168,17 @@ s2 = om.Shoreline(fname1, bbox2, min_edge_length2)
 sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 
-points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2], verbose=0)
+points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2], blend_width=5e3)
 
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = om.make_mesh_boundaries_traversable(points, cells)
 
 points, cells = om.delete_faces_connected_to_one_face(points, cells)
 
+# remove poor boundary elements with quality < 15%
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
+
+# apply a Laplacian smoother that preservers the mesh size distribution
 points, cells = om.laplacian2(points, cells)
 
 meshio.write_points_cells(
