@@ -123,6 +123,46 @@ class Union(Domain):
         return np.minimum.reduce(d)
 
 
+class UnionWithCoverings(Domain):
+    def __init__(self, domains, coverings):
+        """`coverings` is a list of polygons representing each domains extents
+        Each SDF representing the domain is enforced only in the extent of its covering.
+        """
+        bbox = _compute_bbox(domains)
+        super().__init__(bbox, domains)
+        self.coverings = coverings
+        self.covering_functions = []
+        for domain_index, _ in enumerate(self.coverings):
+            self.covering_functions.append(self._build_coverings(domain_index))
+
+    def _build_coverings(self, domain_index):
+        def _func(x):
+            # all points 'outside' by default
+            inside = np.zeros(len(x), dtype=bool)
+            # my domain is 'inside'
+
+            _in, _on = inpoly2(x, self.coverings[domain_index])
+            inside[(_in) | (_on)] = True
+
+            # all other nested domains are 'outside'
+            for covering in self.coverings[domain_index + 1 :]:
+                _in, _ = inpoly2(x, covering)
+                inside[_in] = False
+
+            return inside
+
+        return _func
+
+    def eval(self, x):
+        d = np.ones(len(x), dtype=float)
+        for domain, c in zip(self.domain, self.covering_functions):
+            inside = c(x)
+
+            d[inside] = domain.eval(x[inside])
+
+        return d
+
+
 class Intersection(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
@@ -191,6 +231,21 @@ def signed_distance_function(shoreline, verbose=True):
     return Domain(shoreline.bbox, func)
 
 
+def _create_boubox(bbox):
+    """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
+    xmin, xmax, ymin, ymax = bbox
+    return np.array(
+        [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+        ],
+        dtype=float,
+    )
+
+
 def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
     """Takes a list of :class:`Domain` objects and calculates a signed distance
         function from each one that represents a multiscale meshing domain.
@@ -220,6 +275,15 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     for i, sdf in enumerate(signed_distance_functions):
         nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
 
-    union = Union(nests)
+    EPS = 0  # 1e12 * np.finfo(np.double).eps
+    # create coverings
+    coverings = []
+    for sdf in signed_distance_functions:
+        _bbox = sdf.bbox
+        # inflate bbox by eps
+        _bbox = (_bbox[0] - EPS, _bbox[1] + EPS, _bbox[2] - EPS, _bbox[3] + EPS)
+        coverings.append(_create_boubox(_bbox))
+
+    union = UnionWithCoverings(nests, coverings)
 
     return union, nests
