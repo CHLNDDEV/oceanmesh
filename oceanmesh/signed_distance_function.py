@@ -137,12 +137,12 @@ class UnionWithCoverings(Domain):
 
     def _build_coverings(self, domain_index):
         def _func(x):
-            # all points 'outside' by default
-            inside = np.zeros(len(x), dtype=bool)
-            # my domain is 'inside'
-
-            _in, _on = inpoly2(x, self.coverings[domain_index])
-            inside[(_in) | (_on)] = True
+            if domain_index == 0:
+                # all points inside by design
+                inside = np.ones(len(x), dtype=bool)
+            else:
+                # otherwise domain is 'inside'
+                inside, _ = inpoly2(x, self.coverings[domain_index])
 
             # all other nested domains are 'outside'
             for covering in self.coverings[domain_index + 1 :]:
@@ -275,7 +275,7 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     for i, sdf in enumerate(signed_distance_functions):
         nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
 
-    EPS = 0  # 1e12 * np.finfo(np.double).eps
+    EPS = np.finfo(np.double).eps
     # create coverings
     coverings = []
     for sdf in signed_distance_functions:
@@ -284,6 +284,6 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
         _bbox = (_bbox[0] - EPS, _bbox[1] + EPS, _bbox[2] - EPS, _bbox[3] + EPS)
         coverings.append(_create_boubox(_bbox))
 
-    union = UnionWithCoverings(nests, coverings)
+    union = UnionWithCoverings(signed_distance_functions, coverings)
 
     return union, nests

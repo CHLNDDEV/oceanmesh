@@ -10,7 +10,8 @@ from _fast_geometry import unique_edges
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -242,7 +243,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.10
     geps = 1e-3 * np.amin(min_edge_length)
-    deps = np.sqrt(np.finfo(np.double).eps) * np.amin(min_edge_length)
+    deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
 
