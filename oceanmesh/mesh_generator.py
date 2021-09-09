@@ -7,8 +7,6 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
-from .clean import (delete_faces_connected_to_one_face,
-                    make_mesh_boundaries_traversable)
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
@@ -125,7 +123,7 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         "verbose": 1,
         "min_edge_length": None,
         "plot": 999999,
-        "blend_width": 5000,
+        "blend_width": 1000,
         "blend_polynomial": 2,
         "blend_max_iter": 10,
         "blend_nnear": 256,
@@ -148,10 +146,7 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     ):
         print(f"--> Building domain #{domain_number}")
         global_minimum = np.amin([global_minimum, edge_length.hmin])
-        _tmpp, _tmpc = generate_mesh(sdf, edge_length, **kwargs)
-        # clean up before saving
-        _tmpp, _tmpc = make_mesh_boundaries_traversable(_tmpp, _tmpc, verbose=False)
-        _tmpp, _tmpc = delete_faces_connected_to_one_face(_tmpp, _tmpc, verbose=False)
+        _tmpp, _ = generate_mesh(sdf, edge_length, **kwargs)
 
         _p.append(_tmpp)
 

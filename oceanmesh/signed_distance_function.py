@@ -22,6 +22,8 @@ nan = np.nan
 
 
 def create_circle(center, radius):
+    """Create a circle centered on `center` and with
+    radius `radius` in WGS84 degrees"""
     stepSize = 0.1
     positions = []
     t = 0
@@ -109,6 +111,8 @@ def _compute_bbox(domains):
     return bbox
 
 
+# Note to self: these primitive operations are inexact.
+# Recall: https://www.iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
 class Union(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
@@ -141,19 +145,20 @@ class Difference(Domain):
 
 
 def signed_distance_function(shoreline, verbose=True):
-    """Takes a `shoreline` object containing segments representing islands and mainland boundaries
-    and calculates a signed distance function with it (assuming the polygons are all closed).
-    The returned function `func` becomes a bound method of the :class:`Domain and `is queried every meshing iteration.
+    """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
+    and calculates a signed distance function with it under the assumption that all polygons are closed.
+    The returned function `func` becomes a bound method of the :class:`Domain` and is queried during
+    mesh generation several times per iteration.
 
     Parameters
     ----------
     shoreline: a :class:`Shoreline` object
-        The processed shapefile data from :class:`geodata`
+        The processed shapefile data from :class:`Geodata`
 
     Returns
     -------
     domain: a :class:`Domain` object
-        Contains a signed distance function with a bbox
+        Contains a signed distance function along with an extent `bbox`
 
     """
     if verbose:
@@ -187,8 +192,8 @@ def signed_distance_function(shoreline, verbose=True):
 
 
 def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
-    """Takes a list of :class:`signed_distance_function` objects and calculates a signed distance
-        function from each one
+    """Takes a list of :class:`Domain` objects and calculates a signed distance
+        function from each one that represents a multiscale meshing domain.
 
     Parameters
     ----------
@@ -197,17 +202,20 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     Returns
     -------
     union: a :class:`Union` object
-        The union of all signed distance functions
-    nests: a list of :class:`Difference` objects
-        All inner domains are set differenced from the domain(s) they nest(s).
-
+        The union of the `signed_distance_functions`
+    nests: a list of :class:`Difference` containing objects
+        Nested domains are set differenced from their parent domains.
     """
     if verbose:
         print("Building a multiscale signed distance function...")
     msg = "`signed_distance_functions` is not a list"
     assert isinstance(signed_distance_functions, list), msg
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
+    msg = "list does not contain all `signed_distance_function`"
+    for sdf in signed_distance_functions:
+        assert isinstance(sdf, Domain), msg
 
+    # calculate the boolean/set difference from the base sdf and subsequent nests
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
         nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))

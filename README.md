@@ -83,24 +83,24 @@ Build a simple mesh around New York, United States with a minimum element size o
 
 **Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
 
-![NewYorkMesh](https://user-images.githubusercontent.com/18619644/102819581-7587b600-43b2-11eb-9410-fbf3cadf95b9.png)
+![NewYorkMesh](https://user-images.githubusercontent.com/18619644/132705743-fb05c705-fff9-4f26-9485-0c4fd09facda.png)
+
 
 
 ```python
+
 import pathlib
 import zipfile
 import requests
 
 import meshio
 
-from oceanmesh import (
-    Shoreline,
-    distance_sizing_function,
-    signed_distance_function,
-    generate_mesh,
-    make_mesh_boundaries_traversable,
-    delete_faces_connected_to_one_face,
-)
+from oceanmesh import (Shoreline, delete_boundary_faces,
+                       delete_faces_connected_to_one_face,
+                       distance_sizing_function, generate_mesh, laplacian2,
+                       make_mesh_boundaries_traversable,
+                       signed_distance_function)
+
 
 # Download and load the GSHHS shoreline
 url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
@@ -129,6 +129,11 @@ points, cells = make_mesh_boundaries_traversable(points, cells)
 
 points, cells = delete_faces_connected_to_one_face(points, cells)
 
+points, cells = delete_boundary_faces(points, cells)
+
+points, cells = laplacian2(points, cells)
+
+# write it with meshio
 meshio.write_points_cells(
     "simple_new_york.vtk",
     points,
@@ -179,6 +184,7 @@ points, cells = om.make_mesh_boundaries_traversable(points, cells)
 
 points, cells = om.delete_faces_connected_to_one_face(points, cells)
 
+points, cells = om.laplacian2(points, cells)
 
 meshio.write_points_cells(
     "multiscale_new_york.vtk",

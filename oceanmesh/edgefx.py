@@ -158,10 +158,16 @@ def distance_sizing_function(
     # remove shoreline components outside the shoreline.boubox
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
+    mask = numpy.ones((grid.nx, grid.ny), dtype=bool)
     if len(points) > 0:
         try:
             in_boubox, _ = inpoly2(points, boubox, e_box)
             points = points[in_boubox]
+
+            qpts = numpy.column_stack((lon.flatten(), lat.flatten()))
+            in_boubox, _ = inpoly2(qpts, shoreline.boubox, e_box)
+            mask_indices = grid.find_indices(qpts[in_boubox, :], lon, lat)
+            mask[mask_indices] = False
         except (Exception,):
             ...
 
@@ -169,11 +175,12 @@ def distance_sizing_function(
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
     dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-    grid.values = shoreline.h0 + dis * rate
+    tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
-        grid.values[grid.values > max_edge_length] = max_edge_length
+        tmp[tmp > max_edge_length] = max_edge_length
 
+    grid.values = numpy.ma.array(tmp, mask=mask)
     grid.build_interpolant()
     return grid
 

@@ -1,6 +1,7 @@
 import copy
 
 import numpy as np
+import scipy.sparse as spsparse
 
 from . import edges
 from .fix_mesh import fix_mesh, simp_qual, simp_vol
@@ -10,6 +11,8 @@ __all__ = [
     "delete_interior_faces",
     "delete_exterior_faces",
     "delete_faces_connected_to_one_face",
+    "delete_boundary_faces",
+    "laplacian2",
 ]
 
 
@@ -338,3 +341,162 @@ def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
             f" {int(count)} iterations"
         )
     return vertices, faces
+
+
+def _sparse(Ix, J, S, shape=None, dtype=None):
+    """
+    Similar to MATLAB's SPARSE(I, J, S, ...)
+    """
+
+    # Advanced usage: allow J and S to be scalars.
+    if np.isscalar(J):
+        x = J
+        J = np.empty(Ix.shape, dtype=int)
+        J.fill(x)
+    if np.isscalar(S):
+        x = S
+        S = np.empty(Ix.shape)
+        S.fill(x)
+
+    # Turn these into 1-d arrays for processing.
+    S = S.flat
+    II = Ix.flat
+    J = J.flat
+    return spsparse.coo_matrix((S, (II, J)), shape, dtype)
+
+
+def laplacian2(vertices, entities, max_iter=20, tol=0.01, verbose=1, pfix=None):
+    """Move vertices to the average position of their connected neighbors
+    with the goal to hopefully improve geometric entity quality.
+    :param vertices: vertex coordinates of mesh
+    :type vertices: numpy.ndarray[`float` x dim]
+    :param entities: the mesh connectivity
+    :type entities: numpy.ndarray[`int` x (dim+1)]
+    :param max_iter: maximum number of iterations to perform
+    :type max_iter: `int`, optional
+    :param tol: iterations will cease when movement < tol
+    :type tol: `float`, optional
+    :param verbose: display progress to the screen
+    :type verbose: `float`, optional
+    :param pfix: coordinates that you don't wish to move
+    :type pfix: array-like
+    :return vertices: updated vertices of mesh
+    :rtype: numpy.ndarray[`float` x dim]
+    :return: entities: updated mesh connectivity
+    :rtype: numpy.ndarray[`int` x (dim+1)]
+    """
+    if vertices.ndim != 2:
+        raise NotImplementedError("Laplacian smoothing only works in 2D for now")
+
+    def _closest_node(node, nodes):
+        nodes = np.asarray(nodes)
+        deltas = nodes - node
+        dist_2 = np.einsum("ij,ij->i", deltas, deltas)
+        return np.argmin(dist_2)
+
+    eps = np.finfo(float).eps
+
+    n = len(vertices)
+
+    S = _sparse(
+        entities[:, [0, 0, 1, 1, 2, 2]],
+        entities[:, [1, 2, 0, 2, 0, 1]],
+        1,
+        shape=(n, n),
+    )
+    # bnd = get_boundary_vertices(entities)
+    edge = edges.get_edges(entities)
+    boundary_edges, _ = _external_topology(vertices, entities)
+    bnd = np.unique(boundary_edges.reshape(-1))
+    if pfix is not None:
+        ifix = []
+        for fix in pfix:
+            ifix.append(_closest_node(fix, vertices))
+        ifix = np.asarray(ifix)
+        bnd = np.concatenate((bnd, ifix))
+
+    W = np.sum(S, 1)
+    if np.any(W == 0):
+        print("Invalid mesh. Disjoint vertices found. Returning", flush=True)
+        print(np.argwhere(W == 0), flush=True)
+        return vertices, entities
+
+    L = np.sqrt(
+        np.sum(np.square(vertices[edge[:, 0], :] - vertices[edge[:, 1], :]), axis=1)
+    )
+    L[L < eps] = eps
+    L = L[:, None]
+    for it in range(max_iter):
+        pnew = np.divide(S * np.matrix(vertices), np.hstack((W, W)))
+        pnew[bnd, :] = vertices[bnd, :]
+        vertices = pnew
+        Lnew = np.sqrt(
+            np.sum(np.square(vertices[edge[:, 0], :] - vertices[edge[:, 1], :]), axis=1)
+        )
+        Lnew[Lnew < eps] = eps
+        move = np.amax(np.divide((Lnew - L), Lnew))
+        if move < tol:
+            if verbose:
+                print(
+                    "Movement tolerance reached after "
+                    + str(it)
+                    + " iterations..exiting",
+                    flush=True,
+                )
+            break
+        L = Lnew
+    vertices = np.array(vertices)
+    return vertices, entities
+
+
+def get_boundary_entities(vertices, entities, dim=2):
+    """Determine the entities that lie on the boundary of the mesh.
+    :param vertices: vertex coordinates of mesh
+    :type vertices: numpy.ndarray[`float` x dim]
+    :param entities: the mesh connectivity
+    :type entities: numpy.ndarray[`int` x (dim+1)]
+    :param dim: dimension of the mesh
+    :type dim: `int`, optional
+    :return: bele: indices of entities on the boundary of the mesh.
+    :rtype: numpy.ndarray[`int` x 1]
+    """
+    boundary_edges, _ = _external_topology(vertices, entities)
+    boundary_vertices = np.unique(boundary_edges.reshape(-1))
+    vtoe, ptr = _vertex_to_face(vertices, entities)
+    bele = np.array([], dtype=int)
+    for vertex in boundary_vertices:
+        for ele in zip(vtoe[ptr[vertex] : ptr[vertex + 1]]):
+            bele = np.append(bele, ele)
+    bele = np.unique(bele)
+    return bele
+
+
+def delete_boundary_faces(vertices, entities, dim=2, min_qual=0.10, verbose=1):
+    """Delete boundary faces with poor geometric quality (i.e., < min. quality)
+    :param vertices: vertex coordinates of mesh
+    :type vertices: numpy.ndarray[`float` x dim]
+    :param entities: the mesh connectivity
+    :type entities: numpy.ndarray[`int` x (dim+1)]
+    :param dim: dimension of the mesh
+    :type dim: `int`, optional
+    :param min_qual: minimum geometric quality to consider "poor" quality
+    :type min_qual: `float`, optional
+    :return: vertices: updated vertex array of mesh
+    :rtype: numpy.ndarray[`int` x dim]
+    :return: entities: update mesh connectivity
+    :rtype: numpy.ndarray[`int` x (dim+1)]
+    """
+    qual = simp_qual(vertices, entities)
+    bele, _ = _external_topology(vertices, entities)
+    bele = get_boundary_entities(vertices, entities, dim=dim)
+    qualBou = qual[bele]
+    delete = qualBou < min_qual
+    if verbose:
+        print(
+            "Deleting " + str(np.sum(delete)) + " poor quality boundary entities...",
+            flush=True,
+        )
+    delete = np.argwhere(delete == 1)
+    entities = np.delete(entities, bele[delete], axis=0)
+    vertices, entities, _ = fix_mesh(vertices, entities, delete_unused=True, dim=dim)
+    return vertices, entities
