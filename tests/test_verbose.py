@@ -2,14 +2,13 @@ import os
 import sys
 
 import numpy as np
-import pytest
-
 import oceanmesh
+import pytest
 
 
 @pytest.mark.serial
 def test_verbose():
-    def square(p, x1=0.0, x2=10, y1=0.0, y2=1.0):
+    def square(p, x1=0.0, x2=10, y1=0.0, y2=1.0, **kwargs):
         min = np.minimum
         return -min(min(min(-y1 + p[:, 1], y2 - p[:, 1]), -x1 + p[:, 0]), x2 - p[:, 0])
 

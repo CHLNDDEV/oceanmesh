@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
-import numpy
+import numpy as np
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
+
+from .idw import Invdisttree
 
 
 def compute_minimum(edge_lengths):
@@ -12,10 +14,10 @@ def compute_minimum(edge_lengths):
         edge_length.project(base_edge_length) for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
-    minimum_values = numpy.minimum.reduce(
+    minimum_values = np.minimum.reduce(
         [edge_length.values for edge_length in edge_lengths]
     )
-    min_edgelength = numpy.amin(minimum_values)
+    min_edgelength = np.amin(minimum_values)
     # construct a new grid object with these values
     grid = Grid(
         bbox=base_edge_length.bbox,
@@ -32,15 +34,21 @@ class Grid:
     """Abstracts a structured grid along with
     primitive operations (e.g., min, project, etc.) and
     stores data `values` defined at each grid point.
-
     Parameters
     ----------
     bbox: tuple
-        domain extents
+        domain extent
     dx: float
-        spacing between grid points
+        spacing between grid points along x-axis
+    dy: float, optional
+        spacing grid grid points along y-axis
+    hmin: float, optional
+        minimum grid spacing in domain
     values: scalar or array-like
-        values at grid points
+        values at grid points. If scalar, then an array of
+        the value is created matching the extent.
+    extrapolate: boolean, optional
+        Whether the grid can extrapolate outside its bbox
 
     Attributes
     ----------
@@ -50,22 +58,24 @@ class Grid:
             number of grid points in x-direction
         ny: int
             number of grid points in y-direction
-
+        eval: func
+            A function that takes a vector of points
+            and returns a vector of values
     """
 
-    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, fill=None):
+    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, extrapolate=False):
         if dy is None:
             dy = dx
         self.bbox = bbox
         self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
         self.dx = dx
         self.dy = dy
-        self.hmin = hmin
         self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
         self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
         self.values = values
         self.eval = None
-        self.fill = fill
+        self.extrapolate = extrapolate
+        self.hmin = hmin
 
     @property
     def dx(self):
@@ -110,11 +120,18 @@ class Grid:
 
     @values.setter
     def values(self, data):
-        if numpy.isscalar(data):
-            data = numpy.tile(data, (self.nx, self.ny))
+        if np.isscalar(data):
+            data = np.tile(data, (self.nx, self.ny))
         elif data is None:
             return
         self.__values = data[: self.nx, : self.ny]
+
+    @staticmethod
+    def get_border(self, arr):
+        """Get the border values of a 2D array"""
+        return np.concatenate(
+            [arr[0, :-1], arr[:-1, -1], arr[-1, ::-1], arr[-2:0:-1, 0]], axis=0
+        )
 
     def create_vectors(self):
         """Build coordinate vectors
@@ -131,8 +148,8 @@ class Grid:
             1D array contain data with `float` type of y-coordinates.
 
         """
-        x = self.x0y0[0] + numpy.arange(0, self.nx) * self.dx
-        y = self.x0y0[1] + numpy.arange(0, self.ny) * self.dy
+        x = self.x0y0[0] + np.arange(0, self.nx) * self.dx
+        y = self.x0y0[1] + np.arange(0, self.ny) * self.dy
         return x, y
 
     def create_grid(self):
@@ -151,7 +168,7 @@ class Grid:
 
         """
         x, y = self.create_vectors()
-        return numpy.meshgrid(x, y, sparse=False, indexing="ij")
+        return np.meshgrid(x, y, sparse=False, indexing="ij")
 
     def find_indices(self, points, lon, lat, tree=None):
         """Find linear indices `indices` into a 2D array such that they
@@ -175,64 +192,133 @@ class Grid:
             Indicies into an array. 1D array with `int` type.
 
         """
-        points = points[~numpy.isnan(points[:, 0]), :]
+        points = points[~np.isnan(points[:, 0]), :]
         if tree is None:
-            lonlat = numpy.column_stack((lon.ravel(), lat.ravel()))
+            lonlat = np.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
-        dist, idx = tree.query(points, k=1)
-        return numpy.unravel_index(idx, lon.shape)
+        dist, idx = tree.query(points, k=1, workers=-1)
+        return np.unravel_index(idx, lon.shape)
 
-    def project(self, grid2):
-        """Projects linearly self.values onto :class`Grid` grid2 forming a new
+    def interpolate_to(self, grid2, method="linear"):
+        """Interpolates linearly self.values onto :class`Grid` grid2 forming a new
         :class:`Grid` object grid3.
-
         Note
         ----
         In other words, in areas of overlap, grid1 values
         take precedence elsewhere grid2 values are retained. Grid3 has
         dx and resolution of grid2.
-
         Parameters
         ----------
         grid2: :obj:`Grid`
             A :obj:`Grid` with `values`.
-
+        method: str, optional
+            Way to interpolate data between grids
         Returns
         -------
         grid3: :obj:`Grid`
             A new `obj`:`Grid` with projected `values`.
-
         """
         # is grid2 even a grid object?
-        if not isinstance(grid2, Grid):
-            raise ValueError("Both objects must be grids.")
+        assert isinstance(grid2, Grid), "Object must be Grid."
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
         x2min, x2max, y2min, y2max = self.bbox
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
-        if overlap is False:
-            raise ValueError("Grid objects do not overlap.")
+        assert overlap, "Grid objects do not overlap."
         lon1, lat1 = self.create_vectors()
         lon2, lat2 = grid2.create_vectors()
+        if self.extrapolate:
+            _FILL = None
+        else:
+            _FILL = -999
         # take data from grid1 --> grid2
         fp = RegularGridInterpolator(
             (lon1, lat1),
             self.values,
-            method="linear",
+            method=method,
             bounds_error=False,
-            fill_value=self.fill,
+            fill_value=_FILL,
         )
-        xg, yg = numpy.meshgrid(lon2, lat2, indexing="ij", sparse=True)
+        xg, yg = np.meshgrid(lon2, lat2, indexing="ij", sparse=True)
         new_values = fp((xg, yg))
         # where fill replace with grid2 values
-        new_values[new_values == self.fill] = grid2.values[new_values == self.fill]
+        new_values[new_values == _FILL] = grid2.values[new_values == _FILL]
         return Grid(
             bbox=grid2.bbox,
             dx=grid2.dx,
             dy=grid2.dy,
-            hmin=numpy.amin(new_values),
             values=new_values,
         )
+
+    def blend_into(self, coarse, blend_width=10, p=1, nnear=6, eps=0.0):
+        """Blend self.values into the values of the coarse grid one so that the
+           values transition smoothly. The kwargs control the blending procedure.
+        Parameters
+        ----------
+        coarse: :class:`Grid`
+        blend_width: int, optional
+            The width of the padding in number of grid points
+        p: int, optional
+            The polynomial order in the distance weighting scheme
+        nnear: int, optional
+            The number of nearest points to use to interpolate each point
+        eps: float, optional
+            Points less than `eps` are considered the same point
+        Returns
+        -------
+        _coarse_w_fine: :class:`Grid`
+            The coarse grid with the finer grid interpolated and blended.
+        """
+        _FILL = -99999  # uncommon value
+        if not isinstance(coarse, Grid):
+            raise ValueError("Object must be Grid.")
+        # check if they overlap
+        x1min, x1max, y1min, y1max = self.bbox
+        x2min, x2max, y2min, y2max = self.bbox
+        overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
+        assert overlap, "Grid objects do not overlap."
+        _fine = self.values
+        # 1. Pad the finer grid's values
+        _fine_w_pad_values = np.pad(
+            _fine, pad_width=blend_width, mode="constant", constant_values=_FILL
+        )
+        # 2. Create a new Grid fine_w_pad
+        _add_length = self.dx * blend_width
+        _add_height = self.dy * blend_width
+        _new_fine_bbox = (
+            self.bbox[0] - _add_length,
+            self.bbox[1] + _add_length,
+            self.bbox[2] - _add_height,
+            self.bbox[3] + _add_height,
+        )
+        _fine_w_pad = Grid(
+            _new_fine_bbox,
+            self.dx,
+            dy=self.dy,
+            values=_fine_w_pad_values,
+            extrapolate=self.extrapolate,
+        )
+        # 2. Interpolate _fine_w_pad onto coarse
+        _coarse_w_fine = _fine_w_pad.interpolate_to(coarse, method="nearest")
+
+        # 3. Perform inverse distance weighting on the points with 0
+        _xg, _yg = _coarse_w_fine.create_grid()
+        _pts = np.column_stack((_xg.flatten(), _yg.flatten()))
+        _vals = _coarse_w_fine.values.flatten()
+
+        # find buffer
+        ask_index = _vals == _FILL
+        known_index = _vals != _FILL
+
+        _tree = Invdisttree(_pts[known_index], _vals[known_index])
+        _vals[ask_index] = _tree(_pts[ask_index], nnear=nnear, eps=eps, p=p)
+
+        _hmin = np.amin(_vals[ask_index])
+        _coarse_w_fine.hmin = _hmin
+        # put it back
+        _coarse_w_fine.values = _vals.reshape(*_coarse_w_fine.values.shape)
+
+        return _coarse_w_fine
 
     def plot(
         self,
@@ -245,7 +331,7 @@ class Grid:
         ylabel=None,
         title=None,
         cbarlabel=None,
-        file_name=None,
+        filename=None,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -271,7 +357,7 @@ class Grid:
             self.values[:-1:coarsen, :-1:coarsen],
             vmin=vmin,
             vmax=vmax,
-            shading="auto",
+            shading="flat",
         )
         cbar = plt.colorbar(c)
         if cbarlabel is not None:
@@ -284,8 +370,8 @@ class Grid:
             ax.set_title(title)
         if hold is False and show:
             plt.show()
-        if file_name is not None:
-            plt.savefig(file_name)
+        if filename is not None:
+            plt.savefig(filename)
         return ax
 
     def build_interpolant(self):
@@ -299,13 +385,17 @@ class Grid:
 
         """
         lon1, lat1 = self.create_vectors()
+        if self.extrapolate:
+            _FILL = None
+        else:
+            _FILL = 999999
 
         fp = RegularGridInterpolator(
             (lon1, lat1),
             self.values,
             method="linear",
             bounds_error=False,
-            fill_value=self.fill,
+            fill_value=_FILL,
         )
 
         def sizing_function(x):

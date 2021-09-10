@@ -13,18 +13,43 @@ Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
 Functionality
 =============
 
-
-* A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a succesful numerical simulations with the developed model.
+* A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
 
-Questions?
-============
+
+Citing
+======
+
+The Python version of the algorithm does not yet have a citation; however, similar algorithms and ideas are shared between both version.
+
+```
+[1] - Roberts, K. J., Pringle, W. J., and Westerink, J. J., 2019.
+      OceanMesh2D 1.0: MATLAB-based software for two-dimensional unstructured mesh generation in coastal ocean modeling,
+      Geoscientific Model Development, 12, 1847-1868. https://doi.org/10.5194/gmd-12-1847-2019.
+```
+
+Questions or problems
+======================
 
 Besides posting issues with the code on Github, you can also ask questions via our Slack channel [here](https://join.slack.com/t/oceanmesh2d/shared_invite/zt-su1q3lh3-C_j6AIOQPrewqZnanhzN7g).
 
-Otherwise please reach out to either Dr. Keith Roberts (keithrbt0@gmail.com) or Dr. William Pringle (wpringle@anl.gov) with questions or concerns!
+Otherwise please reach out to Dr. Keith Roberts (keithrbt0@gmail.com) with questions or concerns!
+
+Please include version information when posting bug reports.
+`oceanmesh` uses [versioneer](https://github.com/python-versioneer/python-versioneer).
+
+The version can be inspected through Python
+```
+python -c "import oceanmesh; print(oceanmesh.__version__)"
+```
+or through
+```
+python setup.py version
+```
+in the working directory.
+
 
 Installation
 ============
@@ -53,34 +78,32 @@ For example, to install:
 Examples
 ==========
 
-Build a simple mesh around New York witha minimum element size of 1 km expanding linear from the shoreline to a maximum size of 5 km.
+Build a simple mesh around New York, United States with a minimum element size of around 1 km expanding linear with distance from the shoreline to a maximum element size of 5 km.
 
 
-**Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView.**
+**Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
 
-![NewYorkMesh](https://user-images.githubusercontent.com/18619644/102819581-7587b600-43b2-11eb-9410-fbf3cadf95b9.png)
+![new_york](https://user-images.githubusercontent.com/18619644/132709756-1759ef99-f810-4edc-9710-66226e851a50.png)
 
 
 ```python
+
 import pathlib
 import zipfile
 import requests
 
 import meshio
 
-from oceanmesh import (
-    Shoreline,
-    distance_sizing_function,
-    signed_distance_function,
-    generate_mesh,
-    make_mesh_boundaries_traversable,
-    delete_faces_connected_to_one_face,
-)
+from oceanmesh import (Shoreline, delete_boundary_faces,
+                       delete_faces_connected_to_one_face,
+                       distance_sizing_function, generate_mesh, laplacian2,
+                       make_mesh_boundaries_traversable,
+                       signed_distance_function)
+
 
 # Download and load the GSHHS shoreline
 url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
 filename = url.split("/")[-1]
-print(filename)
 with open(filename, "wb") as f:
     r = requests.get(url)
     f.write(r.content)
@@ -105,8 +128,69 @@ points, cells = make_mesh_boundaries_traversable(points, cells)
 
 points, cells = delete_faces_connected_to_one_face(points, cells)
 
+# remove low quality boundary elements less than 15%
+points, cells = delete_boundary_faces(points, cells, min_qual=0.15)
+
+# apply a Laplacian smoother
+points, cells = laplacian2(points, cells)
+
+# write the mesh with meshio
 meshio.write_points_cells(
     "simple_new_york.vtk",
+    points,
+    [("triangle", cells)],
+    file_format="vtk",
+)
+```
+
+
+Areas of finer refinement can be incorporated seamlessly by using `generate_multiscale_mesh`. In this case, the user passes lists of signed distance and edge length functions. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM simulations.
+
+![new_york_multiscale](https://user-images.githubusercontent.com/18619644/132708885-57357ade-be98-4692-a964-5b5f30d9a9f7.png)
+
+
+```python
+import meshio
+
+import oceanmesh as om
+
+fname1 = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+
+bbox1, min_edge_length1 = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+
+bbox2, min_edge_length2 = (-74.85, -73.75, 40.4, 41), 50.0
+
+s1 = om.Shoreline(fname1, bbox1, min_edge_length1)
+sdf1 = om.signed_distance_function(s1)
+el1 = om.distance_sizing_function(s1, max_edge_length=5e3)
+
+s2 = om.Shoreline(fname1, bbox2, min_edge_length2)
+sdf2 = om.signed_distance_function(s2)
+el2 = om.distance_sizing_function(s2)
+
+# Control the element size transition
+# from coarse to fine with the kwargs prefixed with `blend`
+points, cells = om.generate_multiscale_mesh(
+    [sdf1, sdf2],
+    [el1, el2],
+    blend_width=5e3,
+    blend_polynomial=3,
+    blend_nnear=16,
+)
+
+# remove degenerate mesh faces and other common problems in the mesh
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+
+# remove poor boundary elements with quality < 15%
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
+
+# apply a Laplacian smoother that preservers the mesh size distribution
+points, cells = om.laplacian2(points, cells)
+
+meshio.write_points_cells(
+    "multiscale_new_york.vtk",
     points,
     [("triangle", cells)],
     file_format="vtk",
@@ -119,7 +203,6 @@ Testing
 ============
 
 To run the `oceanmesh` unit tests (and turn off plots), check out this repository and type `tox`. `tox` can be installed via pip.
-
 
 License
 =======

@@ -1,5 +1,4 @@
 import numpy as np
-
 from oceanmesh import generate_mesh, simp_vol
 
 

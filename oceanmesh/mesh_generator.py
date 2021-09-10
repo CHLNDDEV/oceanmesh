@@ -1,15 +1,29 @@
 import time
 
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import numpy as np
 import scipy.sparse as spsparse
-
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
+
+from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain
+from .signed_distance_function import Domain, multiscale_signed_distance_function
 
-__all__ = ["generate_mesh"]
+__all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
+
+
+def plot_mesh(points, cells, count=0, show=True, pause=999):
+    triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
+    plt.triplot(triang)
+    plt.gca().set_aspect("equal", adjustable="box")
+    plt.title(f"Iteration {count}")
+    if show:
+        plt.show(block=False)
+        plt.pause(pause)
+        plt.close()
 
 
 def silence(func):
@@ -44,7 +58,6 @@ def _parse_kwargs(kwargs):
             "nscreen",
             "max_iter",
             "seed",
-            "perform_checks",
             "pfix",
             "points",
             "domain",
@@ -52,12 +65,103 @@ def _parse_kwargs(kwargs):
             "bbox",
             "verbose",
             "min_edge_length",
+            "plot",
+            "blend_width",
+            "blend_polynomial",
+            "blend_max_iter",
+            "blend_nnear",
         }:
             pass
         else:
             raise ValueError(
                 "Option %s with parameter %s not recognized " % (key, kwargs[key])
             )
+
+
+def _check_bbox(bbox):
+    assert isinstance(bbox, tuple), "`bbox` must be a tuple"
+    assert int(len(bbox) / 2), "`dim` must be 2"
+
+
+def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
+    r"""Generate a 2D triangular mesh using callbacks to several
+    sizing functions `edge_lengths` and several signed distance functions
+    See the kwargs for `generate_mesh`.
+
+    Parameters
+    ----------
+    domains: A list of function objects.
+        A list of functions that takes a point and returns the signed nearest distance to the domain boundary Ω.
+    edge_lengths: A function object.
+        A list of functions that can evalulate a point and return a mesh size.
+    \**kwargs:
+        See below for kwargs in addition to the ones available for `generate_mesh`
+
+    :Keyword Arguments:
+        * *blend_width* (``float``) --
+                The width of the element size transition region between nest and parent
+        * *blend_polynomial* (``int``) --
+                The rate of transition scales with 1/dist^blend_polynomial
+        * *blend_max_iter* (``int``) --
+                The number of mesh generation iterations to blend the nest and parent.
+        * *blend_nnear* (``int``) --
+                The number of nearest neighbors in the IDW interpolation.
+
+    """
+    assert (
+        len(domains) > 1 and len(edge_lengths) > 1
+    ), "This function takes a list of domains and sizing functions"
+    assert len(domains) == len(
+        edge_lengths
+    ), "The same number of domains must be passed as sizing functions"
+    opts = {
+        "max_iter": 100,
+        "seed": 0,
+        "pfix": None,
+        "points": None,
+        "verbose": 1,
+        "min_edge_length": None,
+        "plot": 999999,
+        "blend_width": 5000,
+        "blend_polynomial": 2,
+        "blend_max_iter": 20,
+        "blend_nnear": 256,
+    }
+    opts.update(kwargs)
+    _parse_kwargs(kwargs)
+
+    master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
+        edge_lengths,
+        verbose=False,
+        blend_width=opts["blend_width"],
+        nnear=opts["blend_nnear"],
+        p=opts["blend_polynomial"],
+    )
+    union, nests = multiscale_signed_distance_function(domains, verbose=False)
+    _p = []
+    global_minimum = 9999
+    for domain_number, (sdf, edge_length) in enumerate(
+        zip(nests, edge_lengths_smoothed)
+    ):
+        print(f"--> Building domain #{domain_number}")
+        global_minimum = np.amin([global_minimum, edge_length.hmin])
+        _tmpp, _ = generate_mesh(sdf, edge_length, **kwargs)
+        _p.append(_tmpp)
+
+    _p = np.concatenate(_p, axis=0)
+
+    # merge the two domains together
+    print("--> Blending the domains together...")
+    _p, _t = generate_mesh(
+        domain=union,
+        edge_length=master_edge_length,
+        min_edge_length=global_minimum,
+        points=_p,
+        max_iter=opts["blend_max_iter"],
+        **kwargs,
+    )
+
+    return _p, _t
 
 
 def generate_mesh(domain, edge_length, **kwargs):
@@ -76,23 +180,19 @@ def generate_mesh(domain, edge_length, **kwargs):
     :Keyword Arguments:
         * *bbox* (``tuple``) --
             Bounding box containing domain extents. REQUIRED IF NOT USING :class:`edge_length`
-        * *nscreen* (``float``) --
-            Output to the screen `nscreen` timestep. (default==1)
         * *max_iter* (``float``) --
             Maximum number of meshing iterations. (default==50)
         * *seed* (``float`` or ``int``) --
             Psuedo-random seed to initialize meshing points. (default==0)
-        * *perform_checks* (`boolean`) --
-            Whether or not to perform mesh linting/mesh cleanup. (default==False)
         * *pfix* (`array-like`) --
             An array of points to constrain in the mesh. (default==None)
-        * *axis* (`int`) --
-            The axis to decompose the mesh (1,2, or 3). (default==1)
         * *verbose* (``int``) --
             Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
+            If `verbose`==2 all messages are displayed.
         * *min_edge_length* (``float``) --
-            The minimum element size in the domain. Taken from `domain` normally.
-
+            The minimum element size in the domain. REQUIRED IF NOT USING :class:`edge_length`
+        * *plot* (``int``) --
+            The mesh is visualized every `plot` meshing iterations.
 
     Returns
     -------
@@ -102,14 +202,15 @@ def generate_mesh(domain, edge_length, **kwargs):
         mesh connectivity table.
 
     """
+    _DIM = 2
     opts = {
         "max_iter": 50,
         "seed": 0,
-        "perform_checks": False,
         "pfix": None,
         "points": None,
         "verbose": 1,
         "min_edge_length": None,
+        "plot": 999999,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -127,40 +228,42 @@ def generate_mesh(domain, edge_length, **kwargs):
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
 
-    if not isinstance(bbox, tuple):
-        raise ValueError("`bbox` must be a tuple")
-
-    dim = int(len(bbox) / 2)
-    if dim != 2:
-        raise ValueError("`dim` must be 2")
-
+    _check_bbox(bbox)
     bbox = np.array(bbox).reshape(-1, 2)
 
-    if min_edge_length < 0:
-        raise ValueError("`min_edge_length` must be > 0")
+    assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
-    if opts["max_iter"] < 0:
-        raise ValueError("`max_iter` must be > 0")
+    assert opts["max_iter"] > 0, "`max_iter` must be > 0"
     max_iter = opts["max_iter"]
 
     np.random.seed(opts["seed"])
 
-    L0mult = 1 + 0.4 / 2 ** (dim - 1)
+    L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
     delta_t = 0.20
-    geps = 1e-1 * min_edge_length
-    deps = np.sqrt(np.finfo(np.double).eps) * min_edge_length
+    geps = 1e-3 * np.amin(min_edge_length)
+    deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
-    pfix, nfix = _unpack_pfix(dim, opts)
+    pfix, nfix = _unpack_pfix(_DIM, opts)
 
-    p = _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix)
+    if opts["points"] is None:
+        p = _generate_initial_points(
+            min_edge_length,
+            geps,
+            bbox,
+            fh,
+            fd,
+            pfix,
+        )
+    else:
+        p = opts["points"]
 
     N = p.shape[0]
 
     assert N > 0, "No vertices to mesh with!"
 
     print_msg1(
-        "Commencing mesh generation with %d vertices will perform %i iterations."
-        % (N, max_iter),
+        "Commencing mesh generation with %d vertices will perform %i"
+        " iterations." % (N, max_iter),
     )
 
     for count in range(max_iter):
@@ -176,9 +279,13 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
 
+        # plot the mesh every count iterations
+        if count % opts["plot"] == 0 and count != 0:
+            plot_mesh(p, t, count=count, pause=0.2)
+
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
-            p, t, _ = fix_mesh(p, t, dim=2, delete_unused=True)
+            p, t, _ = fix_mesh(p, t, dim=_DIM, delete_unused=True)
             print_msg1("Termination reached...maximum number of iterations.")
             return p, t
 
@@ -196,9 +303,10 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Show the user some progress so they know something is happening
         maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
+
         print_msg2(
-            "Iteration #%d, max movement is %f, there are %d vertices and %d cells"
-            % (count + 1, maxdp, len(p), len(t)),
+            "Iteration #%d, max movement is %f, there are %d vertices and %d"
+            " cells" % (count + 1, maxdp, len(p), len(t)),
         )
 
         end = time.time()
@@ -227,7 +335,9 @@ def _unpack_domain(domain, opts):
         bbox = opts["bbox"]
         fd = domain
     else:
-        raise ValueError("`domain` must be a function or a :class:`geometry` object")
+        raise ValueError(
+            "`domain` must be a function or a :class:`signed_distance_function object"
+        )
     return fd, bbox
 
 
@@ -237,6 +347,7 @@ def _get_bars(t):
     return unique_edges(bars)
 
 
+# Persson-Strang
 def _compute_forces(p, t, fh, min_edge_length, L0mult):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
@@ -251,7 +362,6 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
     Fvec = (
         F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
     )  # Bar forces (x,y components)
-
     Ftot = _dense(
         bars[:, [0] * 2 + [1] * 2],
         np.repeat([list(range(2)) * 2], len(F), axis=0),
@@ -259,6 +369,30 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
         shape=(N, 2),
     )
     return Ftot
+
+
+# Bossen-Heckbert
+# def _compute_forces(p, t, fh, min_edge_length, L0mult):
+#    """Compute the forces on each edge based on the sizing function"""
+#    N = p.shape[0]
+#    bars = _get_bars(t)
+#    barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
+#    L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
+#    L[L == 0] = np.finfo(float).eps
+#    hbars = fh(p[bars].sum(1) / 2)
+#    L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
+#    LN = L / L0
+#    F = (1 - LN ** 4) * np.exp(-(LN ** 4)) / LN
+#    Fvec = (
+#        F[:, None] / LN[:, None].dot(np.ones((1, 2))) * barvec
+#    )  # Bar forces (x,y components)
+#    Ftot = _dense(
+#        bars[:, [0] * 2 + [1] * 2],
+#        np.repeat([list(range(2)) * 2], len(F), axis=0),
+#        np.hstack((Fvec, -Fvec)),
+#        shape=(N, 2),
+#    )
+#    return Ftot
 
 
 def _dense(Ix, J, S, shape=None, dtype=None):
@@ -292,7 +426,6 @@ def _remove_triangles_outside(p, t, fd, geps):
 
 def _project_points_back(p, fd, deps):
     """Project points outsidt the domain back within"""
-
     d = fd(p)
     ix = d > 0  # Find points outside (d>0)
     if ix.any():
@@ -315,13 +448,14 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     p = p.reshape(2, -1).T
-    p = p[fd(p) < geps]  # Keep only d<0 points
     r0 = fh(p)
-    r0m = np.min(r0[r0 > 0])
+    r0m = np.min(r0[r0 >= min_edge_length])
+    p = p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2]
+    p = p[fd(p) < geps]  # Keep only d<0 points
     return np.vstack(
         (
             pfix,
-            p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2],
+            p,
         )
     )
 
@@ -338,10 +472,11 @@ def _unpack_pfix(dim, opts):
     if opts["pfix"] is not None:
         pfix = np.array(opts["pfix"], dtype="d")
         nfix = len(pfix)
-        print(
-            "Constraining " + str(nfix) + " fixed points..",
-            flush=True,
-        )
+        if opts["verbose"]:
+            print(
+                "Constraining " + str(nfix) + " fixed points..",
+                flush=True,
+            )
     return pfix, nfix
 
 

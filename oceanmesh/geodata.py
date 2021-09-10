@@ -45,7 +45,9 @@ def _create_boubox(bbox):
 
 
 def _create_ranges(start, stop, N, endpoint=True):
-    """Vectorized alternative to numpy.linspace"""
+    """Vectorized alternative to numpy.linspace
+    https://stackoverflow.com/questions/40624409/vectorized-numpy-linspace-for-multiple-start-and-stop-values
+    """
     if endpoint == 1:
         divisor = N - 1
     else:
@@ -59,15 +61,16 @@ def _densify(poly, maxdiff, bbox, radius=0):
     that are greater than a `maxdiff` (degrees) apart
     """
     boubox = _create_boubox(bbox)
-    path = mpltPath.Path(boubox)
-    inside = path.contains_points(poly, radius=radius)
-
+    path = mpltPath.Path(boubox, closed=True)
+    inside = path.contains_points(poly, radius=0.1)  # add a small radius
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
     dlat = numpy.abs(lat[1:] - lat[:-1])
     dlon = numpy.abs(lon[1:] - lon[:-1])
     nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
     nin[~inside[1:]] = 0  # no need to densify outside of bbox please
+    # handle negative values
+    nin[nin < 0] = 0
     sumnin = numpy.nansum(nin)
     if sumnin == 0:
         return numpy.hstack((lon[:, None], lat[:, None]))
@@ -401,7 +404,6 @@ def _is_path_ccw(_p):
     return detO > 0.0
 
 
-# TODO: this should be called "Vector" and contain general methods for vector datasets
 class Geodata:
     """
     Geographical data class that handles geographical data describing
@@ -549,7 +551,13 @@ class Shoreline(Geodata):
         self.__h0 = value
 
     def plot(
-        self, ax=None, xlabel=None, ylabel=None, title=None, file_name=None, show=True
+        self,
+        ax=None,
+        xlabel=None,
+        ylabel=None,
+        title=None,
+        file_name=None,
+        show=True,
     ):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
@@ -561,12 +569,12 @@ class Shoreline(Geodata):
             ax.axis("equal")
 
         if len(self.mainland) != 0:
-            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
+            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "kx-")
             flg1 = True
         if len(self.inner) != 0:
-            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
+            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "rx-")
             flg2 = True
-        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "g-")
+        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "gx-")
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
@@ -697,7 +705,11 @@ def _from_netcdf(filename, bbox, verbose):
             lats = nc_fid.variables[lat_name][:]
             latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
             topobathy = nc_fid.variables[z_name][latli:latui, lonli:lonui]
-            return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
+            return (
+                (lats, slice(latli, latui)),
+                (lons, slice(lonli, lonui)),
+                topobathy,
+            )
     except IOError:
         print("Unable to open file...quitting")
         quit()
