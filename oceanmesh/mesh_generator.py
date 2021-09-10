@@ -116,16 +116,16 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         edge_lengths
     ), "The same number of domains must be passed as sizing functions"
     opts = {
-        "max_iter": 50,
+        "max_iter": 100,
         "seed": 0,
         "pfix": None,
         "points": None,
         "verbose": 1,
         "min_edge_length": None,
         "plot": 999999,
-        "blend_width": 1000,
+        "blend_width": 5000,
         "blend_polynomial": 2,
-        "blend_max_iter": 10,
+        "blend_max_iter": 20,
         "blend_nnear": 256,
     }
     opts.update(kwargs)
@@ -147,7 +147,6 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         print(f"--> Building domain #{domain_number}")
         global_minimum = np.amin([global_minimum, edge_length.hmin])
         _tmpp, _ = generate_mesh(sdf, edge_length, **kwargs)
-
         _p.append(_tmpp)
 
     _p = np.concatenate(_p, axis=0)
@@ -241,7 +240,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
-    delta_t = 0.10
+    delta_t = 0.20
     geps = 1e-3 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
@@ -350,30 +349,6 @@ def _get_bars(t):
 
 
 # Persson-Strang
-# def _compute_forces(p, t, fh, min_edge_length, L0mult):
-#    """Compute the forces on each edge based on the sizing function"""
-#    N = p.shape[0]
-#    bars = _get_bars(t)
-#    barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
-#    L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
-#    L[L == 0] = np.finfo(float).eps
-#    hbars = fh(p[bars].sum(1) / 2)
-#    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
-#    F = L0 - L
-#    F[F < 0] = 0  # Bar forces (scalars)
-#    Fvec = (
-#        F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
-#    )  # Bar forces (x,y components)
-#    Ftot = _dense(
-#        bars[:, [0] * 2 + [1] * 2],
-#        np.repeat([list(range(2)) * 2], len(F), axis=0),
-#        np.hstack((Fvec, -Fvec)),
-#        shape=(N, 2),
-#    )
-#    return Ftot
-
-
-# Bossen-Heckbert
 def _compute_forces(p, t, fh, min_edge_length, L0mult):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
@@ -382,11 +357,11 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
     L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     hbars = fh(p[bars].sum(1) / 2)
-    L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
-    LN = L / L0
-    F = (1 - LN ** 4) * np.exp(-(LN ** 4)) / LN
+    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
+    F = L0 - L
+    F[F < 0] = 0  # Bar forces (scalars)
     Fvec = (
-        F[:, None] / LN[:, None].dot(np.ones((1, 2))) * barvec
+        F[:, None] / L[:, None].dot(np.ones((1, 2))) * barvec
     )  # Bar forces (x,y components)
     Ftot = _dense(
         bars[:, [0] * 2 + [1] * 2],
@@ -395,6 +370,30 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
         shape=(N, 2),
     )
     return Ftot
+
+
+# Bossen-Heckbert
+# def _compute_forces(p, t, fh, min_edge_length, L0mult):
+#    """Compute the forces on each edge based on the sizing function"""
+#    N = p.shape[0]
+#    bars = _get_bars(t)
+#    barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
+#    L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
+#    L[L == 0] = np.finfo(float).eps
+#    hbars = fh(p[bars].sum(1) / 2)
+#    L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
+#    LN = L / L0
+#    F = (1 - LN ** 4) * np.exp(-(LN ** 4)) / LN
+#    Fvec = (
+#        F[:, None] / LN[:, None].dot(np.ones((1, 2))) * barvec
+#    )  # Bar forces (x,y components)
+#    Ftot = _dense(
+#        bars[:, [0] * 2 + [1] * 2],
+#        np.repeat([list(range(2)) * 2], len(F), axis=0),
+#        np.hstack((Fvec, -Fvec)),
+#        shape=(N, 2),
+#    )
+#    return Ftot
 
 
 def _dense(Ix, J, S, shape=None, dtype=None):

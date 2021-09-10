@@ -288,14 +288,11 @@ def multiscale_sizing_function(
                 new_coarse, blend_width=_blend_width, p=p, nnear=nnear
             )
             new_coarse.extrapolate = True
-
-        # recreate the interpolant
-        new_coarse.build_interpolant()
+            new_coarse.build_interpolant()
         # append it to list
         new_list_of_grids.append(new_coarse)
 
     list_of_grids[-1].extrapolate = True
-    list_of_grids[-1].build_interpolant()
 
     # retain the finest
     new_list_of_grids.append(list_of_grids[-1])

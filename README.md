@@ -168,7 +168,15 @@ s2 = om.Shoreline(fname1, bbox2, min_edge_length2)
 sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 
-points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2], blend_width=5e3)
+# Control the element size transition
+# from coarse to fine with the kwargs prefixed with `blend`
+points, cells = om.generate_multiscale_mesh(
+    [sdf1, sdf2],
+    [el1, el2],
+    blend_width=5e3,
+    blend_polynomial=3,
+    blend_nnear=16,
+)
 
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = om.make_mesh_boundaries_traversable(points, cells)

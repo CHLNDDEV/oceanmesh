@@ -157,7 +157,6 @@ class UnionWithCoverings(Domain):
         d = np.ones(len(x), dtype=float)
         for domain, c in zip(self.domain, self.covering_functions):
             inside = c(x)
-
             d[inside] = domain.eval(x[inside])
 
         return d
@@ -275,14 +274,10 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     for i, sdf in enumerate(signed_distance_functions):
         nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
 
-    EPS = np.finfo(np.double).eps
     # create coverings
     coverings = []
     for sdf in signed_distance_functions:
-        _bbox = sdf.bbox
-        # inflate bbox by eps
-        _bbox = (_bbox[0] - EPS, _bbox[1] + EPS, _bbox[2] - EPS, _bbox[3] + EPS)
-        coverings.append(_create_boubox(_bbox))
+        coverings.append(_create_boubox(sdf.bbox))
 
     union = UnionWithCoverings(signed_distance_functions, coverings)
 
