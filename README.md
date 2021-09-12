@@ -130,7 +130,7 @@ shoreline.plot(
 )
 # Using our shoreline, we create a signed distance function
 # which will be used for meshing later on.
-sdf = om.signed_distanc_function(shoreline)
+sdf = om.signed_distance_function(shoreline)
 ```
 ![Figure_1](https://user-images.githubusercontent.com/18619644/132995972-4b1cac4a-c898-4de7-9e6a-205c91c06eee.png)
 
@@ -181,8 +181,8 @@ import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
-shore = Shoreline(fname, bbox, min_edge_length)
-sdf = om.signed_distance_function(shore)
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
 # Visualize the medial points
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
 edge_length.plot()
