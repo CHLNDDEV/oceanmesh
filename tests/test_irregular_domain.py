@@ -1,3 +1,4 @@
+import os
 import matplotlib.tri as tri
 import matplotlib.pyplot as plt
 import numpy as np
@@ -5,7 +6,7 @@ import oceanmesh as om
 
 
 def test_irregular_domain():
-    fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+    fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
     # New York Lower Bay and Jamaica Bay
     bbox = np.array(
