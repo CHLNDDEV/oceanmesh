@@ -356,7 +356,7 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True)
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0)
     tmpz[np.abs(tmpz) < 1] = 1
     grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
     grid.values /= 111e3  # transform to degrees
