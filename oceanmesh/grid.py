@@ -11,7 +11,8 @@ def compute_minimum(edge_lengths):
     # project all edge_lengths onto the grid of the first one
     base_edge_length = edge_lengths[0]
     edge_lengths = [
-        edge_length.project(base_edge_length) for edge_length in edge_lengths[1::]
+        edge_length.interpolate_to(base_edge_length)
+        for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
     minimum_values = np.minimum.reduce(
@@ -70,8 +71,8 @@ class Grid:
         self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
         self.dx = dx
         self.dy = dy
-        self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
-        self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
+        self.nx = None  # int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
+        self.ny = None  # int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
         self.values = values
         self.eval = None
         self.extrapolate = extrapolate
@@ -121,10 +122,11 @@ class Grid:
     @values.setter
     def values(self, data):
         if np.isscalar(data):
+            self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
+            self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
             data = np.tile(data, (self.nx, self.ny))
-        elif data is None:
-            return
-        self.__values = data[: self.nx, : self.ny]
+        self.__values = data
+        self.nx, self.ny = data.shape
 
     @staticmethod
     def get_border(self, arr):

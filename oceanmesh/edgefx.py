@@ -152,6 +152,7 @@ def distance_sizing_function(
         dx=shoreline.h0 * coarsen,
         hmin=shoreline.h0,
         extrapolate=True,
+        values=0.0,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = np.ones(shape=(grid.nx, grid.ny))

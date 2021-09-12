@@ -1,15 +1,17 @@
 import errno
 import os
+from math import ceil, floor
 
 import matplotlib.path as mpltPath
 import numpy
 import numpy.linalg
+import rasterio
 import shapefile
 import shapely.geometry
 import shapely.validation
-from netCDF4 import Dataset
-from PIL import Image
-from PIL.TiffTags import TAGS
+# from affine import Affine
+from pyproj import Proj
+from rasterio.windows import Window
 
 from .grid import Grid
 
@@ -615,104 +617,56 @@ class Shoreline(Geodata):
         return ax
 
 
-def _extract_bounds(lons, lats, bbox):
-    """Extract the indexes of the subregion"""
-    # bounds (from DEM)
-    blol, blou = numpy.amin(lons), numpy.amax(lons)
-    blal, blau = numpy.amin(lats), numpy.amax(lats)
-    # check bounds
-    if bbox[0] < blol or bbox[1] > blou:
-        raise ValueError(
-            "bounding box "
-            + str(bbox)
-            + " exceeds DEM extents "
-            + str((blol, blou, blal, blau))
-            + "!"
-        )
-    if bbox[2] < blal or bbox[3] > blau:
-        raise ValueError(
-            "bounding box "
-            + str(bbox)
-            + " exceeds DEM extents "
-            + str((blol, blou, blal, blau))
-            + "!"
-        )
-    # latitude lower and upper index
-    latli = numpy.argmin(numpy.abs(lats - bbox[2]))
-    latui = numpy.argmin(numpy.abs(lats - bbox[3])) + 1
-    # longitude lower and upper index
-    lonli = numpy.argmin(numpy.abs(lons - bbox[0]))
-    lonui = numpy.argmin(numpy.abs(lons - bbox[1])) + 1
+def _longlat2window(lon, lat, dataset):
+    """
+    Args:
+        lon (tuple): Tuple of min and max lon
+        lat (tuple): Tuple of min and max lat
+        dataset: Rasterio dataset
 
-    return latli, latui, lonli, lonui
+    Returns:
+        rasterio.windows.Window
+    """
+    p = Proj(dataset.crs)
+    t = dataset.transform
+    xmin, ymin = p(lon[0], lat[0])
+    xmax, ymax = p(lon[1], lat[1])
+    col_min, row_min = ~t * (xmin, ymin)
+    col_max, row_max = ~t * (xmax, ymax)
+    return Window.from_slices(
+        rows=(floor(row_max), ceil(row_min)), cols=(floor(col_min), ceil(col_max))
+    )
 
 
-def _from_tif(filename, bbox, verbose):
-    """Read in a digitial elevation model from a tif file"""
+def _from_file(filename, bbox, verbose):
+    """Read in a digitial elevation model from a NetCDF or GeoTif file"""
 
-    if verbose > 0:
-        print("Reading in tif... " + filename)
+    if verbose:
+        print(f"Reading in {filename}")
 
-    with Image.open(filename) as img:
-        meta_dict = {TAGS[key]: img.tag[key] for key in img.tag.keys()}
+    with rasterio.open(filename) as r:
 
-    nc, nr = meta_dict["ImageLength"][0], meta_dict["ImageWidth"][0]
-    reso = meta_dict["ModelPixelScaleTag"]
-    tie = meta_dict["ModelTiepointTag"][3:5]
-
-    lats, lons = [], []
-    for n in range(nr):
-        lats.extend([tie[1] - reso[1] * n])
-    for n in range(nc):
-        lons.extend([tie[0] + reso[0] * n])
-    lats, lons = numpy.asarray(lats), numpy.asarray(lons)
-    # should be increasing
-    if lats[1] < lats[0]:
-        lats = numpy.flipud(lats)
-    if lons[1] < lons[0]:
-        lons = numpy.flipud(lons)
-
-    latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
-
-    tmp = numpy.asarray(Image.open(filename))
-    topobathy = tmp[latli:latui, lonli:lonui]
-
-    return (lats, slice(latli, latui)), (lons, slice(lonli, lonui)), topobathy
-
-
-def _from_netcdf(filename, bbox, verbose):
-    """Read in digitial elevation model from a NetCDF file"""
-
-    if verbose > 0:
-        print("Reading in NetCDF... " + filename)
-    # well-known variable names
-    wkv_x = ["x", "Longitude", "longitude", "lon"]
-    wkv_y = ["y", "Latitude", "latitude", "lat"]
-    wkv_z = ["Band1", "z"]
-    try:
-        with Dataset(filename, "r") as nc_fid:
-            for x, y in zip(wkv_x, wkv_y):
-                for var in nc_fid.variables:
-                    if var == x:
-                        lon_name = var
-                    if var == y:
-                        lat_name = var
-            for z in wkv_z:
-                for var in nc_fid.variables:
-                    if var == z:
-                        z_name = var
-            lons = nc_fid.variables[lon_name][:]
-            lats = nc_fid.variables[lat_name][:]
-            latli, latui, lonli, lonui = _extract_bounds(lons, lats, bbox)
-            topobathy = nc_fid.variables[z_name][latli:latui, lonli:lonui]
-            return (
-                (lats, slice(latli, latui)),
-                (lons, slice(lonli, lonui)),
-                topobathy,
+        if bbox is None:
+            bbox = (
+                r.bounds.left,
+                r.bounds.right,
+                r.bounds.bottom,
+                r.bounds.top,
             )
-    except IOError:
-        print("Unable to open file...quitting")
-        quit()
+        window = _longlat2window((bbox[0], bbox[1]), (bbox[2], bbox[3]), r)
+        topobathy = r.read(1, window=window)
+        reso = r.res
+        # This creates coordinate grids
+        # T0 = r.transform  # upper-left pixel corner affine transform
+        # T1 = T0 * Affine.translation(0.5, 0.5)
+        # cols, rows = numpy.meshgrid(
+        #    numpy.arange(topobathy.shape[2]), numpy.arange(topobathy.shape[1])
+        # )
+        ## Function to convert pixel row/column index (from 0) to easting/northing at centre
+        # def rc2en(r, c):
+        #    return (c, r) * T1
+
+    return topobathy, reso, bbox
 
 
 class DEM(Grid):
@@ -720,27 +674,16 @@ class DEM(Grid):
     parent class is a :class:`Grid`
     """
 
-    def __init__(self, dem, bbox, verbose=1):
+    def __init__(self, dem, bbox=None, verbose=1):
 
         basename, ext = os.path.splitext(dem)
-        if ext.lower() in [".nc"]:
-            la, lo, topobathy = _from_netcdf(dem, bbox, verbose)
-        elif ext.lower() in [".tif"]:
-            la, lo, topobathy = _from_tif(dem, bbox, verbose)
+        if ext.lower() in [".nc"] or [".tif"]:
+            topobathy, reso, bbox = _from_file(dem, bbox, verbose)
         else:
-            raise ValueError(
-                "DEM file %s has unknown format '%s'." % (self.dem, ext[1:])
-            )
+            raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
+
         self.dem = dem
-        # determine grid spacing in degrees
-        lats = la[0]
-        lons = lo[0]
-        dy = numpy.abs(lats[1] - lats[0])
-        dx = numpy.abs(lons[1] - lons[0])
         super().__init__(
-            bbox=bbox,
-            dx=dx,
-            dy=dy,
+            bbox=bbox, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
         )
-        self.values = topobathy[: self.ny, : self.nx].T
         super().build_interpolant()

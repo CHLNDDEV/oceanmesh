@@ -24,6 +24,7 @@ __all__ = [
     "delete_faces_connected_to_one_face",
     "plot_mesh",
     "make_mesh_boundaries_traversable",
+    "feature_sizing_function",
     "enforce_mesh_size_bounds_elevation",
     "laplacian2",
     "delete_interior_faces",
