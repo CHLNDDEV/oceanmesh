@@ -9,6 +9,7 @@ import rasterio
 import shapefile
 import shapely.geometry
 import shapely.validation
+
 # from affine import Affine
 from pyproj import Proj
 from rasterio.windows import Window, from_bounds
