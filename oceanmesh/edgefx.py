@@ -276,6 +276,7 @@ def feature_sizing_function(
             "k--",
             label="bounding extents",
         )
+        plt.gca().set_aspect("equal", adjustable="box")
         plt.legend()
         plt.show()
 

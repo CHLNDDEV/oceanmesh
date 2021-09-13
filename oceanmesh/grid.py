@@ -359,7 +359,7 @@ class Grid:
             self.values[:-1:coarsen, :-1:coarsen],
             vmin=vmin,
             vmax=vmax,
-            shading="flat",
+            shading="auto",
         )
         cbar = plt.colorbar(c)
         if cbarlabel is not None:

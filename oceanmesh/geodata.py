@@ -9,10 +9,9 @@ import rasterio
 import shapefile
 import shapely.geometry
 import shapely.validation
-
 # from affine import Affine
 from pyproj import Proj
-from rasterio.windows import Window
+from rasterio.windows import Window, from_bounds
 
 from .grid import Grid
 
@@ -618,27 +617,6 @@ class Shoreline(Geodata):
         return ax
 
 
-def _longlat2window(lon, lat, dataset):
-    """
-    Args:
-        lon (tuple): Tuple of min and max lon
-        lat (tuple): Tuple of min and max lat
-        dataset: Rasterio dataset
-
-    Returns:
-        rasterio.windows.Window
-    """
-    p = Proj(dataset.crs)
-    t = dataset.transform
-    xmin, ymin = p(lon[0], lat[0])
-    xmax, ymax = p(lon[1], lat[1])
-    col_min, row_min = ~t * (xmin, ymin)
-    col_max, row_max = ~t * (xmax, ymax)
-    return Window.from_slices(
-        rows=(floor(row_max), ceil(row_min)), cols=(floor(col_min), ceil(col_max))
-    )
-
-
 def _from_file(filename, bbox, verbose):
     """Read in a digitial elevation model from a NetCDF or GeoTif file"""
 
@@ -654,20 +632,9 @@ def _from_file(filename, bbox, verbose):
                 r.bounds.bottom,
                 r.bounds.top,
             )
-        window = _longlat2window((bbox[0], bbox[1]), (bbox[2], bbox[3]), r)
-        topobathy = r.read(1, window=window)
-        reso = r.res
-        # This creates coordinate grids
-        # T0 = r.transform  # upper-left pixel corner affine transform
-        # T1 = T0 * Affine.translation(0.5, 0.5)
-        # cols, rows = numpy.meshgrid(
-        #    numpy.arange(topobathy.shape[2]), numpy.arange(topobathy.shape[1])
-        # )
-        ## Function to convert pixel row/column index (from 0) to easting/northing at centre
-        # def rc2en(r, c):
-        #    return (c, r) * T1
+        topobathy = r.read(1, window=from_bounds(*bbox, r.transform))
 
-    return topobathy, reso, bbox
+    return topobathy, r.res, bbox
 
 
 class DEM(Grid):
