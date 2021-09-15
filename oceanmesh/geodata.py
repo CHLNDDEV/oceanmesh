@@ -8,7 +8,6 @@ import rasterio
 import shapefile
 import shapely.geometry
 import shapely.validation
-from matplotlib.patches import Polygon
 from rasterio.windows import from_bounds
 
 from .grid import Grid
