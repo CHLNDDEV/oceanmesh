@@ -1,6 +1,5 @@
 import errno
 import os
-from math import ceil, floor
 
 import matplotlib.path as mpltPath
 import numpy
@@ -9,9 +8,8 @@ import rasterio
 import shapefile
 import shapely.geometry
 import shapely.validation
-# from affine import Affine
-from pyproj import Proj
-from rasterio.windows import Window, from_bounds
+from matplotlib.patches import Polygon
+from rasterio.windows import from_bounds
 
 from .grid import Grid
 
@@ -571,12 +569,12 @@ class Shoreline(Geodata):
             ax.axis("equal")
 
         if len(self.mainland) != 0:
-            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "kx-")
+            (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
             flg1 = True
         if len(self.inner) != 0:
-            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "rx-")
+            (line2,) = ax.plot(self.inner[:, 0], self.inner[:, 1], "r-")
             flg2 = True
-        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "gx-")
+        (line3,) = ax.plot(self.boubox[:, 0], self.boubox[:, 1], "g--")
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
@@ -584,7 +582,7 @@ class Shoreline(Geodata):
             xmax - xmin,
             ymax - ymin,
             fill=None,
-            hatch="///",
+            hatch="////",
             alpha=0.2,
         )
 

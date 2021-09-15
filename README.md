@@ -135,7 +135,7 @@ sdf = om.signed_distance_function(shoreline)
 ![Figure_1](https://user-images.githubusercontent.com/18619644/132995972-4b1cac4a-c898-4de7-9e6a-205c91c06eee.png)
 
 
-DEMs are used to build some mesh size functions (e.g., wavelength, enforcing size bounds, enforce maximum Courant bounds) but are not essential for mesh generation purposes. This DEM 'Eastcoast.nc' was created using the Python package [elevation](https://github.com/bopen/elevation) with the following command:
+DEMs are used to build some mesh size functions (e.g., wavelength, enforcing size bounds, enforce maximum Courant bounds) but are not essential for mesh generation purposes. The DEM used below 'Eastcoast.nc' was created using the Python package [elevation](https://github.com/bopen/elevation) with the following command:
 <!--pytest-codeblocks:skip-->
 ```
 eio clip -o EastCoast.nc --bounds -74.85 40.4 -73.75 41
@@ -182,9 +182,7 @@ import oceanmesh as om
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 shoreline = om.Shoreline(fname, bbox, min_edge_length)
-sdf = om.signed_distance_function(shoreline)
-# Visualize the medial points
-edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
+edge_length = om.distance_sizing_function(shoreline, rate=0.15)
 edge_length.plot()
 ```
 ![Figure_3](https://user-images.githubusercontent.com/18619644/132996104-d44beb00-df5c-4cbf-b4e4-bc5df5d79d95.png)
