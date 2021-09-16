@@ -334,6 +334,8 @@ class Grid:
         title=None,
         cbarlabel=None,
         filename=None,
+        xlim=None,
+        ylim=None,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -370,6 +372,10 @@ class Grid:
             ax.set_ylabel(ylabel)
         if title is not None:
             ax.set_title(title)
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
         if hold is False and show:
             plt.show()
         if filename is not None:

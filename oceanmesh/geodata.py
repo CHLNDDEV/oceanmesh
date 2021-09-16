@@ -557,6 +557,8 @@ class Shoreline(Geodata):
         title=None,
         file_name=None,
         show=True,
+        xlim=None,
+        ylim=None,
     ):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
@@ -586,8 +588,9 @@ class Shoreline(Geodata):
         )
 
         border = 0.10 * (xmax - xmin)
-        plt.xlim(xmin - border, xmax + border)
-        plt.ylim(ymin - border, ymax + border)
+        if ax is None:
+            plt.xlim(xmin - border, xmax + border)
+            plt.ylim(ymin - border, ymax + border)
 
         ax.add_patch(rect)
 

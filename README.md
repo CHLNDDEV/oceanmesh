@@ -132,13 +132,12 @@ shoreline.plot(
 # which will be used for meshing later on.
 sdf = om.signed_distance_function(shoreline)
 ```
-![Figure_1](https://user-images.githubusercontent.com/18619644/132995972-4b1cac4a-c898-4de7-9e6a-205c91c06eee.png)
-
+![Figure_1](https://user-images.githubusercontent.com/18619644/133544070-2d0f2552-c29a-4c44-b0aa-d3649541af4d.png)
 
 DEMs are used to build some mesh size functions (e.g., wavelength, enforcing size bounds, enforce maximum Courant bounds) but are not essential for mesh generation purposes. The DEM used below 'Eastcoast.nc' was created using the Python package [elevation](https://github.com/bopen/elevation) with the following command:
 <!--pytest-codeblocks:skip-->
 ```
-eio clip -o EastCoast.nc --bounds -74.85 40.4 -73.75 41
+eio clip - o EastCoast.nc --bounds -74.4 40.2 -73.4 41.2
 ```
 This data is a clip from the [SRTM30 m](https://lpdaac.usgs.gov/products/srtmgl1nv003/) elevation dataset.
 
@@ -157,14 +156,13 @@ dem = om.DEM(fdem)
 dem.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
-    title="SRTM 90m",
+    title="SRTM 30m",
     cbarlabel="elevation (meters)",
     vmin=-10,  # minimum elevation value in plot
     vmax=10,  # maximum elevation value in plot
 )
 ```
-![Figure_2](https://user-images.githubusercontent.com/18619644/132996005-3a6b7e54-fea0-4b46-a772-b47f1d4cdb91.png)
-
+![Figure_2](https://user-images.githubusercontent.com/18619644/133544110-44497a6b-4a5a-482c-9447-cdc2f3663f17.png)
 
 Building mesh sizing functions
 ------------------------------
@@ -183,9 +181,16 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 shoreline = om.Shoreline(fname, bbox, min_edge_length)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
-edge_length.plot()
+ax=edge_length.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="Distance sizing function",
+    cbarlabel="mesh size (degrees)",
+    hold=True,
+)
+shoreline.plot(ax=ax)
 ```
-![Figure_3](https://user-images.githubusercontent.com/18619644/132996104-d44beb00-df5c-4cbf-b4e4-bc5df5d79d95.png)
+![Figure_3](https://user-images.githubusercontent.com/18619644/133544111-314cb668-7fd2-45db-b754-4dc204617628.png)
 
 One major drawback of the distance mesh size function is that the minimum mesh size will be placed evenly along straight stretches of shoreline. If the distance mesh size function generates too many vertices (or your application can tolerate it), a feature mesh size function that places resolution according to the geometric width of the shoreline should be employed instead ([Conroy et al., 2012](https://link.springer.com/article/10.1007/s10236-012-0574-0);[Koko, 2015](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html).
 
@@ -200,15 +205,18 @@ shoreline = om.Shoreline(fname, bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 # Visualize the medial points
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
-edge_length.plot(
+ax = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function",
     cbarlabel="mesh size (degrees)",
+    hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
 )
+shoreline.plot(ax=ax)
 ```
-![Figure_4](https://user-images.githubusercontent.com/18619644/132996371-6295e8ec-a1a4-42fa-9838-98ec86b24a92.png) | ![Figure_5](https://user-images.githubusercontent.com/18619644/132996388-1fb45ebc-ec6f-4f16-be24-5628d609243e.png)
-
+![Figure_4](https://user-images.githubusercontent.com/18619644/133544112-d5fde284-6839-4e45-901d-c81bca9b8000.png)
 
 ### Enforcing mesh size gradation
 
@@ -224,14 +232,19 @@ shoreline = om.Shoreline(fname, bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
-edge_length.plot(
+ax=edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function with gradation bound",
     cbarlabel="mesh size (degrees)",
+    hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
 )
+shoreline.plot(ax=ax)
+
 ```
-![Figure_6](https://user-images.githubusercontent.com/18619644/133005238-8110e376-3661-4f31-aca5-9e3533e7665e.png)
+![Figure_5](https://user-images.githubusercontent.com/18619644/133544114-cedc0750-b33a-4b7c-9fa5-d14b4e169c40.png)
 
 ### Wavelength-to-gridscale
 
@@ -249,7 +262,7 @@ bbox = dem.bbox
 shoreline = om.Shoreline(fname, bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
-edge_length2 = om.wavelength_sizing_function(dem, wl=30)
+edge_length2 = om.wavelength_sizing_function(dem, wl=100)
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
@@ -259,10 +272,12 @@ ax = edge_length.plot(
     title="Feature sizing function + wavelength + gradation bound",
     cbarlabel="mesh size (degrees)",
     hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
 )
 shoreline.plot(ax=ax)
 ```
-![Figure_7](https://user-images.githubusercontent.com/18619644/133006098-90632889-f753-4a54-b5a4-4217ed627d6f.png)
+![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
 
 
 Cleaning up the mesh
@@ -377,9 +392,9 @@ el2 = om.distance_sizing_function(s2)
 points, cells = om.generate_multiscale_mesh(
     [sdf1, sdf2],
     [el1, el2],
-    blend_width=5e3,
-    blend_polynomial=3,
-    blend_nnear=16,
+    blend_width=5e3, # width of blend zone around nest
+    blend_polynomial=3, # inverse distance weighting (IWD) polynomial
+    blend_nnear=16, # number of points to consider in IDW
 )
 
 # remove degenerate mesh faces and other common problems in the mesh
