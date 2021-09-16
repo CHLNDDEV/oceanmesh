@@ -44,6 +44,7 @@ def test_edgefx_elevation_bounds():
     edge_length = om.enforce_mesh_size_bounds_elevation(edge_length, dem, bounds)
     edge_length.plot()
 
+
 def test_edgefx_medial_axis():
 
     bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
@@ -52,7 +53,9 @@ def test_edgefx_medial_axis():
     sdf = om.signed_distance_function(shoreline)
 
     # Visualize the medial points
-    edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
+    edge_length = om.feature_sizing_function(
+        shoreline, sdf, max_edge_length=5e3, plot=True
+    )
     ax = edge_length.plot(
         xlabel="longitude (WGS84 degrees)",
         ylabel="latitude (WGS84 degrees)",
