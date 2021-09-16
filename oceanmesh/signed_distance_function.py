@@ -222,7 +222,7 @@ def signed_distance_function(shoreline, verbose=True):
         # compute dist to shoreline
         try:
             d, _ = tree.query(x, k=1, workers=-1)
-        except:
+        except (Exception,):
             d, _ = tree.query(x, k=1, n_jobs=-1)
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
