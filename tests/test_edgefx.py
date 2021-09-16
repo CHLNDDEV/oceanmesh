@@ -35,7 +35,7 @@ def test_edgefx_elevation_bounds():
 
     dem = om.DEM(dfname, bbox)
 
-    sho = om.Shoreline(fname, bbox, 1e2)
+    sho = om.Shoreline(fname, bbox, 500)
     sho.plot()
 
     edge_length = om.distance_sizing_function(sho)

@@ -177,7 +177,11 @@ def distance_sizing_function(
     # find location of points on grid
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
-    dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        print("0-level set not found in domain")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
@@ -284,7 +288,7 @@ def feature_sizing_function(
     tree = scipy.spatial.cKDTree(medial_points)
     try:
         dMA, _ = tree.query(qpts, k=1, workers=-1)
-    except:
+    except (Exception,):
         dMA, _ = tree.query(qpts, k=1, n_jobs=-1)
     dMA = dMA.reshape(*dis.shape)
     W = dMA + np.abs(dis)
@@ -316,7 +320,7 @@ def _prune(points, dx):
     # build a KDtree w/ the medial points
     try:
         dmed, _ = tree.query(points, k=4, workers=-1)
-    except:
+    except (Exception,):
         dmed, _ = tree.query(points, k=4, n_jobs=-1)
     prune = np.where(
         (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)

@@ -200,7 +200,7 @@ class Grid:
             tree = scipy.spatial.cKDTree(lonlat)
         try:
             dist, idx = tree.query(points, k=1, workers=-1)
-        except:
+        except (Exception,):
             dist, idx = tree.query(points, k=1, n_jobs=-1)
         return np.unravel_index(idx, lon.shape)
 

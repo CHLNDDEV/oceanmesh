@@ -192,7 +192,7 @@ shoreline.plot(ax=ax)
 ```
 ![Figure_3](https://user-images.githubusercontent.com/18619644/133544111-314cb668-7fd2-45db-b754-4dc204617628.png)
 
-One major drawback of the distance mesh size function is that the minimum mesh size will be placed evenly along straight stretches of shoreline. If the distance mesh size function generates too many vertices (or your application can tolerate it), a feature mesh size function that places resolution according to the geometric width of the shoreline should be employed instead ([Conroy et al., 2012](https://link.springer.com/article/10.1007/s10236-012-0574-0);[Koko, 2015](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html).
+One major drawback of the distance mesh size function is that the minimum mesh size will be placed evenly along straight stretches of shoreline. If the distance mesh size function generates too many vertices (or your application can tolerate it), a feature mesh size function that places resolution according to the geometric width of the shoreline should be employed instead ([Conroy et al., 2012](https://link.springer.com/article/10.1007/s10236-012-0574-0);[Koko, 2015](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html)).
 
 In this function, the feature size (e.g., the width of channels and/or tributaries and the radius of curvature of the shoreline) along the coast is estimated by computing distances to the medial axis of the shoreline geometry. In `oceanmesh`, we have implemented an approximate medial axis method closely following [Koko, (2015)](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html).
 
