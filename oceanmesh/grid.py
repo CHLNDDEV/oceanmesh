@@ -198,7 +198,10 @@ class Grid:
         if tree is None:
             lonlat = np.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
-        dist, idx = tree.query(points, k=1, workers=-1)
+        try:
+            dist, idx = tree.query(points, k=1, workers=-1)
+        except:
+            dist, idx = tree.query(points, k=1, n_jobs=-1)
         return np.unravel_index(idx, lon.shape)
 
     def interpolate_to(self, grid2, method="linear"):

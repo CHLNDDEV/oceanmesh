@@ -282,7 +282,10 @@ def feature_sizing_function(
 
     # calculate distance to medial axis
     tree = scipy.spatial.cKDTree(medial_points)
-    dMA, _ = tree.query(qpts, k=1, workers=-1)
+    try:
+        dMA, _ = tree.query(qpts, k=1, workers=-1)
+    except:
+        dMA, _ = tree.query(qpts, k=1, n_jobs=-1)
     dMA = dMA.reshape(*dis.shape)
     W = dMA + np.abs(dis)
     feature_size = (2 * W) / r
@@ -311,7 +314,10 @@ def _prune(points, dx):
     tree = scipy.spatial.cKDTree(points)
     co = 0.75 * np.sqrt(2)
     # build a KDtree w/ the medial points
-    dmed, _ = tree.query(points, k=4, workers=-1)
+    try:
+        dmed, _ = tree.query(points, k=4, workers=-1)
+    except:
+        dmed, _ = tree.query(points, k=4, n_jobs=-1)
     prune = np.where(
         (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)
     )
