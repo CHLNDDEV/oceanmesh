@@ -220,7 +220,10 @@ def signed_distance_function(shoreline, verbose=True):
         # are points inside the shoreline?
         in_shoreline, _ = inpoly2(x, poly, e)
         # compute dist to shoreline
-        d, _ = tree.query(x, k=1, workers=-1)
+        try:
+            d, _ = tree.query(x, k=1, workers=-1)
+        except (Exception,):
+            d, _ = tree.query(x, k=1, n_jobs=-1)
         # d is signed negative if inside the
         # intersection of two areas and vice versa.
         cond = np.logical_and(in_shoreline, in_boubox)

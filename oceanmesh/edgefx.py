@@ -1,6 +1,7 @@
 import warnings
 
-import numpy
+import numpy as np
+import scipy.spatial
 import skfmm
 from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
@@ -14,6 +15,7 @@ __all__ = [
     "distance_sizing_function",
     "wavelength_sizing_function",
     "multiscale_sizing_function",
+    "feature_sizing_function",
 ]
 
 
@@ -62,10 +64,10 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
         assert min_h < max_h, error_sz
         assert min_z < max_z, error_elev
         # get grid values to enforce the bounds
-        upper_indices = numpy.where(
+        upper_indices = np.where(
             (tmpz > min_z) & (tmpz <= max_z) & (grid.values >= max_h)
         )
-        lower_indices = numpy.where(
+        lower_indices = np.where(
             (tmpz > min_z) & (tmpz <= max_z) & (grid.values < min_h)
         )
 
@@ -110,7 +112,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     sz = (sz[0], sz[1], 1)
     cell_size = cell_size.flatten("F")
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
-    tmp = numpy.reshape(tmp, (sz[0], sz[1]), "F")
+    tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
     grid_limited = Grid(
         bbox=grid.bbox,
         dx=grid.dx,
@@ -150,21 +152,22 @@ def distance_sizing_function(
         dx=shoreline.h0 * coarsen,
         hmin=shoreline.h0,
         extrapolate=True,
+        values=0.0,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
-    phi = numpy.ones(shape=(grid.nx, grid.ny))
+    phi = np.ones(shape=(grid.nx, grid.ny))
     lon, lat = grid.create_grid()
-    points = numpy.vstack((shoreline.inner, shoreline.mainland))
+    points = np.vstack((shoreline.inner, shoreline.mainland))
     # remove shoreline components outside the shoreline.boubox
     boubox = shoreline.boubox
     e_box = edges.get_poly_edges(boubox)
-    mask = numpy.ones((grid.nx, grid.ny), dtype=bool)
+    mask = np.ones((grid.nx, grid.ny), dtype=bool)
     if len(points) > 0:
         try:
             in_boubox, _ = inpoly2(points, boubox, e_box)
             points = points[in_boubox]
 
-            qpts = numpy.column_stack((lon.flatten(), lat.flatten()))
+            qpts = np.column_stack((lon.flatten(), lat.flatten()))
             in_boubox, _ = inpoly2(qpts, shoreline.boubox, e_box)
             mask_indices = grid.find_indices(qpts[in_boubox, :], lon, lat)
             mask[mask_indices] = False
@@ -174,15 +177,156 @@ def distance_sizing_function(
     # find location of points on grid
     indices = grid.find_indices(points, lon, lat)
     phi[indices] = -1.0
-    dis = numpy.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        print("0-level set not found in domain")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
         max_edge_length /= 111e3  # assume the value is passed in meters
         tmp[tmp > max_edge_length] = max_edge_length
 
-    grid.values = numpy.ma.array(tmp, mask=mask)
+    grid.values = np.ma.array(tmp, mask=mask)
     grid.build_interpolant()
     return grid
+
+
+def feature_sizing_function(
+    shoreline,
+    signed_distance_function,
+    r=3,
+    max_edge_length=None,
+    verbose=True,
+    plot=False,
+):
+    """Mesh sizes vary proportional to the width or "thickness" of the shoreline
+    Implements roughly the approximate medial axis calculation from Eq. 7.1:
+
+    "A MATLAB MESH GENERATOR FOR THE TWO-DIMENSIONAL FINITE ELEMENT METHOD" by Jonas Koko
+
+    Parameters
+    ----------
+    shoreline: :class:`Shoreline`
+        Data processed from :class:`Shoreline`.
+    signed_distance_function: a function
+        A `signed_distance_function` object
+    r: float, optional
+        The number of times to divide the shoreline thickness/width to calculate
+        the local element size.
+    verbose: boolean, optional
+        Whether to write messages to the screen
+    plot: boolean, optional
+        Visualize the medial points ontop of the shoreline
+
+    Returns
+    -------
+    :class:`Grid` object
+        A sizing function that takes a point and returns a value
+
+    """
+
+    if verbose:
+        print("Building a feature sizing function...")
+    assert r > 0, "local feature size "
+    grid_calc = Grid(
+        bbox=shoreline.bbox,
+        dx=shoreline.h0 / 2,  # dx is half that of the original shoreline spacing
+        hmin=shoreline.h0,
+        values=0.0,
+        extrapolate=True,
+    )
+    grid = Grid(
+        bbox=shoreline.bbox,
+        dx=shoreline.h0,
+        hmin=shoreline.h0,
+        values=0.0,
+        extrapolate=True,
+    )
+    # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
+    phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
+    lon, lat = grid_calc.create_grid()
+    points = np.vstack((shoreline.inner, shoreline.mainland))
+    # find location of points on grid
+    indices = grid_calc.find_indices(points, lon, lat)
+    phi[indices] = -1.0
+    dis = np.abs(skfmm.distance(phi, [grid_calc.dx, grid_calc.dy]))
+    # calculate the sign
+    qpts = np.column_stack((lon.flatten(), lat.flatten()))
+    sgn = np.sign(signed_distance_function.eval(qpts))
+    sgn = sgn.reshape(*dis.shape)
+    dis *= sgn
+    gradx, grady = np.gradient(dis, grid_calc.dx, grid_calc.dy)
+    grad_mag = np.sqrt(gradx ** 2 + grady ** 2)
+    indicies_medial_points = np.where((grad_mag < 0.9) & (dis < -grid_calc.dx))
+    medial_points_x, medial_points_y = (
+        lon[indicies_medial_points],
+        lat[indicies_medial_points],
+    )
+    medial_points = np.column_stack((medial_points_x, medial_points_y))
+    # prune the points twice over to remove spurious medial points
+    # (seems to work better than once)
+    for _ in range(2):
+        medial_points = _prune(medial_points, grid_calc.dx)
+
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.plot(medial_points[:, 0], medial_points[:, 1], "r.", label="medial points")
+        plt.plot(points[:, 0], points[:, 1], "b-", label="shoreline boundaries")
+        plt.plot(
+            shoreline.boubox[:, 0],
+            shoreline.boubox[:, 1],
+            "k--",
+            label="bounding extents",
+        )
+        plt.gca().set_aspect("equal", adjustable="box")
+        plt.legend()
+        plt.show()
+
+    # calculate distance to medial axis
+    tree = scipy.spatial.cKDTree(medial_points)
+    try:
+        dMA, _ = tree.query(qpts, k=1, workers=-1)
+    except (Exception,):
+        dMA, _ = tree.query(qpts, k=1, n_jobs=-1)
+    dMA = dMA.reshape(*dis.shape)
+    W = dMA + np.abs(dis)
+    feature_size = (2 * W) / r
+
+    grid_calc.values = feature_size
+    grid_calc.build_interpolant()
+    # interpolate the finer grid used for calculations to the final coarser grid
+    grid = grid_calc.interpolate_to(grid)
+    if max_edge_length is not None:
+        max_edge_length /= 111e3  # assume the value is passed in meters
+        grid.values[grid.values > max_edge_length] = max_edge_length
+
+    grid.hmin = shoreline.h0
+    grid.extrapolate = True
+    grid.build_interpolant()
+    return grid
+
+
+def _prune(points, dx):
+    # Prune medial points
+    # Note: We want a line of points larger than around 7.
+    # This corresponds to having three points back or forward
+    # up the line. Let's check for those three closest points
+    # and ensure tehy are within about co*h0 distance from
+    # each other where co is the cutoff distance = 0.75*sqrt(2)
+    tree = scipy.spatial.cKDTree(points)
+    co = 0.75 * np.sqrt(2)
+    # build a KDtree w/ the medial points
+    try:
+        dmed, _ = tree.query(points, k=4, workers=-1)
+    except (Exception,):
+        dmed, _ = tree.query(points, k=4, n_jobs=-1)
+    prune = np.where(
+        (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)
+    )
+    points = np.delete(points, prune, axis=0)
+    return points
 
 
 def wavelength_sizing_function(
@@ -223,12 +367,12 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True)
-    tmpz[numpy.abs(tmpz) < 1] = 1
-    grid.values = period * numpy.sqrt(grav * numpy.abs(tmpz)) / wl
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0)
+    tmpz[np.abs(tmpz) < 1] = 1
+    grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
     grid.values /= 111e3  # transform to degrees
     if min_edgelength is None:
-        min_edgelength = numpy.amin(grid.values)
+        min_edgelength = np.amin(grid.values)
     grid.hmin = min_edgelength
     if max_edge_length is not None:
         max_edge_length /= 111e3
@@ -282,7 +426,7 @@ def multiscale_sizing_function(
                     f" function #{idx1}"
                 )
             _dx = finer.dx * 111e3
-            _blend_width = int(numpy.floor(blend_width / _dx))
+            _blend_width = int(np.floor(blend_width / _dx))
             finer.extrapolate = False
             new_coarse = finer.blend_into(
                 new_coarse, blend_width=_blend_width, p=p, nnear=nnear
@@ -300,7 +444,7 @@ def multiscale_sizing_function(
     # return the mesh size function to query during genertaion
     # NB: only keep the minimum value over all grids
     def func(qpts):
-        hmin = numpy.array([999999] * len(qpts))
+        hmin = np.array([999999] * len(qpts))
         for i, grid in enumerate(new_list_of_grids):
             if i == 0:
                 grid.extrapolate = True
@@ -308,7 +452,7 @@ def multiscale_sizing_function(
                 grid.extrapolate = False
             grid.build_interpolant()
             _hmin = grid.eval(qpts)
-            hmin = numpy.min(numpy.column_stack([_hmin, hmin]), axis=1)
+            hmin = np.min(np.column_stack([_hmin, hmin]), axis=1)
         return hmin
 
     return func, new_list_of_grids

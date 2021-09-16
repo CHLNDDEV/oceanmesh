@@ -10,6 +10,7 @@ from oceanmesh.edgefx import (
     distance_sizing_function,
     enforce_mesh_gradation,
     enforce_mesh_size_bounds_elevation,
+    feature_sizing_function,
     multiscale_sizing_function,
     wavelength_sizing_function,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "delete_faces_connected_to_one_face",
     "plot_mesh",
     "make_mesh_boundaries_traversable",
+    "feature_sizing_function",
     "enforce_mesh_size_bounds_elevation",
     "laplacian2",
     "delete_interior_faces",

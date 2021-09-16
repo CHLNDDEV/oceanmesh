@@ -5,15 +5,33 @@ oceanmesh: Automatic coastal ocean mesh generation
 [![CircleCI](https://circleci.com/gh/circleci/circleci-docs.svg?style=svg)](https://circleci.com/gh/CHLNDDEV/oceanmesh)
 [![CodeCov](https://codecov.io/gh/CHLNDDEV/oceanmesh/branch/master/graph/badge.svg)](https://codecov.io/gh/CHLNDDEV/oceanmesh)
 
-
-
 Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
+
+Table of contents
+=================
+
+<!--ts-->
+   * [oceanmesh](#oceanmesh)
+   * [Table of contents](#table-of-contents)
+   * [Functionality](#functionality)
+   * [Citing](#citing)
+   * [Questions or problems](#questions-or-problems)
+   * [Installation](#installation)
+   * [Examples](#examples)
+     * [Reading in geophysical data](#reading-in-geophysical-data)
+     * [Building mesh sizing functions](#building-mesh-sizing-functions)
+     * [Mesh generation](#mesh-generation)
+     * [Multiscale mesh generation](#multiscale-mesh-generation)
+     * [Cleaning up the mesh](#cleaning-up-the-mesh)
+   * [Testing](#testing)
+   * [License](#license)
+<!--te-->
 
 
 Functionality
 =============
 
-* A toolkit for the development of meshes and their auxiliary files that are used in the simulation of coastal ocean circulation. The software integrates mesh generation with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
+* A Python package for the development of unstructured triangular meshes that are used in the simulation of coastal ocean circulation. The software integrates mesh generation directly with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
@@ -78,28 +96,18 @@ For example, to install:
 Examples
 ==========
 
-Build a simple mesh around New York, United States with a minimum element size of around 1 km expanding linear with distance from the shoreline to a maximum element size of 5 km.
+Reading in geophysical data
+---------------------------
+`oceanmesh` uses shoreline vector datasets (i.e., ESRI shapefiles) and digitial elevation models (DEMs) to construct mesh size functions and signed distance functions to adapt mesh resolution for complex and irregularly shaped coastal ocean domains.
 
-
-**Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
-
-![new_york](https://user-images.githubusercontent.com/18619644/132709756-1759ef99-f810-4edc-9710-66226e851a50.png)
-
+Shoreline datasets are necessary to build signed distance functions which define the meshing domain. Here we show how to download a world shoreline dataset referred to as [GSHHG](https://www.ngdc.noaa.gov/mgg/shorelines/) and read it into to `oceanmesh`.
 
 ```python
-
-import pathlib
 import zipfile
+
 import requests
 
-import meshio
-
-from oceanmesh import (Shoreline, delete_boundary_faces,
-                       delete_faces_connected_to_one_face,
-                       distance_sizing_function, generate_mesh, laplacian2,
-                       make_mesh_boundaries_traversable,
-                       signed_distance_function)
-
+import oceanmesh as om
 
 # Download and load the GSHHS shoreline
 url = "http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip"
@@ -110,6 +118,214 @@ with open(filename, "wb") as f:
 
 with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
     zip_ref.extractall("gshhg-shp-2.3.7")
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+# Specify and extent to read in and a minimum mesh size (in meters).
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+shoreline.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="shoreline boundaries",
+)
+# Using our shoreline, we create a signed distance function
+# which will be used for meshing later on.
+sdf = om.signed_distance_function(shoreline)
+```
+![Figure_1](https://user-images.githubusercontent.com/18619644/133544070-2d0f2552-c29a-4c44-b0aa-d3649541af4d.png)
+
+DEMs are used to build some mesh size functions (e.g., wavelength, enforcing size bounds, enforce maximum Courant bounds) but are not essential for mesh generation purposes. The DEM used below 'Eastcoast.nc' was created using the Python package [elevation](https://github.com/bopen/elevation) with the following command:
+<!--pytest-codeblocks:skip-->
+```
+eio clip - o EastCoast.nc --bounds -74.4 40.2 -73.4 41.2
+```
+This data is a clip from the [SRTM30 m](https://lpdaac.usgs.gov/products/srtmgl1nv003/) elevation dataset.
+
+```python
+import oceanmesh as om
+
+fdem = "datasets/EastCoast.nc"
+
+# Digital Elevation Models (DEM) can be read into oceanmesh in
+# either the NetCDF format or GeoTiff format provided they are
+# in geographic coordinates (WGS84)
+
+# If no extents are passed (i.e., the kwarg bbox), then the entire extent of the
+# DEM is read into memory
+dem = om.DEM(fdem)
+dem.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="SRTM 30m",
+    cbarlabel="elevation (meters)",
+    vmin=-10,  # minimum elevation value in plot
+    vmax=10,  # maximum elevation value in plot
+)
+```
+![Figure_2](https://user-images.githubusercontent.com/18619644/133544110-44497a6b-4a5a-482c-9447-cdc2f3663f17.png)
+
+Building mesh sizing functions
+------------------------------
+In `oceanmesh` mesh resolution can be controlled according to a variety of feature-driven geometric and topo-bathymetric functions. In this section, we briefly explain the major functions and present examples and code. Reasonable values for some of these mesh sizing functions and their affect on the numerical simulation of barotropic tides was investigated in [Roberts et. al, 2019](https://www.sciencedirect.com/science/article/abs/pii/S1463500319301222)
+
+All mesh size functions are defined on regular Caretesian grids. The properties of these grids are abstracted by the [Grid](https://github.com/CHLNDDEV/oceanmesh/blob/40baeeae313eb8ef285acc395c671c36c1b9605f/oceanmesh/grid.py#L33) class.
+
+### Distance and feature size
+
+A high degree of mesh refinement is often necessary near the shoreline boundary to capture its geometric complexity. If mesh resolution is poorly distributed, critical conveyances may be missed, leading to larger-scale errors in the nearshore circulation. Thus, a mesh size function that is equal to a user-defined minimum mesh size h0 along the shoreline boundary, growing as a linear function of the signed distance d from it, may be appropriate.
+
+```python
+import oceanmesh as om
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+edge_length = om.distance_sizing_function(shoreline, rate=0.15)
+ax=edge_length.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="Distance sizing function",
+    cbarlabel="mesh size (degrees)",
+    hold=True,
+)
+shoreline.plot(ax=ax)
+```
+![Figure_3](https://user-images.githubusercontent.com/18619644/133544111-314cb668-7fd2-45db-b754-4dc204617628.png)
+
+One major drawback of the distance mesh size function is that the minimum mesh size will be placed evenly along straight stretches of shoreline. If the distance mesh size function generates too many vertices (or your application can tolerate it), a feature mesh size function that places resolution according to the geometric width of the shoreline should be employed instead ([Conroy et al., 2012](https://link.springer.com/article/10.1007/s10236-012-0574-0);[Koko, 2015](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html)).
+
+In this function, the feature size (e.g., the width of channels and/or tributaries and the radius of curvature of the shoreline) along the coast is estimated by computing distances to the medial axis of the shoreline geometry. In `oceanmesh`, we have implemented an approximate medial axis method closely following [Koko, (2015)](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html).
+
+```python
+import oceanmesh as om
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
+# Visualize the medial points
+edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
+ax = edge_length.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="Feature sizing function",
+    cbarlabel="mesh size (degrees)",
+    hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
+)
+shoreline.plot(ax=ax)
+```
+![Figure_4](https://user-images.githubusercontent.com/18619644/133544112-d5fde284-6839-4e45-901d-c81bca9b8000.png)
+
+### Enforcing mesh size gradation
+
+Some mesh size functions will not produce smooth element size transitions when meshed and this can lead to problems with numerical simulation. All mesh size function can thus be graded such that neighboring mesh sizes are bounded above by a constant. Mesh grading edits coarser regions and preserves the finer mesh resolution zones.
+
+Repeating the above but applying a gradation rate of 15% produces the following:
+```python
+import oceanmesh as om
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
+edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
+edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
+ax=edge_length.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="Feature sizing function with gradation bound",
+    cbarlabel="mesh size (degrees)",
+    hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
+)
+shoreline.plot(ax=ax)
+
+```
+![Figure_5](https://user-images.githubusercontent.com/18619644/133544114-cedc0750-b33a-4b7c-9fa5-d14b4e169c40.png)
+
+### Wavelength-to-gridscale
+
+In shallow water theory, the wave celerity, and hence the wavelength λ, is proportional to the square root of the depth of the water column. This relationship indicates that more mesh resolution at shallower depths is required to resolve waves that are shorter than those in deep water. With this considered, a mesh size function hwl that ensures a certain number of elements are present per wavelength (usually of the M2-dominant semi-diurnal tidal species) can be deduced.
+
+In this snippet, as before we compute the feature size function, but now we also compute the wavelength-to-gridscale sizing function using the SRTM dataset and compute the minimum of all the functions before grading. We discretize the wavelength of the M2 by 30 elements (e.g., wl=30)
+```python
+import oceanmesh as om
+
+fdem = "datasets/EastCoast.nc"
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+min_edge_length = 1e3
+dem = om.DEM(fdem)
+bbox = dem.bbox
+shoreline = om.Shoreline(fname, bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
+edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
+edge_length2 = om.wavelength_sizing_function(dem, wl=100)
+# Compute the minimum of the sizing functions
+edge_length = om.compute_minimum([edge_length1, edge_length2])
+edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
+ax = edge_length.plot(
+    xlabel="longitude (WGS84 degrees)",
+    ylabel="latitude (WGS84 degrees)",
+    title="Feature sizing function + wavelength + gradation bound",
+    cbarlabel="mesh size (degrees)",
+    hold=True,
+    xlim=[-74.3, -73.8],
+    ylim=[40.3, 40.8],
+)
+shoreline.plot(ax=ax)
+```
+![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
+
+
+Cleaning up the mesh
+--------------------
+
+After mesh generation has terminated, a secondary round of mesh improvement strategies is applied that is focused towards improving the geometrically worst-quality triangles that often occur near the boundary of the mesh and can make simulation impossible. Low-quality triangles can occur near the mesh boundary because the geospatial datasets used may contain features that have horizontal length scales smaller than the minimum mesh resolution. To handle this issue, a set of algorithms is applied that iteratively addresses the vertex connectivity problems. The application of the following mesh improvement strategies results in a simplified mesh boundary that conforms to the user-requested minimum element size.
+
+Topological defects in the mesh can be removed by ensuring that it is valid, defined as having the following properties:
+
+1. the vertices of each triangle are arranged in counterclockwise order;
+
+2. conformity (a triangle is not allowed to have a vertex of another triangle in its interior); and
+
+3. traversability (the number of boundary segments is equal to the number of boundary vertices, which guarantees a unique path along the mesh boundary).
+
+Here are some of the relevant codes to address these common problems.
+<!--pytest-codeblocks:skip-->
+```python
+# Address (1) above.
+points, cells = fix_mesh(points, cells)
+# Addresses (2)-(3) above. Remove degenerate mesh faces and other common problems in the mesh
+points, cells = make_mesh_boundaries_traversable(points, cells)
+# Remove elements (i.e., "faces") connected to only one channel
+# These typically occur in channels at or near the grid scale.
+points, cells = delete_faces_connected_to_one_face(points, cells)
+# Remove low quality boundary elements less than min_qual
+points, cells = delete_boundary_faces(points, cells, min_qual=0.15)
+# Apply a Laplacian smoother that preserves the element density
+points, cells = laplacian2(points, cells)
+```
+
+
+Mesh generation
+----------------
+Mesh generation is based on the [DistMesh algorithm](http://persson.berkeley.edu/distmesh/) and requires only a signed distance function and a mesh sizing function. These two functions can be defined through the previously elaborated commands above; however, they can also be straightforward functions that take an array of point coordinates and return the signed distance/desired mesh size.
+
+In this example, we demonstrate all of the above to build a mesh around New York, United States with an approximate minimum element size of around 1 km expanding linear with distance from the shoreline to an approximate maximum element size of 5 km.
+
+**Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
+
+```python
+import meshio
+from oceanmesh import (Shoreline, delete_boundary_faces,
+                       delete_faces_connected_to_one_face,
+                       distance_sizing_function, generate_mesh, laplacian2,
+                       make_mesh_boundaries_traversable,
+                       signed_distance_function)
+
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
@@ -143,11 +359,14 @@ meshio.write_points_cells(
 )
 ```
 
+![new_york](https://user-images.githubusercontent.com/18619644/132709756-1759ef99-f810-4edc-9710-66226e851a50.png)
 
-Areas of finer refinement can be incorporated seamlessly by using `generate_multiscale_mesh`. In this case, the user passes lists of signed distance and edge length functions. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM simulations.
+Multiscale mesh generation
+---------------------------
 
-![new_york_multiscale](https://user-images.githubusercontent.com/18619644/132708885-57357ade-be98-4692-a964-5b5f30d9a9f7.png)
+The major downside of the DistMesh algorithm is that it cannot handle regional domains with fine mesh refinement or variable datasets due to the intense memory requirements. The multiscale mesh generation technique addresses these problems and enables an arbitrary number of refinment zones to be incorporated seamlessy into the domain.
 
+Areas of finer refinement can be incorporated seamlessly by using the `generate_multiscale_mesh` function. In this case, the user passes lists of signed distance and edge length functions to the mesh generator but besides this the user API remains the same to the previous mesh generation example. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM numerical simulations through the parameters prefixed with "blend".
 
 ```python
 import meshio
@@ -173,14 +392,15 @@ el2 = om.distance_sizing_function(s2)
 points, cells = om.generate_multiscale_mesh(
     [sdf1, sdf2],
     [el1, el2],
-    blend_width=5e3,
-    blend_polynomial=3,
-    blend_nnear=16,
+    blend_width=5e3, # width of blend zone around nest
+    blend_polynomial=3, # inverse distance weighting (IWD) polynomial
+    blend_nnear=16, # number of points to consider in IDW
 )
 
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = om.make_mesh_boundaries_traversable(points, cells)
 
+# remove singly connected elements (elements connected to only one other element)
 points, cells = om.delete_faces_connected_to_one_face(points, cells)
 
 # remove poor boundary elements with quality < 15%
@@ -196,8 +416,9 @@ meshio.write_points_cells(
     file_format="vtk",
 )
 ```
+![new_york_multiscale](https://user-images.githubusercontent.com/18619644/132708885-57357ade-be98-4692-a964-5b5f30d9a9f7.png)
 
-See the `testing/` folder for more inspiration.
+See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 
 Testing
 ============
