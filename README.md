@@ -120,9 +120,11 @@ with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
     zip_ref.extractall("gshhg-shp-2.3.7")
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-# Specify and extent to read in and a minimum mesh size (in meters).
-bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
-shoreline = om.Shoreline(fname, bbox, min_edge_length)
+WKT = 4326 # WKT for WGS84 which is what the geospatial data is in
+# Specify and extent to read in and a minimum mesh size in the unit of the projected system
+extent = om.BoundingBox(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=WKT)
+min_edge_length = 0.01 # In the units of the projected space!
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=WKT) # NB: the Shoreline class assumes WGS84:4326
 shoreline.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -152,7 +154,8 @@ fdem = "datasets/EastCoast.nc"
 
 # If no extents are passed (i.e., the kwarg bbox), then the entire extent of the
 # DEM is read into memory
-dem = om.DEM(fdem)
+WKT = 4326
+dem = om.DEM(fdem, crs=WKT) # NB: the DEM class assumes data is in WGS84 if not specified
 dem.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -178,8 +181,10 @@ A high degree of mesh refinement is often necessary near the shoreline boundary 
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
-shoreline = om.Shoreline(fname, bbox, min_edge_length)
+WKT = 4326  # EPSG:4326 or WGS84
+extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+min_edge_length = 0.01  # minimum mesh size in domain in WKT
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
 ax=edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
@@ -200,11 +205,13 @@ In this function, the feature size (e.g., the width of channels and/or tributari
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
-shoreline = om.Shoreline(fname, bbox, min_edge_length)
+WKT = 4326  # EPSG:4326 or WGS84
+extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+min_edge_length = 0.01  # minimum mesh size in domain in WKT
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 # Visualize the medial points
-edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3, plot=True)
+edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05, plot=True)
 ax = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -227,10 +234,12 @@ Repeating the above but applying a gradation rate of 15% produces the following:
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+WKT = 4326  # EPSG:4326 or WGS84
+extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+min_edge_length = 0.01  # minimum mesh size in domain in WKT
 shoreline = om.Shoreline(fname, bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
-edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
+edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
 ax=edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
@@ -256,12 +265,14 @@ import oceanmesh as om
 
 fdem = "datasets/EastCoast.nc"
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-min_edge_length = 1e3
-dem = om.DEM(fdem)
+
+min_edge_length = 0.01
+
+dem = om.DEM(fdem, crs=4326)
 bbox = dem.bbox
 shoreline = om.Shoreline(fname, bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
-edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=5e3)
+edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length2 = om.wavelength_sizing_function(dem, wl=100)
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])

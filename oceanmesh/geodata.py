@@ -10,11 +10,12 @@ import shapely.geometry
 import shapely.validation
 from rasterio.windows import from_bounds
 
+from . import BoundingBox
 from .grid import Grid
 
 nan = numpy.nan
 
-__all__ = ["Geodata", "Shoreline", "DEM"]
+__all__ = ["Shoreline", "DEM"]
 
 
 def _convert_to_array(lst):
@@ -403,35 +404,6 @@ def _is_path_ccw(_p):
     return detO > 0.0
 
 
-class Geodata:
-    """
-    Geographical data class that handles geographical data describing
-    shorelines in the form of a shapefile and topobathy in the form of a
-    digital elevation model (DEM).
-    """
-
-    def __init__(self, bbox):
-        self.bbox = bbox
-
-    @property
-    def bbox(self):
-        return self.__bbox
-
-    @bbox.setter
-    def bbox(self, value):
-        if value is None:
-            self.__bbox = value
-        else:
-            if isinstance(value, tuple):
-                if len(value) < 4:
-                    raise ValueError("bbox has wrong number of values.")
-                if value[1] < value[0]:
-                    raise ValueError("bbox has wrong values.")
-                if value[3] < value[2]:
-                    raise ValueError("bbox has wrong values.")
-            self.__bbox = value
-
-
 def _from_shapefile(filename, bbox, verbose):
     """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
     if not isinstance(bbox, tuple):
@@ -460,14 +432,16 @@ def _from_shapefile(filename, bbox, verbose):
     return _convert_to_array(polys)
 
 
-class Shoreline(Geodata):
+class Shoreline(BoundingBox):
     """
-    The shoreline class extends :class:`Geodata` to store data
+    The shoreline class extends :class:`BoundingBox` to store data
     that is later used to create signed distance functions to
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+    def __init__(
+        self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0, verbose=1
+    ):
 
         if isinstance(bbox, tuple):
             _boubox = numpy.asarray(_create_boubox(bbox))
@@ -482,10 +456,10 @@ class Shoreline(Geodata):
                 numpy.nanmax(_boubox[:, 1]),
             )
 
-        super().__init__(bbox)
+        super().__init__(bbox, crs)
 
         self.shp = shp
-        self.h0 = h0  # this converts meters -> wgs84 degees
+        self.h0 = h0
         self.inner = []
         self.outer = []
         self.mainland = []
@@ -546,7 +520,6 @@ class Shoreline(Geodata):
     def h0(self, value):
         if value <= 0:
             raise ValueError("h0 must be > 0")
-        value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
 
     def plot(
@@ -642,7 +615,7 @@ class DEM(Grid):
     parent class is a :class:`Grid`
     """
 
-    def __init__(self, dem, bbox=None, verbose=1):
+    def __init__(self, dem, crs=4326, bbox=None, verbose=1):
 
         basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"] or [".tif"]:
@@ -652,6 +625,6 @@ class DEM(Grid):
 
         self.dem = dem
         super().__init__(
-            bbox=bbox, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
+            bbox=bbox, crs=crs, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
         )
         super().build_interpolant()

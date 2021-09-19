@@ -3,6 +3,7 @@ import numpy as np
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
+from . import BoundingBox
 from .idw import Invdisttree
 
 
@@ -31,7 +32,7 @@ def compute_minimum(edge_lengths):
     return grid
 
 
-class Grid:
+class Grid(BoundingBox):
     """Abstracts a structured grid along with
     primitive operations (e.g., min, project, etc.) and
     stores data `values` defined at each grid point.
@@ -43,6 +44,8 @@ class Grid:
         spacing between grid points along x-axis
     dy: float, optional
         spacing grid grid points along y-axis
+    crs: pyproj.PROJ, optional
+        Well-known text (WKT)
     hmin: float, optional
         minimum grid spacing in domain
     values: scalar or array-like
@@ -64,7 +67,10 @@ class Grid:
             and returns a vector of values
     """
 
-    def __init__(self, bbox, dx, dy=None, hmin=None, values=None, extrapolate=False):
+    def __init__(
+        self, bbox, dx, dy=None, crs=4326, hmin=None, values=None, extrapolate=False
+    ):
+        super().__init__(bbox, crs)
         if dy is None:
             dy = dx
         self.bbox = bbox
@@ -97,23 +103,6 @@ class Grid:
         if value < 0:
             raise ValueError("Grid spacing (dy) must be > 0.0")
         self.__dy = value
-
-    @property
-    def bbox(self):
-        return self.__bbox
-
-    @bbox.setter
-    def bbox(self, value):
-        if value is None:
-            self.__bbox = value
-        else:
-            if len(value) < 4:
-                raise ValueError("bbox has wrong number of values.")
-            if value[1] < value[0]:
-                raise ValueError("bbox has wrong values.")
-            if value[3] < value[2]:
-                raise ValueError("bbox has wrong values.")
-            self.__bbox = value
 
     @property
     def values(self):

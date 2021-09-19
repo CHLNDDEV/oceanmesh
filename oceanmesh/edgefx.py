@@ -79,7 +79,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
+def enforce_mesh_gradation(grid, gradation=0.15, verbose=True, crs=4326):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -119,13 +119,19 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
         values=tmp,
         hmin=grid.hmin,
         extrapolate=grid.extrapolate,
+        crs=crs,
     )
     grid_limited.build_interpolant()
     return grid_limited
 
 
 def distance_sizing_function(
-    shoreline, rate=0.15, max_edge_length=None, verbose=1, coarsen=1
+    shoreline,
+    rate=0.15,
+    max_edge_length=None,
+    verbose=1,
+    coarsen=1,
+    crs=4326,
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
     Parameters
@@ -153,6 +159,7 @@ def distance_sizing_function(
         hmin=shoreline.h0,
         extrapolate=True,
         values=0.0,
+        crs=crs,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = np.ones(shape=(grid.nx, grid.ny))
@@ -184,7 +191,6 @@ def distance_sizing_function(
         dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
-        max_edge_length /= 111e3  # assume the value is passed in meters
         tmp[tmp > max_edge_length] = max_edge_length
 
     grid.values = np.ma.array(tmp, mask=mask)
@@ -199,6 +205,7 @@ def feature_sizing_function(
     max_edge_length=None,
     verbose=True,
     plot=False,
+    crs=4326,
 ):
     """Mesh sizes vary proportional to the width or "thickness" of the shoreline
     Implements roughly the approximate medial axis calculation from Eq. 7.1:
@@ -235,6 +242,7 @@ def feature_sizing_function(
         hmin=shoreline.h0,
         values=0.0,
         extrapolate=True,
+        crs=crs,
     )
     grid = Grid(
         bbox=shoreline.bbox,
@@ -242,6 +250,7 @@ def feature_sizing_function(
         hmin=shoreline.h0,
         values=0.0,
         extrapolate=True,
+        crs=crs,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
@@ -299,7 +308,6 @@ def feature_sizing_function(
     # interpolate the finer grid used for calculations to the final coarser grid
     grid = grid_calc.interpolate_to(grid)
     if max_edge_length is not None:
-        max_edge_length /= 111e3  # assume the value is passed in meters
         grid.values[grid.values > max_edge_length] = max_edge_length
 
     grid.hmin = shoreline.h0
@@ -335,6 +343,7 @@ def wavelength_sizing_function(
     min_edgelength=None,
     max_edge_length=None,
     verbose=True,
+    crs=4326,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
@@ -367,15 +376,15 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0)
+    grid = Grid(
+        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
+    )
     tmpz[np.abs(tmpz) < 1] = 1
     grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
-    grid.values /= 111e3  # transform to degrees
     if min_edgelength is None:
         min_edgelength = np.amin(grid.values)
     grid.hmin = min_edgelength
     if max_edge_length is not None:
-        max_edge_length /= 111e3
         grid.values[grid.values > max_edge_length] = max_edge_length
     grid.build_interpolant()
     return grid
@@ -425,6 +434,7 @@ def multiscale_sizing_function(
                     f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
+            # TODO handle transform to meters (if not in meters)
             _dx = finer.dx * 111e3
             _blend_width = int(np.floor(blend_width / _dx))
             finer.extrapolate = False
