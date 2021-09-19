@@ -620,7 +620,13 @@ class DEM(Grid):
             raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
         self.dem = dem
-        super().__init__(bbox=bbox, crs=crs, dx=reso[0], dy=np.abs(reso[1]), values=np.rot90(topobathy, 3))
+        super().__init__(
+            bbox=bbox,
+            crs=crs,
+            dx=reso[0],
+            dy=np.abs(reso[1]),
+            values=np.rot90(topobathy, 3),
+        )
         super().build_interpolant()
 
     @staticmethod
