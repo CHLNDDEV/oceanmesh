@@ -120,11 +120,13 @@ with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
     zip_ref.extractall("gshhg-shp-2.3.7")
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-WKT = 4326 # WKT for WGS84 which is what the geospatial data is in
-# Specify and extent to read in and a minimum mesh size in the unit of the projected system
-extent = om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01 # In the units of the projected space!
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=WKT) # NB: the Shoreline class assumes WGS84:4326
+EPSG = 4326  # EPSG code for WGS84 which is what you want to mesh in
+# Specify and extent to read in and a minimum mesh size in the unit of the projection
+extent = om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # In the units of the projection!
+shoreline = om.Shoreline(
+    fname, extent.bbox, min_edge_length, crs=EPSG
+)  # NB: the Shoreline class assumes WGS84:4326 if not specified
 shoreline.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -153,9 +155,11 @@ fdem = "datasets/EastCoast.nc"
 # in geographic coordinates (WGS84)
 
 # If no extents are passed (i.e., the kwarg bbox), then the entire extent of the
-# DEM is read into memory
-WKT = 4326
-dem = om.DEM(fdem, crs=WKT) # NB: the DEM class assumes data is in WGS84 if not specified
+# DEM is read into memory.
+EPSG = 4326
+dem = om.DEM(
+    fdem, crs=EPSG
+)
 dem.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -181,12 +185,12 @@ A high degree of mesh refinement is often necessary near the shoreline boundary 
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-WKT = 4326  # EPSG:4326 or WGS84
-extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01  # minimum mesh size in domain in WKT
+EPSG = 4326  # EPSG:4326 or WGS84
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # minimum mesh size in domain in projection
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
-ax=edge_length.plot(
+ax = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Distance sizing function",
@@ -205,13 +209,15 @@ In this function, the feature size (e.g., the width of channels and/or tributari
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-WKT = 4326  # EPSG:4326 or WGS84
-extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01  # minimum mesh size in domain in WKT
+EPSG = 4326  # EPSG:4326 or WGS84
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # minimum mesh size in domain in projection
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 # Visualize the medial points
-edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05, plot=True)
+edge_length = om.feature_sizing_function(
+    shoreline, sdf, max_edge_length=0.05, plot=True
+)
 ax = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -234,14 +240,14 @@ Repeating the above but applying a gradation rate of 15% produces the following:
 import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-WKT = 4326  # EPSG:4326 or WGS84
-extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01  # minimum mesh size in domain in WKT
+EPSG = 4326  # EPSG:4326 or WGS84
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # minimum mesh size in domain in projection
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
-ax=edge_length.plot(
+ax = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function with gradation bound",
@@ -251,7 +257,6 @@ ax=edge_length.plot(
     ylim=[40.3, 40.8],
 )
 shoreline.plot(ax=ax)
-
 ```
 ![Figure_5](https://user-images.githubusercontent.com/18619644/133544114-cedc0750-b33a-4b7c-9fa5-d14b4e169c40.png)
 
@@ -330,41 +335,36 @@ In this example, we demonstrate all of the above to build a mesh around New York
 
 ```python
 import meshio
-from oceanmesh import (Shoreline, delete_boundary_faces,
-                       delete_faces_connected_to_one_face,
-                       distance_sizing_function, generate_mesh, laplacian2,
-                       make_mesh_boundaries_traversable,
-                       signed_distance_function, Region)
-
+import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
-WKT = 4326  # EPSG:4326 or WGS84
-extent = Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01  # minimum mesh size in domain in WKT
+EPSG = 4326  # EPSG:4326 otherwise known as WGS84
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # minimum mesh size in domain in projection
 
-shore = Shoreline(fname, bbox, min_edge_length)
+shore = om.Shoreline(fname, extent.bbox, min_edge_length)
 
-edge_length = distance_sizing_function(shore, max_edge_length=0.05)
+edge_length = om.distance_sizing_function(shore, max_edge_length=0.05)
 
-domain = signed_distance_function(shore)
+domain = om.signed_distance_function(shore)
 
-points, cells = generate_mesh(domain, edge_length)
+points, cells = om.generate_mesh(domain, edge_length)
 
 # remove degenerate mesh faces and other common problems in the mesh
-points, cells = make_mesh_boundaries_traversable(points, cells)
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
 
-points, cells = delete_faces_connected_to_one_face(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
 
 # remove low quality boundary elements less than 15%
-points, cells = delete_boundary_faces(points, cells, min_qual=0.15)
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
 
 # apply a Laplacian smoother
-points, cells = laplacian2(points, cells)
+points, cells = om.laplacian2(points, cells)
 
 # write the mesh with meshio
 meshio.write_points_cells(
-    "simple_new_york.vtk",
+    "new_york.vtk",
     points,
     [("triangle", cells)],
     file_format="vtk",
@@ -387,13 +387,13 @@ import oceanmesh as om
 
 fname1 = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
-WKT = 4326  # EPSG:4326 or WGS84
-extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
-min_edge_length = 0.01  # minimum mesh size in domain in WKT
+EPSG = 4326  # EPSG:4326 or WGS84
+extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length1 = 0.01  # minimum mesh size in domain in projection
 
 bbox2, min_edge_length2 = (-74.85, -73.75, 40.4, 41), 50.0
-extent2 = om.Region(extent=(-74.85, -73.75, 40.4, 41.00), crs=WKT)
-min_edge_length = 4.6e-4 # minimum mesh size in domain in WKT
+extent2 = om.Region(extent=(-74.85, -73.75, 40.4, 41.00), crs=EPSG)
+min_edge_length2 = 4.6e-4  # minimum mesh size in domain in projection
 
 s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1)
 sdf1 = om.signed_distance_function(s1)
@@ -408,9 +408,9 @@ el2 = om.distance_sizing_function(s2)
 points, cells = om.generate_multiscale_mesh(
     [sdf1, sdf2],
     [el1, el2],
-    blend_width=5e3, # width of blend zone around nest
-    blend_polynomial=3, # inverse distance weighting (IWD) polynomial
-    blend_nnear=16, # number of points to consider in IDW
+    blend_width=5e3,  # width of blend zone around nest
+    blend_polynomial=3,  # inverse distance weighting (IWD) polynomial
+    blend_nnear=16,  # number of points to consider in IDW
 )
 
 # remove degenerate mesh faces and other common problems in the mesh

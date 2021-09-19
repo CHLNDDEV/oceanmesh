@@ -434,8 +434,13 @@ def multiscale_sizing_function(
                     f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
                     f" function #{idx1}"
                 )
-            # TODO handle transform to meters (if not in meters)
-            _dx = finer.dx * 111e3
+            _wkt = finer.crs.to_dict()
+            if "units" in _wkt:
+                _dx = finer.dx
+            else:
+                # it must be degrees?
+                print("in here")
+                _dx = finer.dx * 111e3
             _blend_width = int(np.floor(blend_width / _dx))
             finer.extrapolate = False
             new_coarse = finer.blend_into(

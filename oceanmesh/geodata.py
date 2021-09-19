@@ -5,11 +5,10 @@ import geopandas as gpd
 import matplotlib.path as mpltPath
 import numpy as np
 import numpy.linalg
-import rasterio
+import rioxarray as rxr
 import shapely.geometry
 import shapely.validation
 from pyproj import CRS
-from rasterio.windows import from_bounds
 
 from .grid import Grid
 from .region import Region
@@ -438,7 +437,7 @@ class Shoreline(Region):
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
-        polys = self._from_shapefile(verbose)
+        polys = self._read(verbose)
 
         polys = _smooth_shoreline(polys, self.refinements, verbose)
 
@@ -504,7 +503,7 @@ class Shoreline(Region):
             gdf = gdf.to_crs(dst_crs)
         return gdf
 
-    def _from_shapefile(self, verbose):
+    def _read(self, verbose):
         """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
         if not isinstance(self.bbox, tuple):
             _bbox = (
@@ -607,26 +606,6 @@ class Shoreline(Region):
         return ax
 
 
-def _from_file(filename, bbox, verbose):
-    """Read in a digitial elevation model from a NetCDF or GeoTif file"""
-
-    if verbose:
-        print(f"Reading in {filename}")
-
-    with rasterio.open(filename) as r:
-
-        if bbox is None:
-            bbox = (
-                r.bounds.left,
-                r.bounds.right,
-                r.bounds.bottom,
-                r.bounds.top,
-            )
-        topobathy = r.read(1, window=from_bounds(*bbox, r.transform))
-
-    return topobathy, r.res, bbox
-
-
 class DEM(Grid):
     """Digitial elevation model read in from a tif or NetCDF file
     parent class is a :class:`Grid`
@@ -636,12 +615,43 @@ class DEM(Grid):
 
         basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"] or [".tif"]:
-            topobathy, reso, bbox = _from_file(dem, bbox, verbose)
+            topobathy, reso, bbox = self._read(dem, bbox, crs, verbose)
         else:
             raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
         self.dem = dem
-        super().__init__(
-            bbox=bbox, crs=crs, dx=reso[0], dy=reso[1], values=np.rot90(topobathy, 3)
-        )
+        super().__init__(bbox=bbox, crs=crs, dx=reso[0], dy=np.abs(reso[1]), values=np.rot90(topobathy, 3))
         super().build_interpolant()
+
+    @staticmethod
+    def transform_to(xry, dst_crs):
+        """Transform xarray ``xry`` representing
+        a raster to dst_crs
+        """
+        dst_crs = CRS.from_user_input(dst_crs)
+        if not xry.crs.equals(dst_crs):
+            print(f"Reprojecting raster from {xry.crs} to {dst_crs}")
+            xry = xry.rio.reproject(dst_crs)
+        return xry
+
+    def _read(self, filename, bbox, crs, verbose):
+        """Read in a digitial elevation model from a NetCDF or GeoTif file"""
+
+        if verbose:
+            print(f"Reading in {filename}")
+
+        with rxr.open_rasterio(filename) as r:
+            # warp/reproject it if necessary
+            r = self.transform_to(r, crs)
+            # entire DEM is read in
+            if bbox is None:
+                bnds = r.rio.bounds()
+                bbox = (bnds[0], bnds[2], bnds[1], bnds[3])
+            else:
+                # then we clip the DEM to the box
+                r = r.rio.clip_box(
+                    minx=bbox[0], miny=bbox[2], maxx=bbox[1], maxy=bbox[3]
+                )
+            topobathy = r.data[0]
+
+            return topobathy, r.rio.resolution(), bbox
