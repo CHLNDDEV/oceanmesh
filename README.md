@@ -122,7 +122,7 @@ with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 WKT = 4326 # WKT for WGS84 which is what the geospatial data is in
 # Specify and extent to read in and a minimum mesh size in the unit of the projected system
-extent = om.BoundingBox(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=WKT)
+extent = om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01 # In the units of the projected space!
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=WKT) # NB: the Shoreline class assumes WGS84:4326
 shoreline.plot(
@@ -182,7 +182,7 @@ import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 WKT = 4326  # EPSG:4326 or WGS84
-extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01  # minimum mesh size in domain in WKT
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
@@ -206,7 +206,7 @@ import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 WKT = 4326  # EPSG:4326 or WGS84
-extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01  # minimum mesh size in domain in WKT
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
@@ -235,7 +235,7 @@ import oceanmesh as om
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 WKT = 4326  # EPSG:4326 or WGS84
-extent = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01  # minimum mesh size in domain in WKT
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
@@ -334,18 +334,18 @@ from oceanmesh import (Shoreline, delete_boundary_faces,
                        delete_faces_connected_to_one_face,
                        distance_sizing_function, generate_mesh, laplacian2,
                        make_mesh_boundaries_traversable,
-                       signed_distance_function, BoundingBox)
+                       signed_distance_function, Region)
 
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
 WKT = 4326  # EPSG:4326 or WGS84
-extent = BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+extent = Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01  # minimum mesh size in domain in WKT
 
 shore = Shoreline(fname, bbox, min_edge_length)
 
-edge_length = distance_sizing_function(shore, max_edge_length=0.05) 
+edge_length = distance_sizing_function(shore, max_edge_length=0.05)
 
 domain = signed_distance_function(shore)
 
@@ -388,11 +388,11 @@ import oceanmesh as om
 fname1 = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
 WKT = 4326  # EPSG:4326 or WGS84
-extent1 = om.BoundingBox(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
+extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=WKT)
 min_edge_length = 0.01  # minimum mesh size in domain in WKT
 
 bbox2, min_edge_length2 = (-74.85, -73.75, 40.4, 41), 50.0
-extent2 = om.BoundingBox(extent=(-74.85, -73.75, 40.4, 41.00), crs=WKT)
+extent2 = om.Region(extent=(-74.85, -73.75, 40.4, 41.00), crs=WKT)
 min_edge_length = 4.6e-4 # minimum mesh size in domain in WKT
 
 s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1)

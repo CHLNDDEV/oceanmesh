@@ -3,8 +3,8 @@ import numpy as np
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
-from . import BoundingBox
 from .idw import Invdisttree
+from .region import Region
 
 
 def compute_minimum(edge_lengths):
@@ -32,7 +32,7 @@ def compute_minimum(edge_lengths):
     return grid
 
 
-class Grid(BoundingBox):
+class Grid(Region):
     """Abstracts a structured grid along with
     primitive operations (e.g., min, project, etc.) and
     stores data `values` defined at each grid point.
