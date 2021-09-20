@@ -49,9 +49,6 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
             " max_mesh_size, min_elevation_bound, max_elevation_bound]"
         )
         min_h, max_h, min_z, max_z = bound
-        # for now do this crude conversion
-        min_h /= 111e3
-        max_h /= 111e3
         # sanity checks
         error_sz = (
             f"For bound number {i} the maximum size bound {max_h} is smaller"
