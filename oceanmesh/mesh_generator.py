@@ -282,7 +282,6 @@ def generate_mesh(domain, edge_length, **kwargs):
             for fix in pfix:
                 ifix.append(_closest_node(fix, p))
 
-
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
 
