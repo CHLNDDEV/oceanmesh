@@ -495,5 +495,5 @@ def _get_topology(dt):
 def _closest_node(node, nodes):
     nodes = np.asarray(nodes)
     deltas = nodes - node
-    dist_2  np.einsum("ij,i->i", deltas, deltas)
+    dist_2 = np.einsum("ij,i->i", deltas, deltas)
     return np.argmin(dist_2)
