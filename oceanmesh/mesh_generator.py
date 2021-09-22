@@ -276,6 +276,13 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Get the current topology of the triangulation
         p, t = _get_topology(dt)
 
+        # Find where pfix went
+        ifix = []
+        if nfix > 0:
+            for fix in pfix:
+                ifix.append(_closest_node(fix, p))
+
+
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
 
@@ -483,3 +490,10 @@ def _unpack_pfix(dim, opts):
 def _get_topology(dt):
     """Get points and entities from :clas:`CGAL:DelaunayTriangulation2/3` object"""
     return dt.get_finite_vertices(), dt.get_finite_cells()
+
+
+def _closest_node(node, nodes):
+    nodes = np.asarray(nodes)
+    deltas = nodes - node
+    dist_2  np.einsum("ij,i->i", deltas, deltas)
+    return np.argmin(dist_2)
