@@ -1,5 +1,5 @@
-import matplotlib.tri as tri
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import numpy as np
 import oceanmesh as om
 
@@ -24,12 +24,13 @@ def test_irregular_domain():
         ]
     )
 
-    min_edge_length = 100
+    min_edge_length = 0.001
 
-    shore = om.Shoreline(fname, bbox, min_edge_length)
+    region = om.Region(bbox, 4326)
+    shore = om.Shoreline(fname, region.bbox, min_edge_length)
     shore.plot(file_name="test_irregular_domain.png", show=False)
 
-    edge_length = om.distance_sizing_function(shore, max_edge_length=1e3)
+    edge_length = om.distance_sizing_function(shore, max_edge_length=0.01)
 
     domain = om.signed_distance_function(shore)
 
