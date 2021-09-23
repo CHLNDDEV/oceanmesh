@@ -6,9 +6,10 @@ import oceanmesh as om
 def test_grade():
     fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
-    bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+    region = om.Region((-75.000, -70.001, 40.0001, 41.9000), 4326)
+    min_edge_length = 0.01
 
-    shore = om.Shoreline(fname, bbox, min_edge_length)
+    shore = om.Shoreline(fname, region.bbox, min_edge_length)
 
     edge_length = om.distance_sizing_function(shore, rate=0.35)
 
