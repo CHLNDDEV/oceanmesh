@@ -1,4 +1,15 @@
+import numpy as np
 from pyproj import CRS, Transformer
+
+__all__ = ["Region", "warp_coordinates"]
+
+
+def warp_coordinates(points, src_crs, dst_crs):
+    src_crs = CRS.from_epsg(src_crs)
+    dst_crs = CRS.from_epsg(dst_crs)
+    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    points = transformer.transform(points[:, 0], points[:, 1])
+    return np.asarray(points).T
 
 
 class Region:
