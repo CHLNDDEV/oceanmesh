@@ -50,7 +50,9 @@ class Region:
                 self.bbox = (xmin, xmax, ymin, ymax)
             else:
                 # for polygon case
-                self.bbox = transformer.transform(self.bbox)
+                self.bbox = np.asarray(
+                    transformer.transform(self.bbox[:, 0], self.bbox[:, 1])
+                ).T
 
             self._crs = dst_crs
         return self
