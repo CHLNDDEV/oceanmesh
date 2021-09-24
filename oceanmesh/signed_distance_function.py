@@ -1,3 +1,4 @@
+import logging
 import math
 import random
 
@@ -7,6 +8,8 @@ import scipy.spatial
 from inpoly import inpoly2
 
 from . import Shoreline, edges
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "multiscale_signed_distance_function",
@@ -183,7 +186,7 @@ class Difference(Domain):
         )
 
 
-def signed_distance_function(shoreline, verbose=True):
+def signed_distance_function(shoreline):
     """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
     and calculates a signed distance function with it under the assumption that all polygons are closed.
     The returned function `func` becomes a bound method of the :class:`Domain` and is queried during
@@ -200,8 +203,8 @@ def signed_distance_function(shoreline, verbose=True):
         Contains a signed distance function along with an extent `bbox`
 
     """
-    if verbose:
-        print("Building a signed distance function...")
+    logger.info("Building a signed distance function...")
+
     assert isinstance(shoreline, Shoreline), "shoreline is not a Shoreline object"
     poly = np.vstack((shoreline.inner, shoreline.boubox))
     tree = scipy.spatial.cKDTree(
@@ -248,7 +251,7 @@ def _create_boubox(bbox):
     )
 
 
-def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
+def multiscale_signed_distance_function(signed_distance_functions):
     """Takes a list of :class:`Domain` objects and calculates a signed distance
         function from each one that represents a multiscale meshing domain.
 
@@ -263,8 +266,8 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     nests: a list of :class:`Difference` containing objects
         Nested domains are set differenced from their parent domains.
     """
-    if verbose:
-        print("Building a multiscale signed distance function...")
+    logger.info("Building a multiscale signed distance function...")
+
     msg = "`signed_distance_functions` is not a list"
     assert isinstance(signed_distance_functions, list), msg
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"

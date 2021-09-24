@@ -283,7 +283,7 @@ def _clip_polys_2(polys, bbox, delta=0.10):
                         else:
                             iRemove.append(j)
 
-            # print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
+            logger.info(f"Simplify polygon: length {len(p)} --> {len(p)}")
             # Remove colinear||duplicate vertices
             if len(iRemove) > 0:
                 p = np.delete(p, iRemove, axis=0)
@@ -326,8 +326,8 @@ def _clip_polys(polys, bbox, delta=0.10):
     for poly in polyL:
         mp = shapely.geometry.Polygon(poly[:-2, :])
         if not mp.is_valid:
-            logger.debug(
-                f"Warning, polygon {shapely.validation.explain_validity(mp)} Try to make valid."
+            logger.warning(
+                f"polygon {shapely.validation.explain_validity(mp)} Try to make valid."
             )
             mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
         mp = [mp]
@@ -511,7 +511,7 @@ class Shoreline(Region):
         """
         dst_crs = CRS.from_user_input(dst_crs)
         if not gdf.crs.equals(dst_crs):
-            print(f"Reprojecting shoreline from {gdf.crs} to {dst_crs}")
+            logger.info(f"Reprojecting shoreline from {gdf.crs} to {dst_crs}")
             gdf = gdf.to_crs(dst_crs)
         return gdf
 

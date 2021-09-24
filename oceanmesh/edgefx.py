@@ -1,4 +1,4 @@
-import warnings
+import logging
 
 import numpy as np
 import scipy.spatial
@@ -8,6 +8,8 @@ from inpoly import inpoly2
 
 from . import edges
 from .grid import Grid
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "enforce_mesh_gradation",
@@ -19,7 +21,7 @@ __all__ = [
 ]
 
 
-def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
+def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     """Enforce mesh size bounds as a function of elevation
 
     Parameters
@@ -33,8 +35,6 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
         [[min_mesh_size, max_mesh_size, min_elevation_bound, max_elevation_bound]]
         The orientation of the elevation bounds should be the same as that of the DEM
         (i.e., negative downwards towards the Earth's center).
-    verbose: boolean
-        Whether or not to print messages to the screen
 
     Returns
     -------
@@ -76,7 +76,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, verbose=True, crs=4326):
+def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -85,8 +85,6 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True, crs=4326):
         A grid object with its values field populated
     gradation: float
         The decimal percent mesh size gradation rate to-be-enforced.
-    verbose: boolean
-        whether to write messages to the screen
 
     Returns
     -------
@@ -97,9 +95,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True, crs=4326):
     if gradation < 0:
         raise ValueError("Parameter `gradation` must be > 0.0")
     if gradation > 1.0:
-        warnings.warn("Parameter `gradation` is set excessively high (> 1.0)")
-    if verbose:
-        print(f"Enforcing mesh size gradation of {gradation} decimal percent...")
+        logger.warning("Parameter `gradation` is set excessively high (> 1.0)")
+
+    logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
     if grid.dx != grid.dy:
@@ -126,7 +124,6 @@ def distance_sizing_function(
     shoreline,
     rate=0.15,
     max_edge_length=None,
-    verbose=1,
     coarsen=1,
     crs=4326,
 ):
@@ -139,8 +136,6 @@ def distance_sizing_function(
         The rate of expansion in decimal percent from the shoreline.
     max_edge_length: float, optional
         The maximum allowable edge length
-    verbose: boolean, optional
-        Whether to write messages to the screen
     coarsen: integer, optional
         Downsample the grid by a constant factor in x and y axes
     Returns
@@ -148,8 +143,8 @@ def distance_sizing_function(
     :class:`Grid` object
         A sizing function that takes a point and returns a value
     """
-    if verbose > 0:
-        print("Building a distance sizing function...")
+    logger.info("Building a distance sizing function...")
+
     grid = Grid(
         bbox=shoreline.bbox,
         dx=shoreline.h0 * coarsen,
@@ -200,7 +195,6 @@ def feature_sizing_function(
     signed_distance_function,
     r=3,
     max_edge_length=None,
-    verbose=True,
     plot=False,
     crs=4326,
 ):
@@ -218,8 +212,6 @@ def feature_sizing_function(
     r: float, optional
         The number of times to divide the shoreline thickness/width to calculate
         the local element size.
-    verbose: boolean, optional
-        Whether to write messages to the screen
     plot: boolean, optional
         Visualize the medial points ontop of the shoreline
 
@@ -230,8 +222,8 @@ def feature_sizing_function(
 
     """
 
-    if verbose:
-        print("Building a feature sizing function...")
+    logger.info("Building a feature sizing function...")
+
     assert r > 0, "local feature size "
     grid_calc = Grid(
         bbox=shoreline.bbox,
@@ -356,9 +348,6 @@ def wavelength_sizing_function(
         of the edgelength function is used.
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
-    verbose: boolean, optional
-        Whether to write messages to the screen
-
 
     Returns
     -------
@@ -366,8 +355,8 @@ def wavelength_sizing_function(
         A sizing function that takes a point and returns a value
 
     """
-    if verbose > 0:
-        print("Building a wavelength sizing function...")
+    logger.info("Building a wavelength sizing function...")
+
     lon, lat = dem.create_grid()
     tmpz = dem.eval((lon, lat))
 
@@ -404,8 +393,6 @@ def multiscale_sizing_function(
         how many nearest neighbors should one take to perform IDW interp?
     blend_width: float, optional
         The width of the blending zone between nests in meters
-    verbose: boolean, optional
-        Whether to write messages to the screen
 
     Returns
     -------
@@ -422,21 +409,18 @@ def multiscale_sizing_function(
     new_list_of_grids = []
     # loop through remaining sizing functions
     for idx1, new_coarse in enumerate(list_of_grids[:-1]):
-        if verbose:
-            print(f"For sizing function #{idx1}")
+        logger.info(f"For sizing function #{idx1}")
+
         # interpolate all finer nests onto coarse func and enforce gradation rate
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
-            if verbose:
-                print(
-                    f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
-                    f" function #{idx1}"
-                )
+            logger.info(
+                f"  Interpolating sizing function #{idx1+1 + k} onto sizing function #{idx1}"
+            )
             _wkt = finer.crs.to_dict()
             if "units" in _wkt:
                 _dx = finer.dx
             else:
                 # it must be degrees?
-                print("in here")
                 _dx = finer.dx * 111e3
             _blend_width = int(np.floor(blend_width / _dx))
             finer.extrapolate = False
