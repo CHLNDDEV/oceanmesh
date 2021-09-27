@@ -5,7 +5,7 @@ import oceanmesh as om
 
 
 def test_grade():
-    fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
+    fname = os.path.join(os.path.dirname(__file__), "GSHHS_h_L1.shp")
 
     bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
 

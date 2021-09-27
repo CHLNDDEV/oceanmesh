@@ -329,6 +329,9 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
                     "Try to make valid.",
                 )
             mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
+            if mp.geom_type == "Polygon":
+                mp = [mp]  # `Polygon` -> `MultiPolygon` with 1 member
+
         for p in mp:
             pi = p.intersection(b)
             if b.contains(p):
@@ -336,7 +339,7 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
             elif not pi.is_empty:
                 # assert(pi.geom_type,'MultiPolygon')
                 if pi.geom_type == "Polygon":
-                    pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
+                    pi = [pi]
 
                 for ppi in pi:
                     xy = numpy.asarray(ppi.exterior.coords)
