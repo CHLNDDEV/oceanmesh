@@ -111,12 +111,12 @@ def get_boundary_edges(entities, dim=2):
     return boundary_edges
 
 
-def get_winded_boundary_edges(entities, choice=0):
+def get_winded_boundary_edges(entities, vFirst=None):
     """Order the boundary edges of the mesh in a winding fashion
 
     :param entities: the mesh connectivity
     :type entities: numpy.ndarray[`int` x (dim+1)]
-    :param choice: vertex index of any edge element to trace boundary along
+    :param vFirst: vertex index of any edge element to trace boundary along
     :type choice: `int`
 
     :return: boundary_edges: the edges that make up the boundary of the mesh in a winding order
@@ -124,6 +124,12 @@ def get_winded_boundary_edges(entities, choice=0):
     """
 
     boundary_edges = get_boundary_edges(entities)
+    choice = 0
+    if vFirst is not None:
+        for choice, row in enumerate(boundary_edges):
+            if any(vFirst == row):
+                break
+
     _bedges = boundary_edges.copy()
 
     isVisited = np.zeros((len(_bedges)))
