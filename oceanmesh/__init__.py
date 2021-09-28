@@ -15,8 +15,9 @@ from oceanmesh.edgefx import (
     wavelength_sizing_function,
 )
 from oceanmesh.edges import draw_edges, get_poly_edges
-from oceanmesh.geodata import DEM, Geodata, Shoreline
+from oceanmesh.geodata import DEM, Shoreline
 from oceanmesh.grid import Grid, compute_minimum
+from oceanmesh.region import Region, warp_coordinates
 from oceanmesh.signed_distance_function import (
     Difference,
     Domain,
@@ -31,6 +32,7 @@ from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import generate_mesh, generate_multiscale_mesh, plot_mesh
 
 __all__ = [
+    "Region",
     "compute_minimum",
     "multiscale_sizing_function",
     "delete_boundary_faces",
@@ -44,7 +46,6 @@ __all__ = [
     "delete_exterior_faces",
     "SizeFunction",
     "Grid",
-    "Geodata",
     "DEM",
     "Domain",
     "create_circle",
@@ -64,6 +65,7 @@ __all__ = [
     "fix_mesh",
     "simp_vol",
     "simp_qual",
+    "warp_coordinates",
 ]
 
 from . import _version
