@@ -128,7 +128,7 @@ def get_winded_boundary_edges(entities, vFirst=None):
 
     choice = 0
     if vFirst is not None:
-        choice = next((i for i,j in enumerate(_bedges) if any(vFirst == j)), 0)
+        choice = next((i for i, j in enumerate(_bedges) if any(vFirst == j)), 0)
 
     isVisited = np.zeros((len(_bedges)))
     ordering = np.array([choice])
