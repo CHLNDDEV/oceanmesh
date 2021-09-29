@@ -117,20 +117,18 @@ def get_winded_boundary_edges(entities, vFirst=None):
     :param entities: the mesh connectivity
     :type entities: numpy.ndarray[`int` x (dim+1)]
     :param vFirst: vertex index of any edge element to trace boundary along
-    :type choice: `int`
+    :type vFirst: `int`
 
     :return: boundary_edges: the edges that make up the boundary of the mesh in a winding order
     :rtype: numpy.ndarray[`int` x 2]
     """
 
     boundary_edges = get_boundary_edges(entities)
+    _bedges = boundary_edges.copy()
+
     choice = 0
     if vFirst is not None:
-        for choice, row in enumerate(boundary_edges):
-            if any(vFirst == row):
-                break
-
-    _bedges = boundary_edges.copy()
+        choice = next((i for i,j in enumerate(_bedges) if any(vFirst == j)), 0)
 
     isVisited = np.zeros((len(_bedges)))
     ordering = np.array([choice])
