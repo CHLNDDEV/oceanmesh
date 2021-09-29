@@ -1,10 +1,13 @@
 import copy
+import logging
 
 import numpy as np
 import scipy.sparse as spsparse
 
 from . import edges
 from .fix_mesh import fix_mesh, simp_qual, simp_vol
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "make_mesh_boundaries_traversable",
@@ -102,9 +105,7 @@ def _vertex_to_face(vertices, faces):
     return vtoc, vtoc_pointer
 
 
-def make_mesh_boundaries_traversable(
-    vertices, faces, min_disconnected_area=0.05, verbose=1
-):
+def make_mesh_boundaries_traversable(vertices, faces, min_disconnected_area=0.05):
     """
     A mesh described by vertices and faces is  "cleaned" and returned.
     Alternates between checking "interior" and "exterior" portions
@@ -153,15 +154,14 @@ def make_mesh_boundaries_traversable(
 
     boundary_edges, boundary_vertices = _external_topology(vertices, faces)
 
-    if verbose > 0:
-        print("Performing mesh cleaning operations...")
+    logger.info("Performing mesh cleaning operations...")
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
 
-        faces = delete_exterior_faces(vertices, faces, min_disconnected_area, verbose)
+        faces = delete_exterior_faces(vertices, faces, min_disconnected_area)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
-        faces, _ = delete_interior_faces(vertices, faces, verbose)
+        faces, _ = delete_interior_faces(vertices, faces)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
         boundary_edges, boundary_vertices = _external_topology(vertices, faces)
@@ -176,7 +176,7 @@ def _external_topology(vertices, faces):
     return boundary_edges, boundary_vertices
 
 
-def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
+def delete_exterior_faces(vertices, faces, min_disconnected_area):
     """Deletes portions of the mesh that are "outside" or not
     connected to the majority which represent a fractional
     area less than `min_disconnected_area`.
@@ -204,11 +204,9 @@ def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
 
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
-        if verbose > 1:
-            print(
-                f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the"
-                " main mesh"
-            )
+        logger.info(
+            f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh"
+        )
 
         # Calculate the remaining area
         An = np.sum(simp_vol(vertices, t1))
@@ -216,7 +214,7 @@ def delete_exterior_faces(vertices, faces, min_disconnected_area, verbose):
     return t
 
 
-def delete_interior_faces(vertices, faces, verbose):
+def delete_interior_faces(vertices, faces):
     """Delete interior faces that have vertices with more than
     two vertices declared as boundary vertices
     """
@@ -254,8 +252,7 @@ def delete_interior_faces(vertices, faces, verbose):
             idx = np.argmin(qual)
             del_face_idx.append(conn_faces[idx])
 
-    if verbose > 1:
-        print(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
+    logger.info(f"ACCEPTED: Deleting {len(del_face_idx)} faces inside the main mesh")
     faces = np.delete(faces, del_face_idx, 0)
 
     return faces, del_face_idx
@@ -297,7 +294,7 @@ def _depth_first_search(faces):
     return nflag
 
 
-def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
+def delete_faces_connected_to_one_face(vertices, faces, max_iter=5):
     """Iteratively deletes faces connected to one face.
 
     Parameters
@@ -328,17 +325,14 @@ def delete_faces_connected_to_one_face(vertices, faces, max_iter=5, verbose=1):
         nn = np.diff(idx, 1)
         delete = np.argwhere(nn == 2)
         if len(delete) > 0:
-            if verbose > 1:
-                print(f"ACCEPTED: Deleting {int(len(delete))} faces")
+            logger.info(f"ACCEPTED: Deleting {int(len(delete))} faces")
             faces = np.delete(faces, delete, axis=0)
             vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
             count += 1
         else:
             break
-    if verbose > 0:
-        print(
-            f"Deleted {int(start_len - len(faces))} faces after"
-            f" {int(count)} iterations"
+        logger.info(
+            f"Deleted {int(start_len - len(faces))} faces after {int(count)} iterations"
         )
     return vertices, faces
 
@@ -365,7 +359,7 @@ def _sparse(Ix, J, S, shape=None, dtype=None):
     return spsparse.coo_matrix((S, (II, J)), shape, dtype)
 
 
-def laplacian2(vertices, entities, max_iter=20, tol=0.01, verbose=1, pfix=None):
+def laplacian2(vertices, entities, max_iter=20, tol=0.01, pfix=None):
     """Move vertices to the average position of their connected neighbors
     with the goal to hopefully improve geometric entity quality.
     :param vertices: vertex coordinates of mesh
@@ -376,8 +370,6 @@ def laplacian2(vertices, entities, max_iter=20, tol=0.01, verbose=1, pfix=None):
     :type max_iter: `int`, optional
     :param tol: iterations will cease when movement < tol
     :type tol: `float`, optional
-    :param verbose: display progress to the screen
-    :type verbose: `float`, optional
     :param pfix: coordinates that you don't wish to move
     :type pfix: array-like
     :return vertices: updated vertices of mesh
@@ -436,13 +428,7 @@ def laplacian2(vertices, entities, max_iter=20, tol=0.01, verbose=1, pfix=None):
         Lnew[Lnew < eps] = eps
         move = np.amax(np.divide((Lnew - L), Lnew))
         if move < tol:
-            if verbose:
-                print(
-                    "Movement tolerance reached after "
-                    + str(it)
-                    + " iterations..exiting",
-                    flush=True,
-                )
+            logger.info(f"Movement tolerance reached after {it} iterations..exiting")
             break
         L = Lnew
     vertices = np.array(vertices)
@@ -491,11 +477,7 @@ def delete_boundary_faces(vertices, entities, dim=2, min_qual=0.10, verbose=1):
     bele = get_boundary_entities(vertices, entities, dim=dim)
     qualBou = qual[bele]
     delete = qualBou < min_qual
-    if verbose:
-        print(
-            "Deleting " + str(np.sum(delete)) + " poor quality boundary entities...",
-            flush=True,
-        )
+    logger.info(f"Deleting {np.sum(delete)} poor quality boundary entities...")
     delete = np.argwhere(delete == 1)
     entities = np.delete(entities, bele[delete], axis=0)
     vertices, entities, _ = fix_mesh(vertices, entities, delete_unused=True, dim=dim)

@@ -1,32 +1,38 @@
 import errno
+import logging
 import os
 
+import fiona
+import geopandas as gpd
 import matplotlib.path as mpltPath
-import numpy
+import numpy as np
 import numpy.linalg
-import rasterio
-import shapefile
+import rioxarray as rxr
 import shapely.geometry
 import shapely.validation
-from rasterio.windows import from_bounds
+from pyproj import CRS
 
 from .grid import Grid
+from .region import Region
 
-nan = numpy.nan
+nan = np.nan
+fiona_version = fiona.__version__
 
-__all__ = ["Geodata", "Shoreline", "DEM"]
+logger = logging.getLogger(__name__)
+
+__all__ = ["Shoreline", "DEM"]
 
 
 def _convert_to_array(lst):
-    """Converts a list of Numpy arrays to a Numpy array"""
-    return numpy.concatenate(lst, axis=0)
+    """Converts a list of numpy arrays to a np array"""
+    return np.concatenate(lst, axis=0)
 
 
 def _convert_to_list(arr):
-    """Converts a nan-delimited Numpy array to a list of Numpy arrays"""
-    a = numpy.insert(arr, 0, [[nan, nan]], axis=0)
-    tmp = [a[s] for s in numpy.ma.clump_unmasked(numpy.ma.masked_invalid(a[:, 0]))]
-    return [numpy.append(a, [[nan, nan]], axis=0) for a in tmp]
+    """Converts a nan-delimited numpy array to a list of numpy arrays"""
+    a = np.insert(arr, 0, [[nan, nan]], axis=0)
+    tmp = [a[s] for s in np.ma.clump_unmasked(np.ma.masked_invalid(a[:, 0]))]
+    return [np.append(a, [[nan, nan]], axis=0) for a in tmp]
 
 
 def _create_boubox(bbox):
@@ -45,51 +51,53 @@ def _create_boubox(bbox):
 
 def _create_ranges(start, stop, N, endpoint=True):
     """Vectorized alternative to numpy.linspace
-    https://stackoverflow.com/questions/40624409/vectorized-numpy-linspace-for-multiple-start-and-stop-values
+    https://stackoverflow.com/questions/40624409/vectorized-np-linspace-for-multiple-start-and-stop-values
     """
     if endpoint == 1:
         divisor = N - 1
     else:
         divisor = N
     steps = (1.0 / divisor) * (stop - start)
-    return steps[:, None] * numpy.arange(N) + start[:, None]
+    return steps[:, None] * np.arange(N) + start[:, None]
 
 
 def _densify(poly, maxdiff, bbox, radius=0):
     """Fills in any gaps in latitude or longitude arrays
     that are greater than a `maxdiff` (degrees) apart
     """
+    logger.debug("Entering:_densify")
+
     boubox = _create_boubox(bbox)
     path = mpltPath.Path(boubox, closed=True)
     inside = path.contains_points(poly, radius=0.1)  # add a small radius
     lon, lat = poly[:, 0], poly[:, 1]
     nx = len(lon)
-    dlat = numpy.abs(lat[1:] - lat[:-1])
-    dlon = numpy.abs(lon[1:] - lon[:-1])
-    nin = numpy.ceil(numpy.maximum(dlat, dlon) / maxdiff) - 1
+    dlat = np.abs(lat[1:] - lat[:-1])
+    dlon = np.abs(lon[1:] - lon[:-1])
+    nin = np.ceil(np.maximum(dlat, dlon) / maxdiff) - 1
     nin[~inside[1:]] = 0  # no need to densify outside of bbox please
     # handle negative values
     nin[nin < 0] = 0
-    sumnin = numpy.nansum(nin)
+    sumnin = np.nansum(nin)
     if sumnin == 0:
-        return numpy.hstack((lon[:, None], lat[:, None]))
+        return np.hstack((lon[:, None], lat[:, None]))
     nout = sumnin + nx
 
-    lonout = numpy.full((int(nout)), nan, dtype=float)
-    latout = numpy.full((int(nout)), nan, dtype=float)
+    lonout = np.full((int(nout)), nan, dtype=float)
+    latout = np.full((int(nout)), nan, dtype=float)
 
     n = 0
     for i in range(nx - 1):
         ni = nin[i]
-        if ni == 0 or numpy.isnan(ni):
+        if ni == 0 or np.isnan(ni):
             latout[n] = lat[i]
             lonout[n] = lon[i]
             nstep = 1
         else:
             ni = int(ni)
             icoords = _create_ranges(
-                numpy.array([lat[i], lon[i]]),
-                numpy.array([lat[i + 1], lon[i + 1]]),
+                np.array([lat[i], lon[i]]),
+                np.array([lat[i + 1], lon[i + 1]]),
                 ni + 2,
             )
             latout[n : n + ni + 1] = icoords[0, : ni + 1]
@@ -99,62 +107,55 @@ def _densify(poly, maxdiff, bbox, radius=0):
 
     latout[-1] = lat[-1]
     lonout[-1] = lon[-1]
-    return numpy.hstack((lonout[:, None], latout[:, None]))
+
+    logger.debug("Exiting:_densify")
+
+    return np.hstack((lonout[:, None], latout[:, None]))
 
 
 def _poly_area(x, y):
     """Calculates area of a polygon"""
-    return 0.5 * numpy.abs(
-        numpy.dot(x, numpy.roll(y, 1)) - numpy.dot(y, numpy.roll(x, 1))
-    )
+    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
 
 def _poly_length(coords):
     """Calculates circumference of a polygon"""
-    if all(numpy.isclose(coords[0, :], coords[-1, :])):
+    if all(np.isclose(coords[0, :], coords[-1, :])):
         c = coords
     else:
-        c = numpy.vstack((coords, coords[0, :]))
+        c = np.vstack((coords, coords[0, :]))
 
-    return numpy.sum(numpy.sqrt(numpy.sum(numpy.diff(c, axis=0) ** 2, axis=1)))
-
-
-def _is_overlapping(bbox1, bbox2):
-    """Determines if two axis-aligned boxes intersect"""
-    x1min, x1max, y1min, y1max = bbox1
-    x2min, x2max, y2min, y2max = bbox2
-    return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
+    return np.sum(np.sqrt(np.sum(np.diff(c, axis=0) ** 2, axis=1)))
 
 
-def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
+def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
         NB: Removes `inner` geometry with area < `minimum_area_mult`*`h0`**2
     (3) `boubox` polygon array is will be clipped by segments contained by `mainland`.
     """
-    if verbose > 1:
-        print("Classifying shoreline segments...")
+    logger.debug("Entering:_classify_shoreline")
 
     _AREAMIN = minimum_area_mult * h0 ** 2
 
     if len(boubox) == 0:
         boubox = _create_boubox(bbox)
-        boubox = numpy.asarray(boubox)
+        boubox = np.asarray(boubox)
     elif not _is_path_ccw(boubox):
-        boubox = numpy.flipud(boubox)
+        boubox = np.flipud(boubox)
 
     boubox = _densify(boubox, h0 / 2, bbox, radius=0.1)
 
     # Remove nan's (append again at end)
-    isNaN = numpy.sum(numpy.isnan(boubox), axis=1) > 0
+    isNaN = np.sum(np.isnan(boubox), axis=1) > 0
     if any(isNaN):
-        boubox = numpy.delete(boubox, isNaN, axis=0)
+        boubox = np.delete(boubox, isNaN, axis=0)
     del isNaN
 
-    inner = numpy.empty(shape=(0, 2))
+    inner = np.empty(shape=(0, 2))
     inner[:] = nan
-    mainland = numpy.empty(shape=(0, 2))
+    mainland = np.empty(shape=(0, 2))
     mainland[:] = nan
 
     polyL = _convert_to_list(polys)
@@ -164,70 +165,76 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, verbose):
         pSGP = shapely.geometry.Polygon(poly[:-2, :])
         if bSGP.contains(pSGP):
             if pSGP.area >= _AREAMIN:
-                inner = numpy.append(inner, poly, axis=0)
+                inner = np.append(inner, poly, axis=0)
         elif pSGP.overlaps(bSGP):
             # Append polygon segment to mainland
-            mainland = numpy.vstack((mainland, poly))
+            mainland = np.vstack((mainland, poly))
             # Clip polygon segment from boubox and regenerate path
             bSGP = bSGP.difference(pSGP)
 
-    out = numpy.empty(shape=(0, 2))
+    out = np.empty(shape=(0, 2))
 
     if bSGP.geom_type == "Polygon":
         bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
 
     # MultiPolygon members can be accessed via iterator protocol using `in`.
     for b in bSGP:
-        xy = numpy.asarray(b.exterior.coords)
-        xy = numpy.vstack((xy, xy[0]))
-        out = numpy.vstack((out, xy, [nan, nan]))
+        xy = np.asarray(b.exterior.coords)
+        xy = np.vstack((xy, xy[0]))
+        out = np.vstack((out, xy, [nan, nan]))
+
+    logger.debug("Exiting:classify_shoreline")
 
     return inner, mainland, out
 
 
 def _chaikins_corner_cutting(coords, refinements=5):
     """http://www.cs.unc.edu/~dm/UNC/COMP258/LECTURES/Chaikins-Algorithm.pdf"""
-    coords = numpy.array(coords)
+    logger.debug("Entering:_chaikins_corner_cutting")
+    coords = np.array(coords)
 
     for _ in range(refinements):
         L = coords.repeat(2, axis=0)
-        R = numpy.empty_like(L)
+        R = np.empty_like(L)
         R[0] = L[0]
         R[2::2] = L[1:-1:2]
         R[1:-1:2] = L[2::2]
         R[-1] = L[-1]
         coords = L * 0.75 + R * 0.25
 
+    logger.debug("Exiting:_chaikins_corner_cutting")
     return coords
 
 
-def _smooth_shoreline(polys, N, verbose):
+def _smooth_shoreline(polys, N):
     """Smoothes the shoreline segment-by-segment using
     a `N` refinement Chaikins Corner cutting algorithm.
     """
-    if verbose > 1:
-        print("Smoothing shoreline segments...")
+    logger.debug("Entering:_smooth_shoreline")
+
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
         tmp = _chaikins_corner_cutting(poly[:-1], refinements=N)
-        tmp = numpy.append(tmp, [[nan, nan]], axis=0)
+        tmp = np.append(tmp, [[nan, nan]], axis=0)
         out.append(tmp)
+
+    logger.debug("Exiting:_smooth_shoreline")
+
     return _convert_to_array(out)
 
 
-def _clip_polys_2(polys, bbox, verbose, delta=0.10):
+def _clip_polys_2(polys, bbox, delta=0.10):
     """Clip segments in `polys` that intersect with `bbox`.
     Clipped segments need to extend outside `bbox` to avoid
     false positive `all(inside)` cases. Solution here is to
     add a small offset `delta` to the `bbox`.
     """
-    if verbose > 1:
-        print("Collapsing polygon segments outside bbox...")
+    logger.debug("Entering:_clip_polys_2")
 
     # Inflate bounding box to allow clipped segment to overshoot original box.
     bbox = (bbox[0] - delta, bbox[1] + delta, bbox[2] - delta, bbox[3] + delta)
-    boubox = numpy.asarray(_create_boubox(bbox))
+    boubox = np.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
 
@@ -278,26 +285,28 @@ def _clip_polys_2(polys, bbox, verbose, delta=0.10):
                         else:
                             iRemove.append(j)
 
-            # print('Simplify polygon: length {:d} --> {:d}'.format(len(p),len(p)-len(iRemove)))
+            logger.info(f"Simplify polygon: length {len(p)} --> {len(p)}")
             # Remove colinear||duplicate vertices
             if len(iRemove) > 0:
-                p = numpy.delete(p, iRemove, axis=0)
+                p = np.delete(p, iRemove, axis=0)
                 del iRemove
 
             line = p
 
             # Close polygon
-            if not all(numpy.isclose(line[0, :], line[-1, :])):
-                line = numpy.append(line, [line[0, :], [nan, nan]], axis=0)
+            if not all(np.isclose(line[0, :], line[-1, :])):
+                line = np.append(line, [line[0, :], [nan, nan]], axis=0)
             else:
-                line = numpy.append(line, [[nan, nan]], axis=0)
+                line = np.append(line, [[nan, nan]], axis=0)
 
             out.append(line)
+
+    logger.debug("Exiting:_clip_polys_2")
 
     return _convert_to_array(out)
 
 
-def _clip_polys(polys, bbox, verbose, delta=0.10):
+def _clip_polys(polys, bbox, delta=0.10):
     """Clip segments in `polys` that intersect with `bbox`.
     Clipped segments need to extend outside `bbox` to avoid
     false positive `all(inside)` cases. Solution here is to
@@ -305,84 +314,83 @@ def _clip_polys(polys, bbox, verbose, delta=0.10):
     Dependencies: shapely.geometry and numpy
     """
 
-    if verbose > 1:
-        print("Collapsing polygon segments outside bbox...")
+    logger.debug("Entering:_clip_polys")
 
     # Inflate bounding box to allow clipped segment to overshoot original box.
     bbox = (bbox[0] - delta, bbox[1] + delta, bbox[2] - delta, bbox[3] + delta)
-    boubox = numpy.asarray(_create_boubox(bbox))
+    boubox = np.asarray(_create_boubox(bbox))
     polyL = _convert_to_list(polys)
 
-    out = numpy.empty(shape=(0, 2))
+    out = np.empty(shape=(0, 2))
 
     b = shapely.geometry.Polygon(boubox)
 
     for poly in polyL:
         mp = shapely.geometry.Polygon(poly[:-2, :])
-        if mp.is_valid:
-            mp = [mp]
-        else:
-            if verbose > 0:
-                print(
-                    "Warning, polygon",
-                    shapely.validation.explain_validity(mp),
-                    "Try to make valid.",
-                )
+        if not mp.is_valid:
+            logger.warning(
+                f"polygon {shapely.validation.explain_validity(mp)} Try to make valid."
+            )
             mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
             if mp.geom_type == "Polygon":
                 mp = [mp]  # `Polygon` -> `MultiPolygon` with 1 member
+        else:
+            mp = [mp]
 
         for p in mp:
             pi = p.intersection(b)
             if b.contains(p):
-                out = numpy.vstack((out, poly))
+                out = np.vstack((out, poly))
             elif not pi.is_empty:
                 # assert(pi.geom_type,'MultiPolygon')
                 if pi.geom_type == "Polygon":
                     pi = [pi]
 
                 for ppi in pi:
-                    xy = numpy.asarray(ppi.exterior.coords)
-                    xy = numpy.vstack((xy, xy[0]))
-                    out = numpy.vstack((out, xy, [nan, nan]))
+                    xy = np.asarray(ppi.exterior.coords)
+                    xy = np.vstack((xy, xy[0]))
+                    out = np.vstack((out, xy, [nan, nan]))
 
                 del (ppi, xy)
             del pi
         del (p, mp)
 
+    logger.debug("Exiting:_clip_polys")
+
     return out
 
 
-def _nth_simplify(polys, bbox, verbose):
+def _nth_simplify(polys, bbox):
     """Collapse segments in `polys` outside of `bbox`"""
-    if verbose > 1:
-        print("Collapsing segments outside bbox...")
-    boubox = numpy.asarray(_create_boubox(bbox))
+    logger.debug("Entering:_nth_simplify")
+
+    boubox = np.asarray(_create_boubox(bbox))
     path = mpltPath.Path(boubox)
     polys = _convert_to_list(polys)
     out = []
     for poly in polys:
         j = 0
         inside = path.contains_points(poly[:-2, :])
-        line = numpy.empty(shape=(0, 2))
+        line = np.empty(shape=(0, 2))
         while j < len(poly[:-2]):
             if inside[j]:  # keep point (in domain)
-                line = numpy.append(line, [poly[j, :]], axis=0)
+                line = np.append(line, [poly[j, :]], axis=0)
             else:  # pt is outside of domain
                 bd = min(
                     j + 50, len(inside) - 1
                 )  # collapses 50 pts to 1 vertex (arbitary)
                 exte = min(50, bd - j)
                 if sum(inside[j:bd]) == 0:  # next points are all outside
-                    line = numpy.append(line, [poly[j, :]], axis=0)
-                    line = numpy.append(line, [poly[j + exte, :]], axis=0)
+                    line = np.append(line, [poly[j, :]], axis=0)
+                    line = np.append(line, [poly[j + exte, :]], axis=0)
                     j += exte
                 else:  # otherwise keep
-                    line = numpy.append(line, [poly[j, :]], axis=0)
+                    line = np.append(line, [poly[j, :]], axis=0)
             j += 1
-        line = numpy.append(line, [[nan, nan]], axis=0)
+        line = np.append(line, [[nan, nan]], axis=0)
         out.append(line)
 
+    logger.debug("Exiting:_nth_simplify")
     return _convert_to_array(out)
 
 
@@ -391,104 +399,54 @@ def _is_path_ccw(_p):
     Source: https://en.wikipedia.org/wiki/Curve_orientation
     """
     detO = 0.0
-    O3 = numpy.ones((3, 3))
+    O3 = np.ones((3, 3))
 
     i = 0
-    while (i + 3 < _p.shape[0]) and numpy.isclose(detO, 0.0):
+    while (i + 3 < _p.shape[0]) and np.isclose(detO, 0.0):
         # Colinear vectors detected. Try again with next 3 indices.
         O3[:, 1:] = _p[i : (i + 3), :]
-        detO = numpy.linalg.det(O3)
+        detO = np.linalg.det(O3)
         i += 1
 
-    if numpy.isclose(detO, 0.0):
+    if np.isclose(detO, 0.0):
         raise RuntimeError("Cannot determine orientation from colinear path.")
 
     return detO > 0.0
 
 
-class Geodata:
+def _is_overlapping(bbox1, bbox2):
+    """Determines if two axis-aligned boxes intersect"""
+    x1min, x1max, y1min, y1max = bbox1
+    x2min, x2max, y2min, y2max = bbox2
+    return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
+
+
+class Shoreline(Region):
     """
-    Geographical data class that handles geographical data describing
-    shorelines in the form of a shapefile and topobathy in the form of a
-    digital elevation model (DEM).
-    """
-
-    def __init__(self, bbox):
-        self.bbox = bbox
-
-    @property
-    def bbox(self):
-        return self.__bbox
-
-    @bbox.setter
-    def bbox(self, value):
-        if value is None:
-            self.__bbox = value
-        else:
-            if isinstance(value, tuple):
-                if len(value) < 4:
-                    raise ValueError("bbox has wrong number of values.")
-                if value[1] < value[0]:
-                    raise ValueError("bbox has wrong values.")
-                if value[3] < value[2]:
-                    raise ValueError("bbox has wrong values.")
-            self.__bbox = value
-
-
-def _from_shapefile(filename, bbox, verbose):
-    """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
-    if not isinstance(bbox, tuple):
-        bbox = (
-            numpy.amin(bbox[:, 0]),
-            numpy.amax(bbox[:, 0]),
-            numpy.amin(bbox[:, 1]),
-            numpy.amax(bbox[:, 1]),
-        )
-    polys = []  # tmp storage for polygons and polylines
-
-    if verbose > 0:
-        print("Reading in ESRI Shapefile... " + filename)
-    s = shapefile.Reader(filename)
-    re = numpy.array([0, 2, 1, 3], dtype=int)
-    for shape in s.shapes():
-        # only read in shapes that intersect with bbox
-        bbox2 = [shape.bbox[r] for r in re]
-        if _is_overlapping(bbox, bbox2):
-            poly = numpy.asarray(shape.points + [(nan, nan)])
-            polys.append(poly)
-
-    if len(polys) == 0:
-        raise ValueError("Shoreline data does not intersect with bbox")
-
-    return _convert_to_array(polys)
-
-
-class Shoreline(Geodata):
-    """
-    The shoreline class extends :class:`Geodata` to store data
+    The shoreline class extends :class:`Region` to store data
     that is later used to create signed distance functions to
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0):
 
         if isinstance(bbox, tuple):
-            _boubox = numpy.asarray(_create_boubox(bbox))
+            _boubox = np.asarray(_create_boubox(bbox))
         else:
-            _boubox = numpy.asarray(bbox)
+            _boubox = np.asarray(bbox)
             if not _is_path_ccw(_boubox):
-                _boubox = numpy.flipud(_boubox)
+                _boubox = np.flipud(_boubox)
             bbox = (
-                numpy.nanmin(_boubox[:, 0]),
-                numpy.nanmax(_boubox[:, 0]),
-                numpy.nanmin(_boubox[:, 1]),
-                numpy.nanmax(_boubox[:, 1]),
+                np.nanmin(_boubox[:, 0]),
+                np.nanmax(_boubox[:, 0]),
+                np.nanmin(_boubox[:, 1]),
+                np.nanmax(_boubox[:, 1]),
             )
 
-        super().__init__(bbox)
+        super().__init__(bbox, crs)
 
         self.shp = shp
-        self.h0 = h0  # this converts meters -> wgs84 degees
+        self.h0 = h0
         self.inner = []
         self.outer = []
         self.mainland = []
@@ -496,16 +454,16 @@ class Shoreline(Geodata):
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
 
-        polys = _from_shapefile(self.shp, self.bbox, verbose)
+        polys = self._read()
 
-        polys = _smooth_shoreline(polys, self.refinements, verbose)
+        polys = _smooth_shoreline(polys, self.refinements)
 
-        polys = _densify(polys, self.h0, self.bbox, verbose)
+        polys = _densify(polys, self.h0, self.bbox)
 
-        polys = _clip_polys(polys, self.bbox, verbose)
+        polys = _clip_polys(polys, self.bbox)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, verbose
+            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult
         )
 
     @property
@@ -549,8 +507,57 @@ class Shoreline(Geodata):
     def h0(self, value):
         if value <= 0:
             raise ValueError("h0 must be > 0")
-        value /= 111e3  # convert to wgs84 degrees
         self.__h0 = value
+
+    @staticmethod
+    def transform_to(gdf, dst_crs):
+        """Transform geodataframe ``gdf`` representing
+        a shoreline to dst_crs
+        """
+        dst_crs = CRS.from_user_input(dst_crs)
+        if not gdf.crs.equals(dst_crs):
+            logger.info(f"Reprojecting shoreline from {gdf.crs} to {dst_crs}")
+            gdf = gdf.to_crs(dst_crs)
+        return gdf
+
+    def _read(self):
+        """Reads a ESRI Shapefile from `filename` ∩ `bbox`"""
+        if not isinstance(self.bbox, tuple):
+            _bbox = (
+                np.amin(self.bbox[:, 0]),
+                np.amax(self.bbox[:, 0]),
+                np.amin(self.bbox[:, 1]),
+                np.amax(self.bbox[:, 1]),
+            )
+        else:
+            _bbox = self.bbox
+
+        logger.debug("Entering: _read")
+
+        msg = f"Reading in ESRI Shapefile {self.shp}"
+        logger.info(msg)
+
+        # transform if necessary
+        s = self.transform_to(gpd.read_file(self.shp), self.crs)
+
+        polys = []  # store polygons
+
+        delimiter = np.empty((1, 2))
+        delimiter[:] = np.nan
+        re = numpy.array([0, 2, 1, 3], dtype=int)
+        for g in s.geometry:
+            # extent of geometry
+            bbox2 = [g.bounds[r] for r in re]
+            if _is_overlapping(_bbox, bbox2):
+                poly = np.asarray(g.exterior.coords.xy).T
+                polys.append(np.row_stack((poly, delimiter)))
+
+        if len(polys) == 0:
+            raise ValueError("Shoreline data does not intersect with bbox")
+
+        logger.debug("Exiting: _read")
+
+        return _convert_to_array(polys)
 
     def plot(
         self,
@@ -620,41 +627,61 @@ class Shoreline(Geodata):
         return ax
 
 
-def _from_file(filename, bbox, verbose):
-    """Read in a digitial elevation model from a NetCDF or GeoTif file"""
-
-    if verbose:
-        print(f"Reading in {filename}")
-
-    with rasterio.open(filename) as r:
-
-        if bbox is None:
-            bbox = (
-                r.bounds.left,
-                r.bounds.right,
-                r.bounds.bottom,
-                r.bounds.top,
-            )
-        topobathy = r.read(1, window=from_bounds(*bbox, r.transform))
-
-    return topobathy, r.res, bbox
-
-
 class DEM(Grid):
     """Digitial elevation model read in from a tif or NetCDF file
     parent class is a :class:`Grid`
     """
 
-    def __init__(self, dem, bbox=None, verbose=1):
+    def __init__(self, dem, crs=4326, bbox=None):
 
         basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"] or [".tif"]:
-            topobathy, reso, bbox = _from_file(dem, bbox, verbose)
+            topobathy, reso, bbox = self._read(dem, bbox, crs)
         else:
             raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
         self.dem = dem
         super().__init__(
-            bbox=bbox, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
+            bbox=bbox,
+            crs=crs,
+            dx=reso[0],
+            dy=np.abs(reso[1]),
+            values=np.rot90(topobathy, 3),
         )
         super().build_interpolant()
+
+    @staticmethod
+    def transform_to(xry, dst_crs):
+        """Transform xarray ``xry`` representing
+        a raster to dst_crs
+        """
+        dst_crs = CRS.from_user_input(dst_crs)
+        if not xry.crs.equals(dst_crs):
+            msg = f"Reprojecting raster from {xry.crs} to {dst_crs}"
+            logger.debug(msg)
+            xry = xry.rio.reproject(dst_crs)
+        return xry
+
+    def _read(self, filename, bbox, crs):
+        """Read in a digitial elevation model from a NetCDF or GeoTif file"""
+        logger.debug("Entering: DEM._read")
+
+        msg = f"Reading in {filename}"
+        logger.info(msg)
+
+        with rxr.open_rasterio(filename) as r:
+            # warp/reproject it if necessary
+            r = self.transform_to(r, crs)
+            # entire DEM is read in
+            if bbox is None:
+                bnds = r.rio.bounds()
+                bbox = (bnds[0], bnds[2], bnds[1], bnds[3])
+            else:
+                # then we clip the DEM to the box
+                r = r.rio.clip_box(
+                    minx=bbox[0], miny=bbox[2], maxx=bbox[1], maxy=bbox[3]
+                )
+            topobathy = r.data[0]
+
+            logger.debug("Exiting: DEM._read")
+            return topobathy, r.rio.resolution(), bbox

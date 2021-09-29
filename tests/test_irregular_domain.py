@@ -6,7 +6,7 @@ import oceanmesh as om
 
 
 def test_irregular_domain():
-    fname = os.path.join(os.path.dirname(__file__), "GSHHS_h_L1.shp")
+    fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
     # New York Lower Bay and Jamaica Bay
     bbox = np.array(
@@ -25,16 +25,17 @@ def test_irregular_domain():
         ]
     )
 
-    min_edge_length = 100
+    min_edge_length = 0.001
 
-    shore = om.Shoreline(fname, bbox, min_edge_length)
+    region = om.Region(bbox, 4326)
+    shore = om.Shoreline(fname, region.bbox, min_edge_length)
     shore.plot(file_name="test_irregular_domain.png", show=False)
 
-    edge_length = om.distance_sizing_function(shore, max_edge_length=1e3)
+    edge_length = om.distance_sizing_function(shore, max_edge_length=0.01)
 
     domain = om.signed_distance_function(shore)
 
-    points, cells = om.generate_mesh(domain, edge_length, verbose=2, max_iter=50)
+    points, cells = om.generate_mesh(domain, edge_length, max_iter=50)
 
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
 

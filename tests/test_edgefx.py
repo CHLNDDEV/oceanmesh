@@ -9,14 +9,14 @@ fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
 def test_edgefx():
 
-    bbox1 = (-75.0, -70.0, 38.0, 42.0)
-    shore1 = Shoreline(fname, bbox1, 1000.0)
+    region1 = om.Region(extent=(-75.0, -70.0, 38.0, 42.0), crs=4326)
+    shore1 = Shoreline(fname, region1.bbox, 0.01)
     shore1.plot()
 
     dis1 = distance_sizing_function(shore1)
 
-    bbox2 = (-74.0, -73.0, 40.0, 41.0)
-    shore2 = Shoreline(fname, bbox2, 100.0)
+    region2 = om.Region(extent=(-74.0, -73.0, 40.0, 41.0), crs=4326)
+    shore2 = Shoreline(fname, region2.bbox, 0.001)
 
     dis2 = distance_sizing_function(shore2)
     dis2.extrapolate = False
@@ -31,25 +31,28 @@ def test_edgefx():
 
 
 def test_edgefx_elevation_bounds():
-    bbox = (-95.24, -95.21, 28.95, 29.00)
+    region = om.Region(extent=(-95.24, -95.21, 28.95, 29.00), crs=4326)
 
-    dem = om.DEM(dfname, bbox)
+    dem = om.DEM(dfname, bbox=region.bbox, crs=4326)
 
-    sho = om.Shoreline(fname, bbox, 500)
+    sho = om.Shoreline(fname, region.bbox, 0.005)
     sho.plot()
 
     edge_length = om.distance_sizing_function(sho)
 
-    bounds = [[2000.0, 3000.0, -10, -5], [1000.0, 1500.0, -5, -1]]
+    bounds = [[0.02, 0.03, -10, -5], [0.01, 0.015, -5, -1]]
     edge_length = om.enforce_mesh_size_bounds_elevation(edge_length, dem, bounds)
     edge_length.plot()
 
 
 def test_edgefx_medial_axis():
 
-    bbox, min_edge_length = (-75.000, -70.001, 40.0001, 41.9000), 1e3
+    region, min_edge_length = (
+        om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=4326),
+        0.01,
+    )
 
-    shoreline = om.Shoreline(fname, bbox, min_edge_length)
+    shoreline = om.Shoreline(fname, region.bbox, min_edge_length)
     sdf = om.signed_distance_function(shoreline)
 
     # Visualize the medial points
