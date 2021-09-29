@@ -46,6 +46,7 @@ def _parse_kwargs(kwargs):
             "blend_polynomial",
             "blend_max_iter",
             "blend_nnear",
+            "verbose",
         }:
             pass
         else:
@@ -101,6 +102,7 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         "blend_polynomial": 2,
         "blend_max_iter": 20,
         "blend_nnear": 256,
+        "verbose": 0,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
