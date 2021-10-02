@@ -391,15 +391,23 @@ EPSG = 4326  # EPSG:4326 or WGS84
 extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length1 = 0.01  # minimum mesh size in domain in projection
 
-bbox2, min_edge_length2 = (-74.85, -73.75, 40.4, 41), 50.0
-extent2 = om.Region(extent=(-74.85, -73.75, 40.4, 41.00), crs=EPSG)
+bbox2 = [
+    [-73.9481, 40.6028],
+    [-74.0186, 40.5688],
+    [-73.9366, 40.5362],
+    [-73.7269, 40.5626],
+    [-73.7231, 40.6459],
+    [-73.8242, 40.6758],
+    [-73.9481, 40.6028],
+]
+extent2 = om.Region(extent=bbox2, crs=EPSG)
 min_edge_length2 = 4.6e-4  # minimum mesh size in domain in projection
 
-s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1)
+s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1, minimum_area_mult=0.01)
 sdf1 = om.signed_distance_function(s1)
-el1 = om.distance_sizing_function(s1, max_edge_length=5e3)
+el1 = om.distance_sizing_function(s1, max_edge_length=0.05)
 
-s2 = om.Shoreline(fname1, extent2.bbox, min_edge_length2)
+s2 = om.Shoreline(fname1, extent2.bbox, min_edge_length2, minimum_area_mult=0.01)
 sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 
@@ -408,9 +416,6 @@ el2 = om.distance_sizing_function(s2)
 points, cells = om.generate_multiscale_mesh(
     [sdf1, sdf2],
     [el1, el2],
-    blend_width=5e3,  # width of blend zone around nest
-    blend_polynomial=3,  # inverse distance weighting (IWD) polynomial
-    blend_nnear=16,  # number of points to consider in IDW
 )
 
 # remove degenerate mesh faces and other common problems in the mesh
