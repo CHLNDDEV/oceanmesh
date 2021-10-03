@@ -195,7 +195,27 @@ def signed_distance_function(shoreline):
         dist = (-1) ** (cond) * d
         return dist
 
-    return Domain(shoreline.bbox, func, covering=boubox)
+    poly2 = shoreline.boubox
+    tree2 = scipy.spatial.cKDTree(
+        poly2[~np.isnan(poly2[:, 0]), :], balanced_tree=False, leafsize=50
+    )
+
+    def func_covering(x):
+        # Initialize d with some positive number larger than geps
+        dist = np.zeros(len(x)) + 1.0
+        # are points inside the boubox?
+        in_boubox, _ = inpoly2(x, boubox, e_box)
+        # compute dist to shoreline
+        try:
+            d, _ = tree2.query(x, k=1, workers=-1)
+        except (Exception,):
+            d, _ = tree2.query(x, k=1, n_jobs=-1)
+        # d is signed negative if inside the
+        # intersection of two areas and vice versa.
+        dist = (-1) ** (in_boubox) * d
+        return dist
+
+    return Domain(shoreline.bbox, func, covering=func_covering)
 
 
 def _create_boubox(bbox):
@@ -240,7 +260,9 @@ def multiscale_signed_distance_function(signed_distance_functions):
     # calculate the boolean/set difference from the base sdf and subsequent nests
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
-        nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
+        # set eval method to covering
+        tmp = [Domain(s.bbox, s.covering) for s in signed_distance_functions[i + 1 :]]
+        nests.append(Difference([sdf, *tmp]))
 
     union = Union(nests)
 

@@ -403,11 +403,11 @@ bbox2 = [
 extent2 = om.Region(extent=bbox2, crs=EPSG)
 min_edge_length2 = 4.6e-4  # minimum mesh size in domain in projection
 
-s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1, minimum_area_mult=0.01)
+s1 = om.Shoreline(fname1, extent1.bbox, min_edge_length1)
 sdf1 = om.signed_distance_function(s1)
 el1 = om.distance_sizing_function(s1, max_edge_length=0.05)
 
-s2 = om.Shoreline(fname1, extent2.bbox, min_edge_length2, minimum_area_mult=0.01)
+s2 = om.Shoreline(fname1, extent2.bbox, min_edge_length2)
 sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 
