@@ -429,44 +429,26 @@ points, cells = om.laplacian2(points, cells)
 
 # plot it showing the different levels of resolution
 triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-gs = gridspec.GridSpec(2, 2)
-gs.update(wspace=0.5)
+gs = gridspec.GridSpec(2, 1)
+gs.update(wspace=0.1)
 plt.figure()
-
-bbox3 = np.array(
-    [
-        [-73.78, 40.60],
-        [-73.75, 40.60],
-        [-73.75, 40.64],
-        [-73.78, 40.64],
-        [-73.78, 40.60],
-    ],
-    dtype=float,
-)
 
 ax = plt.subplot(gs[0, 0])  #
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=1)
+ax.triplot(triang, "-", lw=0.5)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
-ax = plt.subplot(gs[0, 1])
+ax = plt.subplot(gs[1, 0])  #
+buf = 0.07
+ax.set_xlim([min(bbox2[:,0])-buf,max(bbox2[:,0])+buf])
+ax.set_ylim([min(bbox2[:,1])-buf,max(bbox2[:,1])+buf])
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=1)
+ax.triplot(triang, "-", lw=0.5)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-ax.set_xlim(np.amin(bbox2[:, 0]), np.amax(bbox2[:, 0]))
-ax.set_ylim(np.amin(bbox2[:, 1]), np.amax(bbox2[:, 1]))
-ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
-ax = plt.subplot(gs[1, :])
-ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=1)
-ax.set_xlim(-73.78, -73.75)
-ax.set_ylim(40.60, 40.64)
 plt.show()
 ```
-![Multiscale](https://user-images.githubusercontent.com/18619644/136119785-8746552d-4ff6-44c3-9aa1-3e4981ba3518.png)
-
+![Multiscale](<img width="747" alt="image" src="https://user-images.githubusercontent.com/21131934/136140049-9eee309a-987f-4128-9fe2-bb207f972be3.png">
 
 See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 
