@@ -657,8 +657,3 @@ class DEM(Grid):
             bbox=bbox, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
         )
         super().build_interpolant()
-
-if __name__ == '__main__':
-    file_name = '/home/josephelmes/oceanmesh/datasets/EastCoast.nc'
-    print(file_name)
-    dem = DEM(file_name)
