@@ -448,7 +448,7 @@ ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
 
 plt.show()
 ```
-![Multiscale](<img width="747" alt="image" src="https://user-images.githubusercontent.com/21131934/136140049-9eee309a-987f-4128-9fe2-bb207f972be3.png">
+<img width="747" alt="image" src="https://user-images.githubusercontent.com/21131934/136140049-9eee309a-987f-4128-9fe2-bb207f972be3.png">
 
 See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 
