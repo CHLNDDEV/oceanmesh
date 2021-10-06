@@ -1,3 +1,4 @@
+import logging
 import time
 
 import matplotlib.pyplot as plt
@@ -7,10 +8,13 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
+from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
 from .signed_distance_function import Domain, multiscale_signed_distance_function
+
+logger = logging.getLogger(__name__)
 
 __all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
 
@@ -26,32 +30,6 @@ def plot_mesh(points, cells, count=0, show=True, pause=999):
         plt.close()
 
 
-def silence(func):
-    def wrapper(*args, **kwargs):
-        None
-
-    return wrapper
-
-
-def talk(func):
-    def wrapper(*args, **kwargs):
-        func(*args, **kwargs)
-
-    return wrapper
-
-
-def _select_verbosity(opts):
-    if opts["verbose"] == 0:
-        return silence, silence
-    elif opts["verbose"] == 1:
-        return talk, silence
-    elif opts["verbose"] > 1:
-        return talk, talk
-
-    else:
-        raise ValueError("Unknown verbosity level")
-
-
 def _parse_kwargs(kwargs):
     for key in kwargs:
         if key in {
@@ -63,13 +41,13 @@ def _parse_kwargs(kwargs):
             "domain",
             "edge_length",
             "bbox",
-            "verbose",
             "min_edge_length",
             "plot",
             "blend_width",
             "blend_polynomial",
             "blend_max_iter",
             "blend_nnear",
+            "lock_boundary",
         }:
             pass
         else:
@@ -119,31 +97,30 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         "seed": 0,
         "pfix": None,
         "points": None,
-        "verbose": 1,
         "min_edge_length": None,
         "plot": 999999,
-        "blend_width": 5000,
+        "blend_width": 2500,
         "blend_polynomial": 2,
         "blend_max_iter": 20,
         "blend_nnear": 256,
+        "lock_boundary": False,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
     master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
         edge_lengths,
-        verbose=False,
         blend_width=opts["blend_width"],
         nnear=opts["blend_nnear"],
         p=opts["blend_polynomial"],
     )
-    union, nests = multiscale_signed_distance_function(domains, verbose=False)
+    union, nests = multiscale_signed_distance_function(domains)
     _p = []
     global_minimum = 9999
     for domain_number, (sdf, edge_length) in enumerate(
         zip(nests, edge_lengths_smoothed)
     ):
-        print(f"--> Building domain #{domain_number}")
+        logger.info(f"--> Building domain #{domain_number}")
         global_minimum = np.amin([global_minimum, edge_length.hmin])
         _tmpp, _ = generate_mesh(sdf, edge_length, **kwargs)
         _p.append(_tmpp)
@@ -151,13 +128,14 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     _p = np.concatenate(_p, axis=0)
 
     # merge the two domains together
-    print("--> Blending the domains together...")
+    logger.info("--> Blending the domains together...")
     _p, _t = generate_mesh(
         domain=union,
         edge_length=master_edge_length,
         min_edge_length=global_minimum,
         points=_p,
         max_iter=opts["blend_max_iter"],
+        lock_boundary=True,
         **kwargs,
     )
 
@@ -186,9 +164,6 @@ def generate_mesh(domain, edge_length, **kwargs):
             Psuedo-random seed to initialize meshing points. (default==0)
         * *pfix* (`array-like`) --
             An array of points to constrain in the mesh. (default==None)
-        * *verbose* (``int``) --
-            Output to the screen `verbose` (default==1). If `verbose`==1 only start and end messages are
-            If `verbose`==2 all messages are displayed.
         * *min_edge_length* (``float``) --
             The minimum element size in the domain. REQUIRED IF NOT USING :class:`edge_length`
         * *plot* (``int``) --
@@ -208,22 +183,12 @@ def generate_mesh(domain, edge_length, **kwargs):
         "seed": 0,
         "pfix": None,
         "points": None,
-        "verbose": 1,
         "min_edge_length": None,
         "plot": 999999,
+        "lock_boundary": False,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
-
-    verbosity1, verbosity2 = _select_verbosity(opts)
-
-    @verbosity1
-    def print_msg1(msg):
-        print(msg, flush=True)
-
-    @verbosity2
-    def print_msg2(msg):
-        print(msg, flush=True)
 
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
@@ -243,6 +208,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
+    lock_boundary = opts["lock_boundary"]
 
     if opts["points"] is None:
         p = _generate_initial_points(
@@ -253,15 +219,15 @@ def generate_mesh(domain, edge_length, **kwargs):
             fd,
             pfix,
         )
+  
     else:
         p = opts["points"]
 
     N = p.shape[0]
     assert N > 0, "No vertices to mesh with!"
 
-    print_msg1(
-        "Commencing mesh generation with %d vertices will perform %i"
-        " iterations." % (N, max_iter),
+    logger.info(
+        f"Commencing mesh generation with {N} vertices will perform {max_iter} iterations."
     )
 
     for count in range(max_iter):
@@ -274,8 +240,13 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Get the current topology of the triangulation
         p, t = _get_topology(dt)
 
-        # Find where pfix went
         ifix = []
+
+        if lock_boundary:
+            _, bpts = _external_topology(p, t)
+            for fix in bpts:
+                ind, dist = _closest_node(fix, p)
+                ifix.append(ind)
 
         if nfix > 0:
             for fix in pfix:
@@ -289,12 +260,12 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # plot the mesh every count iterations
         if count % opts["plot"] == 0 and count != 0:
-            plot_mesh(p, t, count=count, pause=0.2)
+            plot_mesh(p, t, count=count, pause=5.0)
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
             p, t, _ = fix_mesh(p, t, dim=_DIM, delete_unused=True)
-            print_msg1("Termination reached...maximum number of iterations.")
+            logger.info("Termination reached...maximum number of iterations.")
             return p, t
 
         # Compute the forces on the bars
@@ -312,13 +283,12 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Show the user some progress so they know something is happening
         maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
 
-        print_msg2(
-            "Iteration #%d, max movement is %f, there are %d vertices and %d"
-            " cells" % (count + 1, maxdp, len(p), len(t)),
+        logger.info(
+            f"Iteration #{count+1}, max movement is {maxdp}, there are {len(p)} vertices and {len(t)}"
         )
 
         end = time.time()
-        print_msg2("     Elapsed wall-clock time %f : " % (end - start))
+        logger.info(f"  Elapsed wall-clock time {end-start} seconds")
 
 
 def _unpack_sizing(edge_length, opts):
@@ -486,11 +456,7 @@ def _unpack_pfix(dim, opts):
     if opts["pfix"] is not None:
         pfix = np.array(opts["pfix"], dtype="d")
         nfix = len(pfix)
-        if opts["verbose"]:
-            print(
-                "Constraining " + str(nfix) + " fixed points..",
-                flush=True,
-            )
+        logger.info(f"Constraining {nfix} fixed points..")
     return pfix, nfix
 
 

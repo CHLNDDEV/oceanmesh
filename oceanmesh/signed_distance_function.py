@@ -1,3 +1,4 @@
+import logging
 import math
 import random
 
@@ -7,6 +8,8 @@ import scipy.spatial
 from inpoly import inpoly2
 
 from . import Shoreline, edges
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "multiscale_signed_distance_function",
@@ -108,9 +111,10 @@ def _plot(geo, filename=None, samples=100000):
 
 
 class Domain:
-    def __init__(self, bbox, func):
+    def __init__(self, bbox, func, covering=None):
         self.bbox = bbox
         self.domain = func
+        self.covering = covering
 
     def eval(self, x):
         return self.domain(x)
@@ -178,7 +182,6 @@ class UnionWithCoverings(Domain):
 
         return d
 
-
 class Intersection(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
@@ -198,7 +201,7 @@ class Difference(Domain):
             [-d.eval(x) if n > 0 else d.eval(x) for n, d in enumerate(self.domain)]
         )
 
-def signed_distance_function(shoreline, verbose=True):
+def signed_distance_function(shoreline):
     """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
     and calculates a signed distance function with it under the assumption that all polygons are closed.
     The returned function `func` becomes a bound method of the :class:`Domain` and is queried during
@@ -215,8 +218,8 @@ def signed_distance_function(shoreline, verbose=True):
         Contains a signed distance function along with an extent `bbox`
 
     """
-    if verbose:
-        print("Building a signed distance function...")
+    logger.info("Building a signed distance function...")
+
     assert isinstance(shoreline, Shoreline), "shoreline is not a Shoreline object"
     poly = np.vstack((shoreline.inner, shoreline.boubox))
     tree = scipy.spatial.cKDTree(
@@ -245,7 +248,27 @@ def signed_distance_function(shoreline, verbose=True):
         dist = (-1) ** (cond) * d
         return dist
 
-    return Domain(shoreline.bbox, func)
+    poly2 = shoreline.boubox
+    tree2 = scipy.spatial.cKDTree(
+        poly2[~np.isnan(poly2[:, 0]), :], balanced_tree=False, leafsize=50
+    )
+
+    def func_covering(x):
+        # Initialize d with some positive number larger than geps
+        dist = np.zeros(len(x)) + 1.0
+        # are points inside the boubox?
+        in_boubox, _ = inpoly2(x, boubox, e_box)
+        # compute dist to shoreline
+        try:
+            d, _ = tree2.query(x, k=1, workers=-1)
+        except (Exception,):
+            d, _ = tree2.query(x, k=1, n_jobs=-1)
+        # d is signed negative if inside the
+        # intersection of two areas and vice versa.
+        dist = (-1) ** (in_boubox) * d
+        return dist
+
+    return Domain(shoreline.bbox, func, covering=func_covering)
 
 def _create_boubox(bbox):
     """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
@@ -261,7 +284,7 @@ def _create_boubox(bbox):
         dtype=float,
     )
 
-def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
+def multiscale_signed_distance_function(signed_distance_functions):
     """Takes a list of :class:`Domain` objects and calculates a signed distance
         function from each one that represents a multiscale meshing domain.
 
@@ -276,8 +299,8 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     nests: a list of :class:`Difference` containing objects
         Nested domains are set differenced from their parent domains.
     """
-    if verbose:
-        print("Building a multiscale signed distance function...")
+    logger.info("Building a multiscale signed distance function...")
+
     msg = "`signed_distance_functions` is not a list"
     assert isinstance(signed_distance_functions, list), msg
     assert len(signed_distance_functions) > 1, "Use `signed_distance_function` instead"
@@ -288,32 +311,10 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     # calculate the boolean/set difference from the base sdf and subsequent nests
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
-        nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
+        # set eval method to covering
+        tmp = [Domain(s.bbox, s.covering) for s in signed_distance_functions[i + 1 :]]
+        nests.append(Difference([sdf, *tmp]))
 
-    # create coverings
-    coverings = []
-    for sdf in signed_distance_functions:
-        coverings.append(_create_boubox(sdf.bbox))
-
-    union = UnionWithCoverings(signed_distance_functions, coverings)
+    union = Union(nests)
 
     return union, nests
-
-if __name__ == '__main__':
-    bbox = (0, 2, -1, 0)
-    bbox2 = (-.1, 2.1, -1.1, .1)
-    domain = create_bbox(bbox)
-    x = np.linspace(bbox2[0], bbox2[1], 101)
-    print(x[[0, -1]])
-    y = np.linspace(bbox2[2], bbox2[3], 101)
-    xm, ym = .5 * (bbox[0] + bbox[1]), .5 * (bbox[2] + bbox[3])
-    X, Y = np.meshgrid(x, y)
-    P = np.array([X, Y])
-    d = domain.eval(P)
-
-    import matplotlib.pyplot as pt
-    c = pt.matshow(d, extent=bbox2, aspect='auto', origin='lower',
-                   vmin=-1, vmax=1, cmap='seismic')
-    pt.colorbar(c)
-    pt.plot(xm, ym, 'rx')
-    pt.show()

@@ -1,4 +1,5 @@
 import os
+
 import matplotlib.pyplot as pyplot
 import oceanmesh
 
@@ -8,10 +9,11 @@ shp = os.path.join(os.path.dirname(__file__), "islands.shp")
 def test_rect():
     bbox = (0.4, 1.6, -0.6, 0.6)
 
-    min_edge_length = 2.0e3  # h0
-    max_edge_length = 10.0e3
+    min_edge_length = 0.002  # 2.0e3  # h0
+    max_edge_length = 0.01  # 10.0e3
 
-    shore = oceanmesh.Shoreline(shp, bbox, min_edge_length)
+    region = oceanmesh.Region(bbox, 4326)
+    shore = oceanmesh.Shoreline(shp, region.bbox, min_edge_length)
     edge_length = oceanmesh.distance_sizing_function(
         shore, rate=0.10, max_edge_length=max_edge_length
     )

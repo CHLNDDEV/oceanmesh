@@ -1,4 +1,4 @@
-import warnings
+import logging
 
 import numpy as np
 import scipy.spatial
@@ -8,6 +8,8 @@ from inpoly import inpoly2
 
 from . import edges
 from .grid import Grid
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "enforce_mesh_gradation",
@@ -20,7 +22,7 @@ __all__ = [
 ]
 
 
-def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
+def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     """Enforce mesh size bounds as a function of elevation
 
     Parameters
@@ -34,8 +36,6 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
         [[min_mesh_size, max_mesh_size, min_elevation_bound, max_elevation_bound]]
         The orientation of the elevation bounds should be the same as that of the DEM
         (i.e., negative downwards towards the Earth's center).
-    verbose: boolean
-        Whether or not to print messages to the screen
 
     Returns
     -------
@@ -50,9 +50,6 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
             " max_mesh_size, min_elevation_bound, max_elevation_bound]"
         )
         min_h, max_h, min_z, max_z = bound
-        # for now do this crude conversion
-        min_h /= 111e3
-        max_h /= 111e3
         # sanity checks
         error_sz = (
             f"For bound number {i} the maximum size bound {max_h} is smaller"
@@ -80,7 +77,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds, verbose=True):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
+def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -89,8 +86,6 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
         A grid object with its values field populated
     gradation: float
         The decimal percent mesh size gradation rate to-be-enforced.
-    verbose: boolean
-        whether to write messages to the screen
 
     Returns
     -------
@@ -101,9 +96,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
     if gradation < 0:
         raise ValueError("Parameter `gradation` must be > 0.0")
     if gradation > 1.0:
-        warnings.warn("Parameter `gradation` is set excessively high (> 1.0)")
-    if verbose:
-        print(f"Enforcing mesh size gradation of {gradation} decimal percent...")
+        logger.warning("Parameter `gradation` is set excessively high (> 1.0)")
+
+    logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
     if grid.dx != grid.dy:
@@ -120,12 +115,17 @@ def enforce_mesh_gradation(grid, gradation=0.15, verbose=True):
         values=tmp,
         hmin=grid.hmin,
         extrapolate=grid.extrapolate,
+        crs=crs,
     )
     grid_limited.build_interpolant()
     return grid_limited
 
 def distance_sizing_function(
-    shoreline, rate=0.15, max_edge_length=None, verbose=1, coarsen=1
+    shoreline,
+    rate=0.15,
+    max_edge_length=None,
+    coarsen=1,
+    crs=4326,
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
     Parameters
@@ -136,8 +136,6 @@ def distance_sizing_function(
         The rate of expansion in decimal percent from the shoreline.
     max_edge_length: float, optional
         The maximum allowable edge length
-    verbose: boolean, optional
-        Whether to write messages to the screen
     coarsen: integer, optional
         Downsample the grid by a constant factor in x and y axes
     Returns
@@ -145,14 +143,15 @@ def distance_sizing_function(
     :class:`Grid` object
         A sizing function that takes a point and returns a value
     """
-    if verbose > 0:
-        print("Building a distance sizing function...")
+    logger.info("Building a distance sizing function...")
+
     grid = Grid(
         bbox=shoreline.bbox,
         dx=shoreline.h0 * coarsen,
         hmin=shoreline.h0,
         extrapolate=True,
         values=0.0,
+        crs=crs,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = np.ones(shape=(grid.nx, grid.ny))
@@ -184,7 +183,6 @@ def distance_sizing_function(
         dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
-        max_edge_length /= 111e3  # assume the value is passed in meters
         tmp[tmp > max_edge_length] = max_edge_length
 
     grid.values = np.ma.array(tmp, mask=mask)
@@ -197,8 +195,8 @@ def feature_sizing_function(
     signed_distance_function,
     r=3,
     max_edge_length=None,
-    verbose=True,
     plot=False,
+    crs=4326,
 ):
     """Mesh sizes vary proportional to the width or "thickness" of the shoreline
     Implements roughly the approximate medial axis calculation from Eq. 7.1:
@@ -214,8 +212,6 @@ def feature_sizing_function(
     r: float, optional
         The number of times to divide the shoreline thickness/width to calculate
         the local element size.
-    verbose: boolean, optional
-        Whether to write messages to the screen
     plot: boolean, optional
         Visualize the medial points ontop of the shoreline
 
@@ -226,8 +222,8 @@ def feature_sizing_function(
 
     """
 
-    if verbose:
-        print("Building a feature sizing function...")
+    logger.info("Building a feature sizing function...")
+
     assert r > 0, "local feature size "
     grid_calc = Grid(
         bbox=shoreline.bbox,
@@ -235,6 +231,7 @@ def feature_sizing_function(
         hmin=shoreline.h0,
         values=0.0,
         extrapolate=True,
+        crs=crs,
     )
     grid = Grid(
         bbox=shoreline.bbox,
@@ -242,6 +239,7 @@ def feature_sizing_function(
         hmin=shoreline.h0,
         values=0.0,
         extrapolate=True,
+        crs=crs,
     )
     # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
     phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
@@ -299,7 +297,6 @@ def feature_sizing_function(
     # interpolate the finer grid used for calculations to the final coarser grid
     grid = grid_calc.interpolate_to(grid)
     if max_edge_length is not None:
-        max_edge_length /= 111e3  # assume the value is passed in meters
         grid.values[grid.values > max_edge_length] = max_edge_length
 
     grid.hmin = shoreline.h0
@@ -335,6 +332,7 @@ def wavelength_sizing_function(
     min_edgelength=None,
     max_edge_length=None,
     verbose=True,
+    crs=4326,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
@@ -350,9 +348,6 @@ def wavelength_sizing_function(
         of the edgelength function is used.
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
-    verbose: boolean, optional
-        Whether to write messages to the screen
-
 
     Returns
     -------
@@ -360,22 +355,20 @@ def wavelength_sizing_function(
         A sizing function that takes a point and returns a value
 
     """
-    if verbose > 0:
-        print("Building a wavelength sizing function...")
+    logger.info("Building a wavelength sizing function...")
+
     lon, lat = dem.create_grid()
     tmpz = dem.eval((lon, lat))
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0)
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs)
     tmpz[np.abs(tmpz) < 1] = 1 #Limit minimum depth to 1 m
     grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
-    grid.values /= 111e3  # transform to degrees
     if min_edgelength is None:
         min_edgelength = np.amin(grid.values)
     grid.hmin = min_edgelength
     if max_edge_length is not None:
-        max_edge_length /= 111e3
         grid.values[grid.values > max_edge_length] = max_edge_length
     grid.build_interpolant()
 
@@ -388,6 +381,7 @@ def slope_sizing_function(
     min_edge_length=None,
     max_edge_length=None,
     verbose=True,
+    crs=4326,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of the M2 tidal constituent
@@ -421,7 +415,7 @@ def slope_sizing_function(
     x, y = dem.create_grid()
 
     tmpz = dem.eval((x, y))
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0)
+    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs)
     x0, xN, y0, yN = dem.bbox
     tmpz[np.abs(tmpz) < 50] = 50
 
@@ -669,8 +663,6 @@ def multiscale_sizing_function(
         how many nearest neighbors should one take to perform IDW interp?
     blend_width: float, optional
         The width of the blending zone between nests in meters
-    verbose: boolean, optional
-        Whether to write messages to the screen
 
     Returns
     -------
@@ -687,16 +679,19 @@ def multiscale_sizing_function(
     new_list_of_grids = []
     # loop through remaining sizing functions
     for idx1, new_coarse in enumerate(list_of_grids[:-1]):
-        if verbose:
-            print(f"For sizing function #{idx1}")
+        logger.info(f"For sizing function #{idx1}")
+
         # interpolate all finer nests onto coarse func and enforce gradation rate
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
-            if verbose:
-                print(
-                    f"  Interpolating sizing function #{idx1+1 + k} onto sizing"
-                    f" function #{idx1}"
-                )
-            _dx = finer.dx * 111e3
+            logger.info(
+                f"  Interpolating sizing function #{idx1+1 + k} onto sizing function #{idx1}"
+            )
+            _wkt = finer.crs.to_dict()
+            if "units" in _wkt:
+                _dx = finer.dx
+            else:
+                # it must be degrees?
+                _dx = finer.dx * 111e3
             _blend_width = int(np.floor(blend_width / _dx))
             finer.extrapolate = False
             new_coarse = finer.blend_into(
@@ -749,35 +744,3 @@ def EarthGradient(F, dy, dx):
     Fy[1:-1, :] = (F[2:, :] - F[:-2, :]) / (2 * dy)
 
     return Fy, Fx
-
-if __name__ == '__main__':
-    #Testing gradient function
-    N = 100
-    x, y = np.linspace(0, 2*np.pi, N+1)[None, :], np.linspace(0, np.pi, N+1)[:, None]
-    dy, dx = (y[-1, 0] - y[0, 0]) / (y.shape[0] - 1), (x[0, -1] - x[0, 0]) / (x.shape[1] - 1)
-    F = np.cos(y) * np.cos(x)
-    Fx, Fy = -np.cos(y) * np.sin(x), -np.sin(y) * np.cos(x)
-
-    Fy1, Fx1 = EarthGradient(F, dy, dx)
-
-    import matplotlib.pyplot as pt
-
-    for F_1, F_2 in zip([Fx, Fy], [Fx1, Fy1]):
-        c = pt.matshow(F, aspect='auto', origin='lower', vmin=-1, vmax=1,
-                       extent=[x[0, 0], x[0, -1], y[0, 0], y[-1, 0]])
-        pt.colorbar(c)
-        pt.show()
-
-        c = pt.matshow(F_1, aspect='auto', origin='lower', vmin=-1, vmax=1,
-                       extent=[x[0, 0], x[0, -1], y[0, 0], y[-1, 0]])
-        pt.colorbar(c)
-        pt.show()
-
-        c = pt.matshow(F_2, aspect='auto', origin='lower', vmin=-1, vmax=1,
-                       extent=[x[0, 0], x[0, -1], y[0, 0], y[-1, 0]])
-        pt.colorbar(c)
-        pt.show()
-
-
-
-

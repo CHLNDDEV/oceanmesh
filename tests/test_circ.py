@@ -1,36 +1,25 @@
 import os
+
+import geopandas as gpd
 import matplotlib.pyplot as pyplot
 import numpy
 import oceanmesh
-import shapefile
-
 
 shp0 = os.path.join(os.path.dirname(__file__), "ocean.shp")
 shp = os.path.join(os.path.dirname(__file__), "islands.shp")
 
 
 def test_circ():
-    with shapefile.Reader(shp0) as shpf:
-        shapes = shpf.shapes()
-        n = len(shapes)
-        for shape in shapes:
-            if n > 1:
-                print(
-                    "WARN, {:d} polygons in '{:s}'. Continue with item[0].".format(
-                        n, os.path.basename(shp0)
-                    )
-                )
-                break
+    file = gpd.read_file(shp0)
+    for g in file.geometry:
+        bbox = numpy.asarray(g.exterior.coords.xy).T
+    bbox = numpy.append(bbox, [[numpy.nan, numpy.nan]], axis=0)
 
-        bbox = numpy.asarray(shape.points)
-        bbox = numpy.append(bbox, [[numpy.nan, numpy.nan]], axis=0)
+    min_edge_length = 0.002  # 2.0e3  # h0
+    max_edge_length = 0.01  # 10.0e3
 
-    del (shapes, shape, shpf)
-
-    min_edge_length = 2.0e3  # h0
-    max_edge_length = 10.0e3
-
-    shore = oceanmesh.Shoreline(shp, bbox, min_edge_length)
+    region = oceanmesh.Region(bbox, 4326)
+    shore = oceanmesh.Shoreline(shp, region.bbox, min_edge_length)
     edge_length = oceanmesh.distance_sizing_function(
         shore, rate=0.10, max_edge_length=max_edge_length
     )
