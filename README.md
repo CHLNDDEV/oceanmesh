@@ -68,6 +68,16 @@ python setup.py version
 ```
 in the working directory.
 
+To see what's going on with `oceanmesh` you can turn on logging, which is by default suppressed. 
+
+```
+import logging
+import sys
+ 
+logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
+# logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+```
 
 Installation
 ============
