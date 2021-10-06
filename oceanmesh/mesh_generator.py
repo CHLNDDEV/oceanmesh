@@ -227,10 +227,9 @@ def generate_mesh(domain, edge_length, **kwargs):
 
     fd, bbox = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
-
     _check_bbox(bbox)
     bbox = np.array(bbox).reshape(-1, 2)
-
+    print(min_edge_length)
     assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
     assert opts["max_iter"] > 0, "`max_iter` must be > 0"
@@ -258,7 +257,6 @@ def generate_mesh(domain, edge_length, **kwargs):
         p = opts["points"]
 
     N = p.shape[0]
-
     assert N > 0, "No vertices to mesh with!"
 
     print_msg1(
@@ -278,9 +276,13 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Find where pfix went
         ifix = []
+
         if nfix > 0:
             for fix in pfix:
-                ifix.append(_closest_node(fix, p))
+                ind, dist = _closest_node(fix, p) #finds closest node and associated euclidean distance
+                if dist > deps: #if new pfix is beyond threshold, replace with moved node with fixed point
+                     p[ind] = fix #This keeps fixed points fixed
+                ifix.append(ind)
 
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
@@ -435,15 +437,21 @@ def _project_points_back(p, fd, deps):
     d = fd(p)
     ix = d > 0  # Find points outside (d>0)
     if ix.any():
-
         def _deps_vec(i):
             a = [0] * 2
             a[i] = deps
             return a
 
-        dgrads = [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)]
+        try:
+            dgrads =  [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)] #old method
+
+        except ValueError: #an error is thrown if all points in fd are outside bbox domain, so instead calulate all fd and then take the solely ones outside domain
+            dgrads = [(fd(p + _deps_vec(i)) - d) / deps for i in range(2)]
+            dgrads = list(np.array(dgrads)[:, ix])
+
         dgrad2 = sum(dgrad ** 2 for dgrad in dgrads)
         dgrad2 = np.where(dgrad2 < deps, deps, dgrad2)
+
         p[ix] -= (d[ix] * np.vstack(dgrads) / dgrad2).T  # Project
     return p
 
@@ -495,4 +503,5 @@ def _closest_node(node, nodes):
     nodes = np.asarray(nodes)
     deltas = nodes - node
     dist_2 = np.einsum("ij,ij->i", deltas, deltas)
-    return np.argmin(dist_2)
+    ind = np.argmin(dist_2)
+    return ind, np.sqrt(dist_2[ind]) #index of closest node and its associated Euclidean distance

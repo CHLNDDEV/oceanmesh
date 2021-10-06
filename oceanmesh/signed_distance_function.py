@@ -16,10 +16,10 @@ __all__ = [
     "Difference",
     "Intersection",
     "create_circle",
+    "create_bbox",
 ]
 
 nan = np.nan
-
 
 def create_circle(center, radius):
     """Create a circle centered on `center` and with
@@ -35,6 +35,25 @@ def create_circle(center, radius):
 
     return np.array(positions)
 
+def create_bbox(bbox):
+    """
+    Returns a domain class object which gives a bbox and signed-distance function
+    for a domain defined by bbox.
+    """
+    import numpy as np
+    x0, xN, y0, yN = bbox
+
+    def func(p):
+        min = np.minimum
+        """Signed distance function for rectangle with corners (x1,y1), (x2,y1),
+        (x1,y2), (x2,y2).
+        This has an incorrect distance to the four corners but that isn't a big deal
+        """
+        return -min(min(min(-y0 + p[:, 1], yN - p[:, 1]), -x0 + p[:, 0]), xN - p[:, 0])
+
+    domain = Domain(bbox, func)
+
+    return domain
 
 def _generate_samples(bbox, dim, N):
     N = int(N)
@@ -66,7 +85,6 @@ def _generate_samples(bbox, dim, N):
     points = np.asarray(points)
     points = points.reshape(-1, dim)
     return points
-
 
 def _plot(geo, filename=None, samples=100000):
     p = _generate_samples(geo.bbox, 2, N=samples)
@@ -122,7 +140,6 @@ class Union(Domain):
         d = [d.eval(x) for d in self.domain]
         return np.minimum.reduce(d)
 
-
 class UnionWithCoverings(Domain):
     def __init__(self, domains, coverings):
         """`coverings` is a list of polygons representing each domains extents
@@ -171,7 +188,6 @@ class Intersection(Domain):
         d = [d.eval(x) for d in self.domain]
         return np.maximum.reduce(d)
 
-
 class Difference(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
@@ -181,7 +197,6 @@ class Difference(Domain):
         return np.maximum.reduce(
             [-d.eval(x) if n > 0 else d.eval(x) for n, d in enumerate(self.domain)]
         )
-
 
 def signed_distance_function(shoreline, verbose=True):
     """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
@@ -232,7 +247,6 @@ def signed_distance_function(shoreline, verbose=True):
 
     return Domain(shoreline.bbox, func)
 
-
 def _create_boubox(bbox):
     """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
     xmin, xmax, ymin, ymax = bbox
@@ -246,7 +260,6 @@ def _create_boubox(bbox):
         ],
         dtype=float,
     )
-
 
 def multiscale_signed_distance_function(signed_distance_functions, verbose=True):
     """Takes a list of :class:`Domain` objects and calculates a signed distance
@@ -285,3 +298,22 @@ def multiscale_signed_distance_function(signed_distance_functions, verbose=True)
     union = UnionWithCoverings(signed_distance_functions, coverings)
 
     return union, nests
+
+if __name__ == '__main__':
+    bbox = (0, 2, -1, 0)
+    bbox2 = (-.1, 2.1, -1.1, .1)
+    domain = create_bbox(bbox)
+    x = np.linspace(bbox2[0], bbox2[1], 101)
+    print(x[[0, -1]])
+    y = np.linspace(bbox2[2], bbox2[3], 101)
+    xm, ym = .5 * (bbox[0] + bbox[1]), .5 * (bbox[2] + bbox[3])
+    X, Y = np.meshgrid(x, y)
+    P = np.array([X, Y])
+    d = domain.eval(P)
+
+    import matplotlib.pyplot as pt
+    c = pt.matshow(d, extent=bbox2, aspect='auto', origin='lower',
+                   vmin=-1, vmax=1, cmap='seismic')
+    pt.colorbar(c)
+    pt.plot(xm, ym, 'rx')
+    pt.show()

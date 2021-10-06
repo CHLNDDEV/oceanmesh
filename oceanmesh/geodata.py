@@ -467,7 +467,7 @@ class Shoreline(Geodata):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, verbose=1):
+    def __init__(self, shp, bbox, h0, refinements=1, minimum_area_mult=4.0, smooth_shoreline=True, verbose=1):
 
         if isinstance(bbox, tuple):
             _boubox = numpy.asarray(_create_boubox(bbox))
@@ -495,7 +495,8 @@ class Shoreline(Geodata):
 
         polys = _from_shapefile(self.shp, self.bbox, verbose)
 
-        polys = _smooth_shoreline(polys, self.refinements, verbose)
+        if smooth_shoreline: #Default, will smooth shoreline
+            polys = _smooth_shoreline(polys, self.refinements, verbose)
 
         polys = _densify(polys, self.h0, self.bbox, verbose)
 
@@ -647,6 +648,7 @@ class DEM(Grid):
         basename, ext = os.path.splitext(dem)
         if ext.lower() in [".nc"] or [".tif"]:
             topobathy, reso, bbox = _from_file(dem, bbox, verbose)
+            print(topobathy.shape)
         else:
             raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
@@ -655,3 +657,8 @@ class DEM(Grid):
             bbox=bbox, dx=reso[0], dy=reso[1], values=numpy.rot90(topobathy, 3)
         )
         super().build_interpolant()
+
+if __name__ == '__main__':
+    file_name = '/home/josephelmes/oceanmesh/datasets/EastCoast.nc'
+    print(file_name)
+    dem = DEM(file_name)
