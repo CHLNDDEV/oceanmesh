@@ -26,7 +26,10 @@ def filt2(Z, res, wl, filtertype, truncate=2.6) :
         raise TypeError('filtertype must be either lp (low pass), \
 hp (high pass), bp (band pass) or bs (band stop)')
 
-    if wl <= 2 * res:
+    if hasattr(wl, '__len__') and type(wl) != np.ndarray:
+        wl = np.array(wl)
+
+    if np.any(wl <= 2 * res):
         print('WARNING:: Nyquist says the wavelength should exceed two times \
               the resolution of the dataset, which is an unmet condition based on these inputs')
 
@@ -60,8 +63,47 @@ hp (high pass), bp (band pass) or bs (band stop)')
     else: #Leaves the case of 'bs'
         return filt2(Z, res, np.max(wl), 'lp') - filt2(Z, res, np.min(wl),'hp')
 
-
 def gaussfilter(Z, sigma, truncate):
     from scipy.ndimage import gaussian_filter
 
     return gaussian_filter(Z, sigma, truncate=truncate, mode='nearest')
+
+if __name__ == '__main__':
+    import numpy as np
+    res = 0.2 # 200 m resolution
+
+    x = np.arange(0, 100+res, res) # eastings from 0 to 100 km
+    y = np.arange(0, 100+res, res) # northings from 0 to 100 km
+    X, Y = np.meshgrid(x,y)
+
+    # Z contains 25 km features, ~5 km diagonal features, and noise:
+    Z = np.cos(2*np.pi*X/25) + np.cos(2 * np.pi * (X + Y) / 7) + np.random.randn(X.shape[0], X.shape[1])
+
+    import matplotlib.pyplot as pt
+    pt.matshow(Z, aspect='auto', extent=[0, 100, 0, 100])
+    pt.xlabel('eastings (km)') ; pt.ylabel('northings (km)')
+    pt.title('Original with Noise')
+    pt.show()
+
+    Zlow = filt2(Z, res, 15,'lp')
+    pt.matshow(Zlow, aspect='auto', extent=[0, 100, 0, 100])
+    pt.xlabel('eastings (km)') ; pt.ylabel('northings (km)')
+    pt.title('15 km lowpass filtered data')
+    pt.show()
+
+    Zhi = filt2(Z, res, 15,'hp')
+    pt.matshow(Zhi, aspect='auto', extent=[0, 100, 0, 100])
+    pt.xlabel('eastings (km)') ; pt.ylabel('northings (km)')
+    pt.title('15 km highpass filtered data')
+    pt.show()
+
+    Zbp = filt2(Z, res, [4, 7],'bp')
+    pt.matshow(Zbp, aspect='auto', extent=[0, 100, 0, 100])
+    pt.xlabel('eastings (km)') ; pt.ylabel('northings (km)')
+    pt.title('4 to 7 km bandpass filtered data')
+    pt.show()
+
+    Zbs = filt2(Z, res, [3, 12], 'bs')
+    pt.matshow(Zbs, aspect='auto', extent=[0, 100, 0, 100])
+    pt.xlabel('eastings (km)') ; pt.ylabel('northings (km)')
+    pt.title('3 to 12 km bandstop filtered data')

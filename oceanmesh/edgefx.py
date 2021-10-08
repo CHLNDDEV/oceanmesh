@@ -101,7 +101,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
+
     if grid.dx != grid.dy:
+        logger.info('CAUTION:: Structured grids with unequal grid spaces not yet supported')
         assert "Structured grids with unequal grid spaces not yet supported"
     cell_size = grid.values.copy()
     sz = cell_size.shape
@@ -329,7 +331,7 @@ def _prune(points, dx):
 def wavelength_sizing_function(
     dem,
     wl=10,
-    min_edgelength=None,
+    min_edge_length=None,
     max_edge_length=None,
     verbose=True,
     crs=4326,
@@ -365,11 +367,14 @@ def wavelength_sizing_function(
     grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs)
     tmpz[np.abs(tmpz) < 1] = 1 #Limit minimum depth to 1 m
     grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
-    if min_edgelength is None:
-        min_edgelength = np.amin(grid.values)
-    grid.hmin = min_edgelength
+    grid.values /= 2e6 #to convrt from m to L_R (this needs to be taken out when commiting to github
+
+    if min_edge_length is None:
+        grid.hmin = np.amin(grid.values)
+
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
+
     grid.build_interpolant()
 
     return grid
@@ -411,7 +416,7 @@ def slope_sizing_function(
     """
     from oceanmesh.filterfx import filt2
     if verbose > 0:
-        print("Building a slope length sizing function...")
+        logger.info("Building a slope length sizing function...")
     x, y = dem.create_grid()
 
     tmpz = dem.eval((x, y))
@@ -439,28 +444,28 @@ def slope_sizing_function(
     #Now filtering bathymetry to obtain only relevant features
     #Loop through each set of bandpass filter lengths
     if fl[0] < 0 and fl[0] != -999:
-        print("Rossby radius of deformation filter is on.")
+        logger.info("Rossby radius of deformation filter is on.")
         rbfilt = abs(fl[0])
         barot = True
         if hasattr(slp, '__len__'):
             if len(slp) > 1 and slp[1] < 0:
-                print("Using 1st-mode baroclinic Rossby radius.")
+                logger.info("Using 1st-mode baroclinic Rossby radius.")
                 barot = False
 
         else:
-            print("Using barotropic Rossby radius")
+            logger.info("Using barotropic Rossby radius")
 
         fl = []
         filtit = True
 
     elif fl[0] == 0:
-        print("Slope filter is off.")
+        logger.info("Slope filter is off.")
         fl = []
         tmpz_f[:] = tmpz[:]
         filtit = False
 
     elif fl[0] == -999:
-        print("Slope filter is LEGACY.")
+        logger.info("Slope filter is LEGACY.")
         fl = []
         tmpz_f[:] = tmpz[:]
         filtit = -999
@@ -473,9 +478,9 @@ def slope_sizing_function(
                 tmpz_ft = filt2(tmpz, dy, slp, 'lp')
 
             elif slp[1] == 0:
-                tmpz_ft = filt2(tmpz, dy, slp, 'lp')
+                tmpz_ft = filt2(tmpz, dy, slp[0], 'lp')
 
-            elif np.all(slp) == 0:
+            elif np.all(slp != 0):
                 # Do a bandpass filter
                 tmpz_ft = filt2(tmpz, dy, slp, 'bp')
 
@@ -497,7 +502,7 @@ edgelength function in not recommended')
         div = math.ceil(min(1e7/nx, 10 * ny/(yN-y0)))
         grav = 9.807
         nb = math.ceil(ny/div)
-        n2s = 1
+        n2s = 0
 
         for jj in range(nb):
             n2e = min(ny, n2s+div - 1)
@@ -538,6 +543,7 @@ edgelength function in not recommended')
                     if ((np.max(xg) > 179 and np.min(xg) < -179))  or \
                         (np.max(xg) > 359 and np.min(xg) < 1):
                         # wraps around
+                        logger.info('wrapping around')
                         xr = np.concatenate([np.arange(nx-mult/2, nx, 1),
                                              np.arange(xl, xu),
                                              np.arange(1, mult/2)], dtype=int)
@@ -556,12 +562,11 @@ edgelength function in not recommended')
                     xr, yr = xr[:, None], yr[None, :]
 
                     if mult == 2:
-                        print(xr, yr, tmpz.shape)
                         tmpz_ft = filt2(tmpz[xr, yr],
-                                           [dxx, dy], dy * 2.01,'lp')
+                                           min([dxx, dy]), dy * 2.01,'lp')
                     else:
                         tmpz_ft = filt2(tmpz[xr, yr],
-                                           [dxx, dy], dy * mult, 'lp')
+                                           min([dxx, dy]), dy * mult, 'lp')
 
                     # delete the padded region
                     tmpz_ft[:np.where(xr == 1)[0][0], :] = 0
@@ -572,16 +577,16 @@ edgelength function in not recommended')
                 else:
                     tmpz_ft = tmpz[:, n2s:n2e]
 
-                by, bx = EarthGradient(tmpz_ft, dy, dx[n2s:n2e]) # get slope in x and y directions
-                tempbs  = np.sqrt(bx**2 + by**2) # get overall slope
+                by, bx = EarthGradient(tmpz_ft, dy, dx)#[n2s:n2e]) # get slope in x and y directions
+                tempbs = np.sqrt(bx**2 + by**2) # get overall slope
                 bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
 
-                bs[:, n2s:n2e] = bst
-                n2s = n2e + 1
+            bs[:, n2s:n2e] = bst
+            n2s = n2e + 1
 
-                time_taken = time.perf_counter() - start
-                # legacy filter
+        time_taken = time.perf_counter() - start
 
+        # legacy filter
     elif filtit == -999:
         bs = np.empty((nx, ny))
         bs[:] = np.nan
@@ -594,21 +599,24 @@ edgelength function in not recommended')
         tmpz_ft = tmpz
         dyb = dy
         # get slope from filtered bathy for the segment only
-        by, bx = EarthGradient(tmpz_ft,dy,dx) # get slope in x and y directions
+        by, bx = EarthGradient(tmpz_ft, dy, dx) # get slope in x and y directions
         tempbs  = np.sqrt(bx**2 + by**2); # get overall slope
         for i in range(len(edges) - 1):
             sel = (rosb >= edges[i]) & (rosb <= edges[i+1])
             rosbylb = np.mean(edges[i:i+1])
+
             if rosbylb > 2 * dyb:
-                print(f'i = {i}, rl/dx={rosbylb/dyb:.3f}')
                 tmpz_ft  = filt2(tmpz_ft, dyb, rosbylb,'lp')
                 dyb = rosbylb;
+
                 # get slope from filtered bathy for the segment only
                 by, bx = EarthGradient(tmpz_ft, dy, dx) # get slope in x and y directions
                 tempbs  = np.sqrt(bx**2 + by**2) # get overall slope
+
             else:
                 # otherwise just use the same tempbs from before
                 pass
+
              # put in the full one
             bs[sel] = tempbs[sel]
 
@@ -617,31 +625,41 @@ edgelength function in not recommended')
         by, bx = EarthGradient(tmpz_f, dy, dx) # get slope in x and y directions
         bs = np.sqrt(bx**2 + by**2) # get overall slope
 
-        del bx, by, tmpz_f, tmpz_ft
-        # Allow user to specify depth ranges for slope parameter.
-        slpd = np.empty((nx, ny))
-        slpd[:] = np.nan
-        for param in slp.T:
-            if len(param)==1:
-                # no bounds specified. valid in this range.
-                slpp = param[0]
-                z_min = np.NINF
-                z_max = np.inf
+    del bx, by
 
-            else:
-                slpp, z_min, zmax = param[:3]
-            # Calculating the slope function
-            eps = 1e-16 #approximate floating point precision
-            dp = np.maximum(1, -tmpz)
-            tslpd = (2 * np.pi/slpp) * dp[bs+eps]
-            # apply slope with mask
-            limidx = (tmpz >= z_min) & (tmpz < z_max)
-            slpd[limidx] = tslpd[limidx]
-            del tslpd
+    # Allow user to specify depth ranges for slope parameter.
+    slpd = np.empty((nx, ny))
+    slpd[:] = np.nan
 
-        del tmpz, xg, yg
+    for param in slp.T:
+        if not hasattr(param, '__len__'):
+            # no bounds specified. valid in this range.
+            slpp = param
+            z_min = np.NINF
+            z_max = np.inf
 
+        else:
+            slpp, z_min, zmax = param[:3]
+
+        # Calculating the slope function
+        eps = 1e-10 #small number to approximate derivative
+        dp = np.maximum(1, tmpz)
+        tslpd = (2 * np.pi/slpp) * dp / (bs+eps)
+        # apply slope with mask
+        limidx = (tmpz >= z_min) & (tmpz < z_max)
+        slpd[limidx] = tslpd[limidx]
+        del tslpd
+
+    del tmpz, xg, yg
     grid.values = slpd
+
+    if min_edge_length is None:
+        grid.hmin = np.amin(grid.values)
+
+    if max_edge_length is not None:
+        grid.values[grid.values > max_edge_length] = max_edge_length
+
+    grid.hmin = np.min(grid.values)
     grid.build_interpolant()
 
     return grid

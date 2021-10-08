@@ -322,7 +322,7 @@ Here are some of the relevant codes to address these common problems.
 <!--pytest-codeblocks:skip-->
 ```python
 # Address (1) above.
-points, cells = fix_mesh(points, cells)
+points, cells, jx = fix_mesh(points, cells)
 # Addresses (2)-(3) above. Remove degenerate mesh faces and other common problems in the mesh
 points, cells = make_mesh_boundaries_traversable(points, cells)
 # Remove elements (i.e., "faces") connected to only one channel

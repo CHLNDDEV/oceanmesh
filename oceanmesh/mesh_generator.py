@@ -219,7 +219,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             fd,
             pfix,
         )
-  
+
     else:
         p = opts["points"]
 
@@ -252,7 +252,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             for fix in pfix:
                 ind, dist = _closest_node(fix, p) #finds closest node and associated euclidean distance
                 if dist > deps: #if new pfix is beyond threshold, replace with moved node with fixed point
-                     p[ind] = fix #This keeps fixed points fixed
+                     p[ind] = fix #This keeps fixed points fixed.
                 ifix.append(ind)
 
         # Remove points outside the domain

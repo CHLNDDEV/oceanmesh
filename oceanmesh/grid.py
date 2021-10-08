@@ -20,6 +20,7 @@ def compute_minimum(edge_lengths):
         [edge_length.values for edge_length in edge_lengths]
     )
     min_edgelength = np.amin(minimum_values)
+    max_edgelength = np.amax(minimum_values)
     # construct a new grid object with these values
     grid = Grid(
         bbox=base_edge_length.bbox,
@@ -27,6 +28,7 @@ def compute_minimum(edge_lengths):
         dy=base_edge_length.dy,
         hmin=min_edgelength,
         values=minimum_values,
+        extrapolate=True,
     )
     grid.build_interpolant()
     return grid
