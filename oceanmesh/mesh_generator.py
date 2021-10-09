@@ -250,9 +250,13 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         if nfix > 0:
             for fix in pfix:
-                ind, dist = _closest_node(fix, p) #finds closest node and associated euclidean distance
-                if dist > deps: #if new pfix is beyond threshold, replace with moved node with fixed point
-                     p[ind] = fix #This keeps fixed points fixed.
+                ind, dist = _closest_node(
+                    fix, p
+                )  # finds closest node and associated euclidean distance
+                if (
+                    dist > deps
+                ):  # if new pfix is beyond threshold, replace with moved node with fixed point
+                    p[ind] = fix  # This keeps fixed points fixed.
                 ifix.append(ind)
 
         # Remove points outside the domain
@@ -407,15 +411,18 @@ def _project_points_back(p, fd, deps):
     d = fd(p)
     ix = d > 0  # Find points outside (d>0)
     if ix.any():
+
         def _deps_vec(i):
             a = [0] * 2
             a[i] = deps
             return a
 
         try:
-            dgrads =  [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)] #old method
+            dgrads = [
+                (fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)
+            ]  # old method
 
-        except ValueError: #an error is thrown if all points in fd are outside bbox domain, so instead calulate all fd and then take the solely ones outside domain
+        except ValueError:  # an error is thrown if all points in fd are outside bbox domain, so instead calulate all fd and then take the solely ones outside domain
             dgrads = [(fd(p + _deps_vec(i)) - d) / deps for i in range(2)]
             dgrads = list(np.array(dgrads)[:, ix])
 
@@ -470,4 +477,6 @@ def _closest_node(node, nodes):
     deltas = nodes - node
     dist_2 = np.einsum("ij,ij->i", deltas, deltas)
     ind = np.argmin(dist_2)
-    return ind, np.sqrt(dist_2[ind]) #index of closest node and its associated Euclidean distance
+    return ind, np.sqrt(
+        dist_2[ind]
+    )  # index of closest node and its associated Euclidean distance

@@ -27,7 +27,8 @@ from oceanmesh.signed_distance_function import (
     Domain,
     Intersection,
     Union,
-    create_circle, create_bbox,
+    create_circle,
+    create_bbox,
     multiscale_signed_distance_function,
     signed_distance_function,
 )
