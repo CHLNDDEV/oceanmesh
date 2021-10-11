@@ -511,6 +511,7 @@ edgelength function in not recommended"
     if filtit:
         bs, time_taken = rossby_filter(tmpz, dem.bbox, grid, coords, rbfilt, barot)
 
+
         # legacy filter
     elif filtit == -999:
         from math import sqrt
@@ -595,7 +596,6 @@ edgelength function in not recommended"
     grid.build_interpolant()
 
     return grid
-
 
 def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
     """
@@ -741,7 +741,6 @@ def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
     time_taken = time.perf_counter() - start
 
     return bs, time_taken
-
 
 def multiscale_sizing_function(
     list_of_grids, p=3, nnear=28, blend_width=1000, verbose=True
