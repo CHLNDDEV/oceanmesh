@@ -24,6 +24,7 @@ __all__ = [
 
 nan = np.nan
 
+
 def create_circle(center, radius):
     """Create a circle centered on `center` and with
     radius `radius` in WGS84 degrees"""
@@ -38,12 +39,14 @@ def create_circle(center, radius):
 
     return np.array(positions)
 
+
 def create_bbox(bbox):
     """
     Returns a domain class object which gives a bbox and signed-distance function
     for a domain defined by bbox.
     """
     import numpy as np
+
     x0, xN, y0, yN = bbox
 
     def func(p):
@@ -57,6 +60,7 @@ def create_bbox(bbox):
     domain = Domain(bbox, func)
 
     return domain
+
 
 def _generate_samples(bbox, dim, N):
     N = int(N)
@@ -88,6 +92,7 @@ def _generate_samples(bbox, dim, N):
     points = np.asarray(points)
     points = points.reshape(-1, dim)
     return points
+
 
 def _plot(geo, filename=None, samples=100000):
     p = _generate_samples(geo.bbox, 2, N=samples)
@@ -144,6 +149,7 @@ class Union(Domain):
         d = [d.eval(x) for d in self.domain]
         return np.minimum.reduce(d)
 
+
 class UnionWithCoverings(Domain):
     def __init__(self, domains, coverings):
         """`coverings` is a list of polygons representing each domains extents
@@ -182,6 +188,7 @@ class UnionWithCoverings(Domain):
 
         return d
 
+
 class Intersection(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
@@ -190,6 +197,7 @@ class Intersection(Domain):
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
         return np.maximum.reduce(d)
+
 
 class Difference(Domain):
     def __init__(self, domains):
@@ -200,6 +208,7 @@ class Difference(Domain):
         return np.maximum.reduce(
             [-d.eval(x) if n > 0 else d.eval(x) for n, d in enumerate(self.domain)]
         )
+
 
 def signed_distance_function(shoreline):
     """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
@@ -270,6 +279,7 @@ def signed_distance_function(shoreline):
 
     return Domain(shoreline.bbox, func, covering=func_covering)
 
+
 def _create_boubox(bbox):
     """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
     xmin, xmax, ymin, ymax = bbox
@@ -283,6 +293,7 @@ def _create_boubox(bbox):
         ],
         dtype=float,
     )
+
 
 def multiscale_signed_distance_function(signed_distance_functions):
     """Takes a list of :class:`Domain` objects and calculates a signed distance

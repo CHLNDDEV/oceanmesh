@@ -10,14 +10,7 @@ from oceanmesh.edgefx import (
     distance_sizing_function,
     enforce_mesh_gradation,
     enforce_mesh_size_bounds_elevation,
-    feature_sizing_function,
-    multiscale_sizing_function,
-    wavelength_sizing_function,
-    slope_sizing_function,
 )
-
-from oceanmesh.filterfx import filt2
-
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Shoreline
 from oceanmesh.grid import Grid, compute_minimum
@@ -27,7 +20,7 @@ from oceanmesh.signed_distance_function import (
     Domain,
     Intersection,
     Union,
-    create_circle, create_bbox,
+    create_circle,
     multiscale_signed_distance_function,
     signed_distance_function,
 )

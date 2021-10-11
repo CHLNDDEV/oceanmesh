@@ -18,7 +18,7 @@ __all__ = [
     "wavelength_sizing_function",
     "multiscale_sizing_function",
     "feature_sizing_function",
-    "slope_sizing_function"
+    "slope_sizing_function",
 ]
 
 
@@ -103,7 +103,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     elen = grid.dx
 
     if grid.dx != grid.dy:
-        logger.info('CAUTION:: Structured grids with unequal grid spaces not yet supported')
+        logger.info(
+            "CAUTION:: Structured grids with unequal grid spaces not yet supported"
+        )
         assert "Structured grids with unequal grid spaces not yet supported"
     cell_size = grid.values.copy()
     sz = cell_size.shape
@@ -121,6 +123,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     )
     grid_limited.build_interpolant()
     return grid_limited
+
 
 def distance_sizing_function(
     shoreline,
@@ -307,6 +310,7 @@ def feature_sizing_function(
     grid.build_interpolant()
     return grid
 
+
 def _prune(points, dx):
     # Prune medial points
     # Note: We want a line of points larger than around 7.
@@ -364,10 +368,12 @@ def wavelength_sizing_function(
 
     grav = 9.807
     period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs)
-    tmpz[np.abs(tmpz) < 1] = 1 #Limit minimum depth to 1 m
+    grid = Grid(
+        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
+    )
+    tmpz[np.abs(tmpz) < 1] = 1  # Limit minimum depth to 1 m
     grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
-    grid.values /= 2e6 #to convrt from m to L_R (this needs to be taken out when commiting to github
+    grid.values /= 2e6  # to convrt from m to L_R (this needs to be taken out when commiting to github
 
     if min_edge_length is None:
         grid.hmin = np.amin(grid.values)
@@ -378,6 +384,7 @@ def wavelength_sizing_function(
     grid.build_interpolant()
 
     return grid
+
 
 def slope_sizing_function(
     dem,
@@ -415,13 +422,17 @@ def slope_sizing_function(
 
     """
     from oceanmesh.filterfx import filt2
+
     if verbose > 0:
         logger.info("Building a slope length sizing function...")
     x, y = dem.create_grid()
-
     tmpz = dem.eval((x, y))
-    grid = Grid(bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs)
+    grid = Grid(
+        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
+    )
     x0, xN, y0, yN = dem.bbox
+    grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
+    # per second
     tmpz[np.abs(tmpz) < 50] = 50
 
     try:
@@ -436,18 +447,20 @@ def slope_sizing_function(
     except TypeError:
         slp = np.array([slp])
 
-    dx, dy = dem.dx, dem.dy # for gradient function
+    dx, dy = dem.dx, dem.dy  # for gradient function
     nx, ny = dem.nx, dem.ny
+    grid = (nx, ny, dx, dy)
     xg, yg = dem.create_grid()
+    coords = (xg, yg)
     tmpz_f = np.zeros(tmpz.shape)
 
-    #Now filtering bathymetry to obtain only relevant features
-    #Loop through each set of bandpass filter lengths
+    # Now filtering bathymetry to obtain only relevant features
+    # Loop through each set of bandpass filter lengths
     if fl[0] < 0 and fl[0] != -999:
         logger.info("Rossby radius of deformation filter is on.")
         rbfilt = abs(fl[0])
         barot = True
-        if hasattr(slp, '__len__'):
+        if hasattr(slp, "__len__"):
             if len(slp) > 1 and slp[1] < 0:
                 logger.info("Using 1st-mode baroclinic Rossby radius.")
                 barot = False
@@ -475,155 +488,74 @@ def slope_sizing_function(
         for slp in fl.T:
             if isinstance(slp, (int, float)):
                 # Do a low-pass filter
-                tmpz_ft = filt2(tmpz, dy, slp, 'lp')
+                tmpz_ft = filt2(tmpz, dy, slp, "lp")
 
             elif slp[1] == 0:
-                tmpz_ft = filt2(tmpz, dy, slp[0], 'lp')
+                tmpz_ft = filt2(tmpz, dy, slp[0], "lp")
 
             elif np.all(slp != 0):
                 # Do a bandpass filter
-                tmpz_ft = filt2(tmpz, dy, slp, 'bp')
+                tmpz_ft = filt2(tmpz, dy, slp, "bp")
 
             else:
-                #Highpass filter not recommended
-                print('Warning:: Highpass filter on bathymetry in slope - \
-edgelength function in not recommended')
-                tmpz_ft = filt2(tmpz, dy, slp[1], 'hp')
+                # Highpass filter not recommended
+                print(
+                    "Warning:: Highpass filter on bathymetry in slope - \
+edgelength function in not recommended"
+                )
+                tmpz_ft = filt2(tmpz, dy, slp[1], "hp")
 
             tmpz_f += tmpz_ft
 
-    #Rossby radius of deformation filter
-    if filtit == True:
-        import time, math
-        start = time.perf_counter()
-        bs = np.empty(tmpz.shape)
-        bs[:] = np.nan
-        #Break into 10 deg latitude chuncsm or less if higher resolution
-        div = math.ceil(min(1e7/nx, 10 * ny/(yN-y0)))
-        grav = 9.807
-        nb = math.ceil(ny/div)
-        n2s = 0
-
-        for jj in range(nb):
-            n2e = min(ny, n2s+div - 1)
-            # Rossby radius of deformation filter
-            # See Shelton, D. B., et al. (1998): Geographical variability of the
-            # first-baroclinic Rossby radius of deformation. J. Phys. Oceanogr.,
-            # 28, 433-460.
-            ygg = yg[:, n2s:n2e]
-            dxx = np.mean(np.diff(xg[n2s:n2e, 0]))
-            Rre = 7.29e-5 #Rotation rate of Earth in radians per second
-            f = 2 * Rre * abs(np.sin(ygg * np.pi / 180))
-            if barot:
-                #Barotropic case
-                c = np.sqrt(grav * np.maximum(1, -tmpz[:, n2s:n2e]))
-
-            else:
-                #Baroclinic case (estimate Nm to be 2.5e-3)
-                Nm = 2.5e-3 # Δz x N, where N is Brunt-Vaisala frequency, sqrt(-g/ρ0 * dρ/dz), giving sqrt(-g * (Δρ/ρ0) * Δz)
-                c = Nm * np.maximum(1, -tmpz[:, n2s:n2e]) / np.pi
-
-            rosb = c/f
-            #Update for equatorial regions
-            I = abs(ygg) < 5
-            Re = 6371e3 # Earth radius at equator in SI units of metres
-            twobeta = 4 * Rre * np.cos(ygg[I] * np.pi / 180)/Re
-            rosb[I] = np.sqrt(c[I] / twobeta)
-            # limit rossby radius to 10,000 km for practical purposes
-            rosb[rosb > 1e7] = 1e7
-            # Keep lengthscales rbfilt * barotropic
-            # radius of deformation
-            rosb = np.minimum(10, np.maximum(0, np.floor(np.log2(rosb/dy/rbfilt))))
-            edges = np.unique(np.copy(rosb))
-            bst = rosb * 0
-            for i in range(len(edges)):
-                if edges[i] > 0:
-                    mult = 2**edges[i]
-                    xl, xu = 1, nx
-                    if ((np.max(xg) > 179 and np.min(xg) < -179))  or \
-                        (np.max(xg) > 359 and np.min(xg) < 1):
-                        # wraps around
-                        logger.info('wrapping around')
-                        xr = np.concatenate([np.arange(nx-mult/2, nx, 1),
-                                             np.arange(xl, xu),
-                                             np.arange(1, mult/2)], dtype=int)
-                    else:
-                        xr = np.arange(xl-1, xu, dtype=int)
-
-                    yl, yu = max(1, n2s-mult/2), min(ny, n2e+mult/2)
-                    if np.max(yg) > 89 and yu == ny:
-                        # create mirror around pole
-                        yr = np.concatenate([np.arange(yl, yu),
-                                             np.arange(yu-1, 2*ny - n2e - mult/2, -1)
-                                            ], dtype=int)
-                    else:
-                        yr = np.arange(yl-1, yu, dtype=int)
-
-                    xr, yr = xr[:, None], yr[None, :]
-
-                    if mult == 2:
-                        tmpz_ft = filt2(tmpz[xr, yr],
-                                           min([dxx, dy]), dy * 2.01,'lp')
-                    else:
-                        tmpz_ft = filt2(tmpz[xr, yr],
-                                           min([dxx, dy]), dy * mult, 'lp')
-
-                    # delete the padded region
-                    tmpz_ft[:np.where(xr == 1)[0][0], :] = 0
-                    tmpz_ft[nx:, :] = 0
-                    tmpz_ft[:, :np.where(yr == n2s)[0][0]] = 0
-                    tmpz_ft[:, n2e-n2s+2:] = 0
-
-                else:
-                    tmpz_ft = tmpz[:, n2s:n2e]
-
-                by, bx = EarthGradient(tmpz_ft, dy, dx)#[n2s:n2e]) # get slope in x and y directions
-                tempbs = np.sqrt(bx**2 + by**2) # get overall slope
-                bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
-
-            bs[:, n2s:n2e] = bst
-            n2s = n2e + 1
-
-        time_taken = time.perf_counter() - start
+    # Performs bandpass filtering
+    if filtit:
+        bs, time_taken = rossby_filter(tmpz, dem.bbox, grid, coords, rbfilt, barot)
 
         # legacy filter
     elif filtit == -999:
+        from math import sqrt
+
         bs = np.empty((nx, ny))
         bs[:] = np.nan
         # Rossby radius of deformation filter
-        f = 2 * Rre * abs(np.sin(yg * np.pi / 180)) #Local Coriolis coefficient
+        f = 2 * Rre * abs(np.sin(yg * np.pi / 180))  # Local Coriolis coefficient
         # limit to 1000 km
-        rosb = np.minimum(1000e3, sqrt(grav * abs(tmpz))/f) #Gives local Rossby radius everywhere
+        rosb = np.minimum(
+            1000e3, sqrt(grav * abs(tmpz)) / f
+        )  # Gives local Rossby radius everywhere
         # autmatically divide into discrete bins
         _, edges = np.histogram(rosb)
         tmpz_ft = tmpz
         dyb = dy
         # get slope from filtered bathy for the segment only
-        by, bx = EarthGradient(tmpz_ft, dy, dx) # get slope in x and y directions
-        tempbs  = np.sqrt(bx**2 + by**2); # get overall slope
+        by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
+        tempbs = np.sqrt(bx ** 2 + by ** 2)
+        # get overall slope
         for i in range(len(edges) - 1):
-            sel = (rosb >= edges[i]) & (rosb <= edges[i+1])
-            rosbylb = np.mean(edges[i:i+1])
+            sel = (rosb >= edges[i]) & (rosb <= edges[i + 1])
+            rosbylb = np.mean(edges[i : i + 1])
 
             if rosbylb > 2 * dyb:
-                tmpz_ft  = filt2(tmpz_ft, dyb, rosbylb,'lp')
-                dyb = rosbylb;
+                tmpz_ft = filt2(tmpz_ft, dyb, rosbylb, "lp")
+                dyb = rosbylb
 
                 # get slope from filtered bathy for the segment only
-                by, bx = EarthGradient(tmpz_ft, dy, dx) # get slope in x and y directions
-                tempbs  = np.sqrt(bx**2 + by**2) # get overall slope
+                by, bx = EarthGradient(
+                    tmpz_ft, dy, dx
+                )  # get slope in x and y directions
+                tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
 
             else:
                 # otherwise just use the same tempbs from before
                 pass
 
-             # put in the full one
+            # put in the full one
             bs[sel] = tempbs[sel]
 
     else:
         # get slope from (possibly filtered) bathy
-        by, bx = EarthGradient(tmpz_f, dy, dx) # get slope in x and y directions
-        bs = np.sqrt(bx**2 + by**2) # get overall slope
+        by, bx = EarthGradient(tmpz_f, dy, dx)  # get slope in x and y directions
+        bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
 
     del bx, by
 
@@ -632,7 +564,7 @@ edgelength function in not recommended')
     slpd[:] = np.nan
 
     for param in slp.T:
-        if not hasattr(param, '__len__'):
+        if not hasattr(param, "__len__"):
             # no bounds specified. valid in this range.
             slpp = param
             z_min = np.NINF
@@ -642,9 +574,9 @@ edgelength function in not recommended')
             slpp, z_min, zmax = param[:3]
 
         # Calculating the slope function
-        eps = 1e-10 #small number to approximate derivative
+        eps = 1e-10  # small number to approximate derivative
         dp = np.maximum(1, tmpz)
-        tslpd = (2 * np.pi/slpp) * dp / (bs+eps)
+        tslpd = (2 * np.pi / slpp) * dp / (bs + eps)
         # apply slope with mask
         limidx = (tmpz >= z_min) & (tmpz < z_max)
         slpd[limidx] = tslpd[limidx]
@@ -663,6 +595,153 @@ edgelength function in not recommended')
     grid.build_interpolant()
 
     return grid
+
+
+def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
+    """
+    Performs the Rossby radius filtering if filtit==True in
+    slope_sizing_function.
+
+    Parameters
+    ----------
+    tmpz : numpy.ndarray
+        Contains the bathymetric data across the grid formed by coordinate
+        arrays (xg, yg).
+    bbox : tuple
+        Describes the boundary box of our domain.
+    grid : tuple
+        Contains the information regarding normals and grid resolutions,
+        (nx, ny, dx, dy).
+    coords : tuple np.ndarray
+        A tuple of two numpy.ndarray describing the longitude and latitude
+        coordinate system of our grid.
+    rbfilt : float
+        Describes the corresponding rossby radius to filter out
+    barot : bool
+        If True, the function uses the barotropic Rossby radius of deformation.
+
+    Returns
+    -------
+    bs : numpy.ndarray
+        This is essentially grad(h) squared after performing the bandpass
+        filtering on the Rossby radius of deformation.
+    time_taken : float
+        the time taken to prform the filtering process.
+
+    """
+    import time
+    import math
+    from filterfx import filt2
+
+    x0, xN, y0, yN = bbox
+    nx, ny, dx, dy = grid
+    xg, yg = coords
+
+    start = time.perf_counter()
+    bs = np.empty(tmpz.shape)
+    bs[:] = np.nan
+
+    # Break into 10 deg latitude chuncsm or less if higher resolution
+    div = math.ceil(min(1e7 / nx, 10 * ny / (yN - y0)))
+    grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
+    # per second
+    nb = math.ceil(ny / div)
+    n2s = 0
+
+    for jj in range(nb):
+        n2e = min(ny, n2s + div - 1)
+        # Rossby radius of deformation filter
+        # See Shelton, D. B., et al. (1998): Geographical variability of the
+        # first-baroclinic Rossby radius of deformation. J. Phys. Oceanogr.,
+        # 28, 433-460.
+        ygg = yg[:, n2s:n2e]
+        dxx = np.mean(np.diff(xg[n2s:n2e, 0]))
+        f = 2 * Rre * abs(np.sin(ygg * np.pi / 180))
+        if barot:
+            # Barotropic case
+            c = np.sqrt(grav * np.maximum(1, -tmpz[:, n2s:n2e]))
+
+        else:
+            # Baroclinic case (estimate Nm to be 2.5e-3)
+            Nm = 2.5e-3  # Δz x N, where N is Brunt-Vaisala frequency,
+            # sqrt(-g/ρ0 * dρ/dz), giving sqrt(-g * (Δρ/ρ0) * Δz)
+            c = Nm * np.maximum(1, -tmpz[:, n2s:n2e]) / np.pi
+
+        rosb = c / f
+        # Update for equatorial regions
+        indices = abs(ygg) < 5
+        Re = 6.371e6  # Earth radius at equator in SI units of metres
+        twobeta = 4 * Rre * np.cos(ygg[indices] * np.pi / 180) / Re
+        rosb[indices] = np.sqrt(c[indices] / twobeta)
+        # limit rossby radius to 10,000 km for practical purposes
+        rosb[rosb > 1e7] = 1e7
+        # Keep lengthscales rbfilt * barotropic
+        # radius of deformation
+        rosb = np.minimum(10, np.maximum(0, np.floor(np.log2(rosb / dy / rbfilt))))
+        edges = np.unique(np.copy(rosb))
+        bst = rosb * 0
+        for i in range(len(edges)):
+            if edges[i] > 0:
+                mult = 2 ** edges[i]
+                xl, xu = 1, nx
+                if ((np.max(xg) > 179 and np.min(xg) < -179)) or (
+                    np.max(xg) > 359 and np.min(xg) < 1
+                ):
+                    # wraps around
+                    logger.info("wrapping around")
+                    xr = np.concatenate(
+                        [
+                            np.arange(nx - mult / 2, nx, 1),
+                            np.arange(xl, xu),
+                            np.arange(1, mult / 2),
+                        ],
+                        dtype=int,
+                    )
+                else:
+                    xr = np.arange(xl - 1, xu, dtype=int)
+
+                yl, yu = max(1, n2s - mult / 2), min(ny, n2e + mult / 2)
+                if np.max(yg) > 89 and yu == ny:
+                    # create mirror around pole
+                    yr = np.concatenate(
+                        [
+                            np.arange(yl, yu),
+                            np.arange(yu - 1, 2 * ny - n2e - mult / 2, -1),
+                        ],
+                        dtype=int,
+                    )
+                else:
+                    yr = np.arange(yl - 1, yu, dtype=int)
+
+                xr, yr = xr[:, None], yr[None, :]
+
+                if mult == 2:
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * 2.01, "lp")
+                else:
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lp")
+
+                # delete the padded region
+                tmpz_ft[: np.where(xr == 1)[0][0], :] = 0
+                tmpz_ft[nx:, :] = 0
+                tmpz_ft[:, : np.where(yr == n2s)[0][0]] = 0
+                tmpz_ft[:, n2e - n2s + 2 :] = 0
+
+            else:
+                tmpz_ft = tmpz[:, n2s:n2e]
+
+            by, bx = EarthGradient(
+                tmpz_ft, dy, dx
+            )  # [n2s:n2e]) # get slope in x and y directions
+            tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+            bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
+
+        bs[:, n2s:n2e] = bst
+        n2s = n2e + 1
+
+    time_taken = time.perf_counter() - start
+
+    return bs, time_taken
+
 
 def multiscale_sizing_function(
     list_of_grids, p=3, nnear=28, blend_width=1000, verbose=True
@@ -741,6 +820,7 @@ def multiscale_sizing_function(
 
     return func, new_list_of_grids
 
+
 def EarthGradient(F, dy, dx):
     """
     EarthGradient(F,HX,HY), where F is 2-D, uses the spacing
@@ -751,13 +831,13 @@ def EarthGradient(F, dy, dx):
     """
     Fy, Fx = np.zeros(F.shape), np.zeros(F.shape)
 
-    #Forward diferences on edges
+    # Forward diferences on edges
     Fx[:, 0] = (F[:, 1] - F[:, 0]) / dx
     Fx[:, -1] = (F[:, -1] - F[:, -2]) / dx
     Fy[0, :] = (F[1, :] - F[0, :]) / dy
     Fy[-1, :] = (F[-1, :] - F[-2, :]) / dy
 
-    #Central Differences on interior
+    # Central Differences on interior
     Fx[:, 1:-1] = (F[:, 2:] - F[:, :-2]) / (2 * dx)
     Fy[1:-1, :] = (F[2:, :] - F[:-2, :]) / (2 * dy)
 
