@@ -431,8 +431,6 @@ def slope_sizing_function(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
     x0, xN, y0, yN = dem.bbox
-    grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
-    # per second
     tmpz[np.abs(tmpz) < 50] = 50
 
     try:
@@ -449,7 +447,7 @@ def slope_sizing_function(
 
     dx, dy = dem.dx, dem.dy  # for gradient function
     nx, ny = dem.nx, dem.ny
-    grid = (nx, ny, dx, dy)
+    grid_details = (nx, ny, dx, dy)
     xg, yg = dem.create_grid()
     coords = (xg, yg)
     tmpz_f = np.zeros(tmpz.shape)
@@ -509,48 +507,13 @@ edgelength function in not recommended"
 
     # Performs bandpass filtering
     if filtit:
-        bs, time_taken = rossby_filter(tmpz, dem.bbox, grid, coords, rbfilt, barot)
+        bs, time_taken = rossby_filter(
+            tmpz, dem.bbox, grid_details, coords, rbfilt, barot
+        )
 
         # legacy filter
     elif filtit == -999:
-        from math import sqrt
-
-        bs = np.empty((nx, ny))
-        bs[:] = np.nan
-        # Rossby radius of deformation filter
-        f = 2 * Rre * abs(np.sin(yg * np.pi / 180))  # Local Coriolis coefficient
-        # limit to 1000 km
-        rosb = np.minimum(
-            1000e3, sqrt(grav * abs(tmpz)) / f
-        )  # Gives local Rossby radius everywhere
-        # autmatically divide into discrete bins
-        _, edges = np.histogram(rosb)
-        tmpz_ft = tmpz
-        dyb = dy
-        # get slope from filtered bathy for the segment only
-        by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
-        tempbs = np.sqrt(bx ** 2 + by ** 2)
-        # get overall slope
-        for i in range(len(edges) - 1):
-            sel = (rosb >= edges[i]) & (rosb <= edges[i + 1])
-            rosbylb = np.mean(edges[i : i + 1])
-
-            if rosbylb > 2 * dyb:
-                tmpz_ft = filt2(tmpz_ft, dyb, rosbylb, "lp")
-                dyb = rosbylb
-
-                # get slope from filtered bathy for the segment only
-                by, bx = EarthGradient(
-                    tmpz_ft, dy, dx
-                )  # get slope in x and y directions
-                tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-
-            else:
-                # otherwise just use the same tempbs from before
-                pass
-
-            # put in the full one
-            bs[sel] = tempbs[sel]
+        bs = legacy_filter(tmpz, dem.bbox, grid_details, coords)
 
     else:
         # get slope from (possibly filtered) bathy
@@ -597,7 +560,7 @@ edgelength function in not recommended"
     return grid
 
 
-def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
+def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     """
     Performs the Rossby radius filtering if filtit==True in
     slope_sizing_function.
@@ -609,7 +572,7 @@ def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
         arrays (xg, yg).
     bbox : tuple
         Describes the boundary box of our domain.
-    grid : tuple
+    grid_details : tuple
         Contains the information regarding normals and grid resolutions,
         (nx, ny, dx, dy).
     coords : tuple np.ndarray
@@ -634,7 +597,7 @@ def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
     from filterfx import filt2
 
     x0, xN, y0, yN = bbox
-    nx, ny, dx, dy = grid
+    nx, ny, dx, dy = grid_details
     xg, yg = coords
 
     start = time.perf_counter()
@@ -741,6 +704,79 @@ def rossby_filter(tmpz, bbox, grid, coords, rbfilt, barot):
     time_taken = time.perf_counter() - start
 
     return bs, time_taken
+
+
+def legacy_filter(tmpz, bbox, grid_details, coords):
+    """
+    Performs the Rossby radius filtering if filtit==True in
+    slope_sizing_function.
+
+    Parameters
+    ----------
+    tmpz : numpy.ndarray
+        Contains the bathymetric data across the grid formed by coordinate
+        arrays (xg, yg).
+    bbox : tuple
+        Describes the boundary box of our domain.
+    grid_details : tuple
+        Contains the information regarding normals and grid resolutions,
+        (nx, ny, dx, dy).
+    coords : tuple np.ndarray
+        A tuple of two numpy.ndarray describing the longitude and latitude
+        coordinate system of our grid.
+
+    Returns
+    -------
+    bs : numpy.ndarray
+        This is essentially grad(h) squared after performing the bandpass
+        filtering on the Rossby radius of deformation.
+
+    """
+    from math import sqrt
+    from filterfx import filt2
+
+    x0, xN, y0, yN = bbox
+    nx, ny, dx, dy = grid_details
+    xg, yg = coords
+    grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
+    # per second
+
+    bs = np.empty((nx, ny))
+    bs[:] = np.nan
+    # Rossby radius of deformation filter
+    f = 2 * Rre * abs(np.sin(yg * np.pi / 180))  # Local Coriolis coefficient
+    # limit to 1000 km
+    rosb = np.minimum(
+        1000e3, sqrt(grav * abs(tmpz)) / f
+    )  # Gives local Rossby radius everywhere
+    # autmatically divide into discrete bins
+    _, edges = np.histogram(rosb)
+    tmpz_ft = tmpz
+    dyb = dy
+    # get slope from filtered bathy for the segment only
+    by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
+    tempbs = np.sqrt(bx ** 2 + by ** 2)
+    # get overall slope
+    for i in range(len(edges) - 1):
+        sel = (rosb >= edges[i]) & (rosb <= edges[i + 1])
+        rosbylb = np.mean(edges[i : i + 1])
+
+        if rosbylb > 2 * dyb:
+            tmpz_ft = filt2(tmpz_ft, dyb, rosbylb, "lp")
+            dyb = rosbylb
+
+            # get slope from filtered bathy for the segment only
+            by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
+            tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+
+        else:
+            # otherwise just use the same tempbs from before
+            pass
+
+        # put in the full one
+        bs[sel] = tempbs[sel]
+
+    return bs
 
 
 def multiscale_sizing_function(
