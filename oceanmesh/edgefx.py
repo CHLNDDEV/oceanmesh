@@ -392,11 +392,11 @@ def slope_sizing_function(
     fl=-50,
     min_edge_length=None,
     max_edge_length=None,
+    min_elevation_cutoff=50,
     verbose=True,
     crs=4326,
 ):
-    """Mesh sizes that vary proportional to an estimate of the wavelength
-       of the M2 tidal constituent
+    """Mesh sizes that vary proportional to the bathymetryic gradient.
 
     Parameters
     ----------
@@ -411,9 +411,10 @@ def slope_sizing_function(
         of the edgelength function is used.
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
+    min_elevation_cutoff: float, optional
+        Below this elevation, this sizing function is not used.
     verbose: boolean, optional
         Whether to write messages to the screen
-
 
     Returns
     -------
@@ -423,7 +424,7 @@ def slope_sizing_function(
     """
     from oceanmesh.filterfx import filt2
 
-    if verbose > 0:
+    if verbose:
         logger.info("Building a slope length sizing function...")
     x, y = dem.create_grid()
     tmpz = dem.eval((x, y))
@@ -431,17 +432,15 @@ def slope_sizing_function(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
     x0, xN, y0, yN = dem.bbox
-    tmpz[np.abs(tmpz) < 50] = 50
+    tmpz[np.abs(tmpz) < min_elevation_cutoff] = min_elevation_cutoff
 
     try:
         len(fl)
-
     except TypeError:
         fl = np.array([fl])
 
     try:
         len(slp)
-
     except TypeError:
         slp = np.array([slp])
 
@@ -592,8 +591,9 @@ def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-    import time
     import math
+    import time
+
     from filterfx import filt2
 
     x0, xN, y0, yN = bbox
@@ -733,6 +733,7 @@ def legacy_filter(tmpz, bbox, grid_details, coords):
 
     """
     from math import sqrt
+
     from filterfx import filt2
 
     x0, xN, y0, yN = bbox
