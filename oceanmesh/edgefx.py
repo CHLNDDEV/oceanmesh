@@ -1,6 +1,4 @@
 import logging
-import math
-import time
 
 import numpy as np
 import scipy.spatial
@@ -105,11 +103,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
-
     if grid.dx != grid.dy:
-        logger.info(
-            "CAUTION:: Structured grids with unequal grid spaces not yet supported"
-        )
         assert "Structured grids with unequal grid spaces not yet supported"
     cell_size = grid.values.copy()
     sz = cell_size.shape
@@ -199,197 +193,6 @@ def distance_sizing_function(
     return grid
 
 
-def feature_sizing_function(
-    shoreline,
-    signed_distance_function,
-    r=3,
-    max_edge_length=None,
-    plot=False,
-    crs=4326,
-):
-    """Mesh sizes vary proportional to the width or "thickness" of the shoreline
-    Implements roughly the approximate medial axis calculation from Eq. 7.1:
-
-    "A MATLAB MESH GENERATOR FOR THE TWO-DIMENSIONAL FINITE ELEMENT METHOD" by Jonas Koko
-
-    Parameters
-    ----------
-    shoreline: :class:`Shoreline`
-        Data processed from :class:`Shoreline`.
-    signed_distance_function: a function
-        A `signed_distance_function` object
-    r: float, optional
-        The number of times to divide the shoreline thickness/width to calculate
-        the local element size.
-    plot: boolean, optional
-        Visualize the medial points ontop of the shoreline
-
-    Returns
-    -------
-    :class:`Grid` object
-        A sizing function that takes a point and returns a value
-
-    """
-
-    logger.info("Building a feature sizing function...")
-
-    assert r > 0, "local feature size "
-    grid_calc = Grid(
-        bbox=shoreline.bbox,
-        dx=shoreline.h0 / 2,  # dx is half that of the original shoreline spacing
-        hmin=shoreline.h0,
-        values=0.0,
-        extrapolate=True,
-        crs=crs,
-    )
-    grid = Grid(
-        bbox=shoreline.bbox,
-        dx=shoreline.h0,
-        hmin=shoreline.h0,
-        values=0.0,
-        extrapolate=True,
-        crs=crs,
-    )
-    # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
-    phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
-    lon, lat = grid_calc.create_grid()
-    points = np.vstack((shoreline.inner, shoreline.mainland))
-    # find location of points on grid
-    indices = grid_calc.find_indices(points, lon, lat)
-    phi[indices] = -1.0
-    dis = np.abs(skfmm.distance(phi, [grid_calc.dx, grid_calc.dy]))
-    # calculate the sign
-    qpts = np.column_stack((lon.flatten(), lat.flatten()))
-    sgn = np.sign(signed_distance_function.eval(qpts))
-    sgn = sgn.reshape(*dis.shape)
-    dis *= sgn
-    gradx, grady = np.gradient(dis, grid_calc.dx, grid_calc.dy)
-    grad_mag = np.sqrt(gradx ** 2 + grady ** 2)
-    indicies_medial_points = np.where((grad_mag < 0.9) & (dis < -grid_calc.dx))
-    medial_points_x, medial_points_y = (
-        lon[indicies_medial_points],
-        lat[indicies_medial_points],
-    )
-    medial_points = np.column_stack((medial_points_x, medial_points_y))
-    # prune the points twice over to remove spurious medial points
-    # (seems to work better than once)
-    for _ in range(2):
-        medial_points = _prune(medial_points, grid_calc.dx)
-
-    if plot:
-        import matplotlib.pyplot as plt
-
-        plt.plot(medial_points[:, 0], medial_points[:, 1], "r.", label="medial points")
-        plt.plot(points[:, 0], points[:, 1], "b-", label="shoreline boundaries")
-        plt.plot(
-            shoreline.boubox[:, 0],
-            shoreline.boubox[:, 1],
-            "k--",
-            label="bounding extents",
-        )
-        plt.gca().set_aspect("equal", adjustable="box")
-        plt.legend()
-        plt.show()
-
-    # calculate distance to medial axis
-    tree = scipy.spatial.cKDTree(medial_points)
-    try:
-        dMA, _ = tree.query(qpts, k=1, workers=-1)
-    except (Exception,):
-        dMA, _ = tree.query(qpts, k=1, n_jobs=-1)
-    dMA = dMA.reshape(*dis.shape)
-    W = dMA + np.abs(dis)
-    feature_size = (2 * W) / r
-
-    grid_calc.values = feature_size
-    grid_calc.build_interpolant()
-    # interpolate the finer grid used for calculations to the final coarser grid
-    grid = grid_calc.interpolate_to(grid)
-    if max_edge_length is not None:
-        grid.values[grid.values > max_edge_length] = max_edge_length
-
-    grid.hmin = shoreline.h0
-    grid.extrapolate = True
-    grid.medial_points = medial_points
-    grid.build_interpolant()
-    return grid
-
-
-def _prune(points, dx):
-    # Prune medial points
-    # Note: We want a line of points larger than around 7.
-    # This corresponds to having three points back or forward
-    # up the line. Let's check for those three closest points
-    # and ensure tehy are within about co*h0 distance from
-    # each other where co is the cutoff distance = 0.75*sqrt(2)
-    tree = scipy.spatial.cKDTree(points)
-    co = 0.75 * np.sqrt(2)
-    # build a KDtree w/ the medial points
-    try:
-        dmed, _ = tree.query(points, k=4, workers=-1)
-    except (Exception,):
-        dmed, _ = tree.query(points, k=4, n_jobs=-1)
-    prune = np.where(
-        (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)
-    )
-    points = np.delete(points, prune, axis=0)
-    return points
-
-
-def wavelength_sizing_function(
-    dem,
-    wl=10,
-    min_edge_length=None,
-    max_edge_length=None,
-    verbose=True,
-    crs=4326,
-):
-    """Mesh sizes that vary proportional to an estimate of the wavelength
-       of the M2 tidal constituent
-
-    Parameters
-    ----------
-    dem:  :class:`Dem`
-        Data processed from :class:`Dem`.
-    wl: integer, optional
-        The number of desired elements per wavelength of the M2 constituent
-    min_edgelength: float, optional
-        The minimum edge length in meters in the domain. If None, the min
-        of the edgelength function is used.
-    max_edge_length: float, optional
-        The maximum edge length in meters in the domain.
-
-    Returns
-    -------
-    :class:`Grid` object
-        A sizing function that takes a point and returns a value
-
-    """
-    logger.info("Building a wavelength sizing function...")
-
-    lon, lat = dem.create_grid()
-    tmpz = dem.eval((lon, lat))
-
-    grav = 9.807
-    period = 12.42 * 3600  # M2 period in seconds
-    grid = Grid(
-        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
-    )
-    tmpz[np.abs(tmpz) < 1] = 1  # Limit minimum depth to 1 m
-    grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
-    grid.values /= 2e6  # to convrt from m to L_R (this needs to be taken out when commiting to github
-
-    if min_edge_length is None:
-        grid.hmin = np.amin(grid.values)
-
-    if max_edge_length is not None:
-        grid.values[grid.values > max_edge_length] = max_edge_length
-
-    grid.build_interpolant()
-
-    return grid
-
-
 def bathymetric_gradient_sizing_function(
     dem,
     slope_parameter=20,
@@ -421,7 +224,7 @@ def bathymetric_gradient_sizing_function(
         Use the barotropic, baroclinic Rossby radius to lowpass filter bathymetry
         prior to calculating the sizing function. In addition,
         bandpass, lowpass, highpass can also be utilized.
-    filter_cutoffs: list, optional
+    filter_cutoff: list, optional
         If filter is bandpass/lowpass/highpass/bandstop, then contains the lower and upper
         bounds for the filter (depends on the filter)
 
@@ -461,7 +264,7 @@ def bathymetric_gradient_sizing_function(
         )
     elif "pass" in type_of_filter:
         logger.info("Using a {type_of_filter} filter...")
-        bs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
+        bs = filt2(tmpz, dy, filter_cutoff, type_of_filter)
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
@@ -623,6 +426,192 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     time_taken = time.perf_counter() - start
 
     return bs, time_taken
+
+
+def feature_sizing_function(
+    shoreline,
+    signed_distance_function,
+    r=3,
+    max_edge_length=None,
+    plot=False,
+    crs=4326,
+):
+    """Mesh sizes vary proportional to the width or "thickness" of the shoreline
+    Implements roughly the approximate medial axis calculation from Eq. 7.1:
+
+    "A MATLAB MESH GENERATOR FOR THE TWO-DIMENSIONAL FINITE ELEMENT METHOD" by Jonas Koko
+
+    Parameters
+    ----------
+    shoreline: :class:`Shoreline`
+        Data processed from :class:`Shoreline`.
+    signed_distance_function: a function
+        A `signed_distance_function` object
+    r: float, optional
+        The number of times to divide the shoreline thickness/width to calculate
+        the local element size.
+    plot: boolean, optional
+        Visualize the medial points ontop of the shoreline
+
+    Returns
+    -------
+    :class:`Grid` object
+        A sizing function that takes a point and returns a value
+
+    """
+
+    logger.info("Building a feature sizing function...")
+
+    assert r > 0, "local feature size "
+    grid_calc = Grid(
+        bbox=shoreline.bbox,
+        dx=shoreline.h0 / 2,  # dx is half that of the original shoreline spacing
+        hmin=shoreline.h0,
+        values=0.0,
+        extrapolate=True,
+        crs=crs,
+    )
+    grid = Grid(
+        bbox=shoreline.bbox,
+        dx=shoreline.h0,
+        hmin=shoreline.h0,
+        values=0.0,
+        extrapolate=True,
+        crs=crs,
+    )
+    # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
+    phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
+    lon, lat = grid_calc.create_grid()
+    points = np.vstack((shoreline.inner, shoreline.mainland))
+    # find location of points on grid
+    indices = grid_calc.find_indices(points, lon, lat)
+    phi[indices] = -1.0
+    dis = np.abs(skfmm.distance(phi, [grid_calc.dx, grid_calc.dy]))
+    # calculate the sign
+    qpts = np.column_stack((lon.flatten(), lat.flatten()))
+    sgn = np.sign(signed_distance_function.eval(qpts))
+    sgn = sgn.reshape(*dis.shape)
+    dis *= sgn
+    gradx, grady = np.gradient(dis, grid_calc.dx, grid_calc.dy)
+    grad_mag = np.sqrt(gradx ** 2 + grady ** 2)
+    indicies_medial_points = np.where((grad_mag < 0.9) & (dis < -grid_calc.dx))
+    medial_points_x, medial_points_y = (
+        lon[indicies_medial_points],
+        lat[indicies_medial_points],
+    )
+    medial_points = np.column_stack((medial_points_x, medial_points_y))
+    # prune the points twice over to remove spurious medial points
+    # (seems to work better than once)
+    for _ in range(2):
+        medial_points = _prune(medial_points, grid_calc.dx)
+
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.plot(medial_points[:, 0], medial_points[:, 1], "r.", label="medial points")
+        plt.plot(points[:, 0], points[:, 1], "b-", label="shoreline boundaries")
+        plt.plot(
+            shoreline.boubox[:, 0],
+            shoreline.boubox[:, 1],
+            "k--",
+            label="bounding extents",
+        )
+        plt.gca().set_aspect("equal", adjustable="box")
+        plt.legend()
+        plt.show()
+
+    # calculate distance to medial axis
+    tree = scipy.spatial.cKDTree(medial_points)
+    try:
+        dMA, _ = tree.query(qpts, k=1, workers=-1)
+    except (Exception,):
+        dMA, _ = tree.query(qpts, k=1, n_jobs=-1)
+    dMA = dMA.reshape(*dis.shape)
+    W = dMA + np.abs(dis)
+    feature_size = (2 * W) / r
+
+    grid_calc.values = feature_size
+    grid_calc.build_interpolant()
+    # interpolate the finer grid used for calculations to the final coarser grid
+    grid = grid_calc.interpolate_to(grid)
+    if max_edge_length is not None:
+        grid.values[grid.values > max_edge_length] = max_edge_length
+
+    grid.hmin = shoreline.h0
+    grid.extrapolate = True
+    grid.build_interpolant()
+    return grid
+
+
+def _prune(points, dx):
+    # Prune medial points
+    # Note: We want a line of points larger than around 7.
+    # This corresponds to having three points back or forward
+    # up the line. Let's check for those three closest points
+    # and ensure tehy are within about co*h0 distance from
+    # each other where co is the cutoff distance = 0.75*sqrt(2)
+    tree = scipy.spatial.cKDTree(points)
+    co = 0.75 * np.sqrt(2)
+    # build a KDtree w/ the medial points
+    try:
+        dmed, _ = tree.query(points, k=4, workers=-1)
+    except (Exception,):
+        dmed, _ = tree.query(points, k=4, n_jobs=-1)
+    prune = np.where(
+        (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)
+    )
+    points = np.delete(points, prune, axis=0)
+    return points
+
+
+def wavelength_sizing_function(
+    dem,
+    wl=10,
+    min_edgelength=None,
+    max_edge_length=None,
+    verbose=True,
+    crs=4326,
+):
+    """Mesh sizes that vary proportional to an estimate of the wavelength
+       of the M2 tidal constituent
+
+    Parameters
+    ----------
+    dem:  :class:`Dem`
+        Data processed from :class:`Dem`.
+    wl: integer, optional
+        The number of desired elements per wavelength of the M2 constituent
+    min_edgelength: float, optional
+        The minimum edge length in meters in the domain. If None, the min
+        of the edgelength function is used.
+    max_edge_length: float, optional
+        The maximum edge length in meters in the domain.
+
+    Returns
+    -------
+    :class:`Grid` object
+        A sizing function that takes a point and returns a value
+
+    """
+    logger.info("Building a wavelength sizing function...")
+
+    lon, lat = dem.create_grid()
+    tmpz = dem.eval((lon, lat))
+
+    grav = 9.807
+    period = 12.42 * 3600  # M2 period in seconds
+    grid = Grid(
+        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
+    )
+    tmpz[np.abs(tmpz) < 1] = 1
+    grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
+    if min_edgelength is None:
+        min_edgelength = np.amin(grid.values)
+    grid.hmin = min_edgelength
+    if max_edge_length is not None:
+        grid.values[grid.values > max_edge_length] = max_edge_length
+    grid.build_interpolant()
+    return grid
 
 
 def multiscale_sizing_function(
