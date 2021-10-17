@@ -1,10 +1,14 @@
 import logging
+import math
+import time
 
 import numpy as np
 import scipy.spatial
 import skfmm
 from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
+
+from oceanmesh.filterfx import filt2
 
 from . import edges
 from .grid import Grid
@@ -18,7 +22,7 @@ __all__ = [
     "wavelength_sizing_function",
     "multiscale_sizing_function",
     "feature_sizing_function",
-    "slope_sizing_function",
+    "bathymetric_gradient_sizing_function",
 ]
 
 
@@ -386,26 +390,28 @@ def wavelength_sizing_function(
     return grid
 
 
-def slope_sizing_function(
+def bathymetric_gradient_sizing_function(
     dem,
-    slp=20,
-    fl=-50,
+    slope_parameter=20,
+    filter_quotient=50,
     min_edge_length=None,
     max_edge_length=None,
     min_elevation_cutoff=50,
-    verbose=True,
+    rossby_radius_calculation="barotropic",
     crs=4326,
 ):
     """Mesh sizes that vary proportional to the bathymetryic gradient.
+       Bathymetry is filtered by default using a fraction of the
+       barotropic/baroclinic Rossby radius.
 
     Parameters
     ----------
-    dem:  :class:`Dem`
-        Data processed from :class:`Dem`.
-    fl: float, optional
-        The filter equal to Rossby radius divided by fl
-    slp: integer, optional
-        The number of modes to resolve slope gradients
+    dem:  :class:`DEM`
+        Data processed from :class:`DEM`.
+    filter_quotient: float, optional
+        The filter length equal to Rossby radius divided by fl
+    slope_parameter: integer, optional
+        The number of nodes to resolve bathymetryic gradients
     min_edgelength: float, optional
         The minimum edge length in meters in the domain. If None, the min
         of the edgelength function is used.
@@ -413,8 +419,9 @@ def slope_sizing_function(
         The maximum edge length in meters in the domain.
     min_elevation_cutoff: float, optional
         Below this elevation, this sizing function is not used.
-    verbose: boolean, optional
-        Whether to write messages to the screen
+    rossby_radius_calculation: str, optional
+        Calculate either barotropic or baroclinic rosbby radius
+        to filter bathymetry
 
     Returns
     -------
@@ -422,130 +429,44 @@ def slope_sizing_function(
         A sizing function that takes a point and returns a value
 
     """
-    from oceanmesh.filterfx import filt2
 
-    if verbose:
-        logger.info("Building a slope length sizing function...")
+    logger.info("Building a slope length sizing function...")
+
     x, y = dem.create_grid()
     tmpz = dem.eval((x, y))
     grid = Grid(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
     x0, xN, y0, yN = dem.bbox
+    logger.info(f"Enforcing a minimum elevation cutoff of {min_elevation_cutoff}")
     tmpz[np.abs(tmpz) < min_elevation_cutoff] = min_elevation_cutoff
-
-    try:
-        len(fl)
-    except TypeError:
-        fl = np.array([fl])
-
-    try:
-        len(slp)
-    except TypeError:
-        slp = np.array([slp])
 
     dx, dy = dem.dx, dem.dy  # for gradient function
     nx, ny = dem.nx, dem.ny
     grid_details = (nx, ny, dx, dy)
     xg, yg = dem.create_grid()
     coords = (xg, yg)
-    tmpz_f = np.zeros(tmpz.shape)
 
-    # Now filtering bathymetry to obtain only relevant features
-    # Loop through each set of bandpass filter lengths
-    if fl[0] < 0 and fl[0] != -999:
-        logger.info("Rossby radius of deformation filter is on.")
-        rbfilt = abs(fl[0])
-        barot = True
-        if hasattr(slp, "__len__"):
-            if len(slp) > 1 and slp[1] < 0:
-                logger.info("Using 1st-mode baroclinic Rossby radius.")
-                barot = False
-
-        else:
-            logger.info("Using barotropic Rossby radius")
-
-        fl = []
-        filtit = True
-
-    elif fl[0] == 0:
-        logger.info("Slope filter is off.")
-        fl = []
-        tmpz_f[:] = tmpz[:]
-        filtit = False
-
-    elif fl[0] == -999:
-        logger.info("Slope filter is LEGACY.")
-        fl = []
-        tmpz_f[:] = tmpz[:]
-        filtit = -999
-
+    if rossby_radius_calculation == "barotropic":
+        barot = True  # barotropic rossby radius
+    elif rossby_radius_calculation == "baroclinic":
+        barot = False
     else:
-        filtit = False
-        for slp in fl.T:
-            if isinstance(slp, (int, float)):
-                # Do a low-pass filter
-                tmpz_ft = filt2(tmpz, dy, slp, "lp")
+        msg = f"The rossby_radius_calculation {rossby_radius_calculation} is not known"
+        raise ValueError(msg)
 
-            elif slp[1] == 0:
-                tmpz_ft = filt2(tmpz, dy, slp[0], "lp")
-
-            elif np.all(slp != 0):
-                # Do a bandpass filter
-                tmpz_ft = filt2(tmpz, dy, slp, "bp")
-
-            else:
-                # Highpass filter not recommended
-                print(
-                    "Warning:: Highpass filter on bathymetry in slope - \
-edgelength function in not recommended"
-                )
-                tmpz_ft = filt2(tmpz, dy, slp[1], "hp")
-
-            tmpz_f += tmpz_ft
-
-    # Performs bandpass filtering
-    if filtit:
+    if filter_quotient > 0:
         bs, time_taken = rossby_filter(
-            tmpz, dem.bbox, grid_details, coords, rbfilt, barot
+            tmpz, dem.bbox, grid_details, coords, filter_quotient, barot
         )
-
-        # legacy filter
-    elif filtit == -999:
-        bs = legacy_filter(tmpz, dem.bbox, grid_details, coords)
-
     else:
-        # get slope from (possibly filtered) bathy
-        by, bx = EarthGradient(tmpz_f, dy, dx)  # get slope in x and y directions
+        by, bx = earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
         bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
 
-    del bx, by
-
-    # Allow user to specify depth ranges for slope parameter.
-    slpd = np.empty((nx, ny))
-    slpd[:] = np.nan
-
-    for param in slp.T:
-        if not hasattr(param, "__len__"):
-            # no bounds specified. valid in this range.
-            slpp = param
-            z_min = np.NINF
-            z_max = np.inf
-
-        else:
-            slpp, z_min, zmax = param[:3]
-
-        # Calculating the slope function
-        eps = 1e-10  # small number to approximate derivative
-        dp = np.maximum(1, tmpz)
-        tslpd = (2 * np.pi / slpp) * dp / (bs + eps)
-        # apply slope with mask
-        limidx = (tmpz >= z_min) & (tmpz < z_max)
-        slpd[limidx] = tslpd[limidx]
-        del tslpd
-
-    del tmpz, xg, yg
-    grid.values = slpd
+    # Calculating the slope function
+    eps = 1e-10  # small number to approximate derivative
+    dp = np.maximum(1, tmpz)
+    grid.values = (2 * np.pi / slope_parameter) * dp / (bs + eps)
 
     if min_edge_length is None:
         grid.hmin = np.amin(grid.values)
@@ -591,10 +512,6 @@ def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-    import math
-    import time
-
-    from filterfx import filt2
 
     x0, xN, y0, yN = bbox
     nx, ny, dx, dy = grid_details
@@ -692,7 +609,7 @@ def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
             else:
                 tmpz_ft = tmpz[:, n2s:n2e]
 
-            by, bx = EarthGradient(
+            by, bx = earth_gradient(
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
@@ -704,80 +621,6 @@ def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     time_taken = time.perf_counter() - start
 
     return bs, time_taken
-
-
-def legacy_filter(tmpz, bbox, grid_details, coords):
-    """
-    Performs the Rossby radius filtering if filtit==True in
-    slope_sizing_function.
-
-    Parameters
-    ----------
-    tmpz : numpy.ndarray
-        Contains the bathymetric data across the grid formed by coordinate
-        arrays (xg, yg).
-    bbox : tuple
-        Describes the boundary box of our domain.
-    grid_details : tuple
-        Contains the information regarding normals and grid resolutions,
-        (nx, ny, dx, dy).
-    coords : tuple np.ndarray
-        A tuple of two numpy.ndarray describing the longitude and latitude
-        coordinate system of our grid.
-
-    Returns
-    -------
-    bs : numpy.ndarray
-        This is essentially grad(h) squared after performing the bandpass
-        filtering on the Rossby radius of deformation.
-
-    """
-    from math import sqrt
-
-    from filterfx import filt2
-
-    x0, xN, y0, yN = bbox
-    nx, ny, dx, dy = grid_details
-    xg, yg = coords
-    grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
-    # per second
-
-    bs = np.empty((nx, ny))
-    bs[:] = np.nan
-    # Rossby radius of deformation filter
-    f = 2 * Rre * abs(np.sin(yg * np.pi / 180))  # Local Coriolis coefficient
-    # limit to 1000 km
-    rosb = np.minimum(
-        1000e3, sqrt(grav * abs(tmpz)) / f
-    )  # Gives local Rossby radius everywhere
-    # autmatically divide into discrete bins
-    _, edges = np.histogram(rosb)
-    tmpz_ft = tmpz
-    dyb = dy
-    # get slope from filtered bathy for the segment only
-    by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
-    tempbs = np.sqrt(bx ** 2 + by ** 2)
-    # get overall slope
-    for i in range(len(edges) - 1):
-        sel = (rosb >= edges[i]) & (rosb <= edges[i + 1])
-        rosbylb = np.mean(edges[i : i + 1])
-
-        if rosbylb > 2 * dyb:
-            tmpz_ft = filt2(tmpz_ft, dyb, rosbylb, "lp")
-            dyb = rosbylb
-
-            # get slope from filtered bathy for the segment only
-            by, bx = EarthGradient(tmpz_ft, dy, dx)  # get slope in x and y directions
-            tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-
-        else:
-            # otherwise just use the same tempbs from before
-            pass
-
-        # put in the full one
-        bs[sel] = tempbs[sel]
-
-    return bs
 
 
 def multiscale_sizing_function(
@@ -858,9 +701,9 @@ def multiscale_sizing_function(
     return func, new_list_of_grids
 
 
-def EarthGradient(F, dy, dx):
+def earth_gradient(F, dy, dx):
     """
-    EarthGradient(F,HX,HY), where F is 2-D, uses the spacing
+    earth_gradient(F,HX,HY), where F is 2-D, uses the spacing
     specified by HX and HY. HX and HY can either be scalars to specify
     the spacing between coordinates or vectors to specify the
     coordinates of the points.  If HX and HY are vectors, their length
