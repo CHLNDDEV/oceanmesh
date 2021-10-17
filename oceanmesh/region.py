@@ -40,7 +40,6 @@ class Region:
     def transform_to(self, dst_crs):
         """Transform extents ``bbox`` to dst_crs"""
 
-        print("non-local")
         dst_crs = CRS.from_user_input(dst_crs)
         if not self._crs.equals(dst_crs):
             transformer = Transformer.from_crs(self.crs, dst_crs, always_xy=True)
