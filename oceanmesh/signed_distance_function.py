@@ -19,7 +19,6 @@ __all__ = [
     "Difference",
     "Intersection",
     "create_circle",
-    "create_bbox",
 ]
 
 nan = np.nan
@@ -38,28 +37,6 @@ def create_circle(center, radius):
         t += stepSize
 
     return np.array(positions)
-
-
-def create_bbox(bbox):
-    """
-    Returns a domain class object which gives a bbox and signed-distance function
-    for a domain defined by bbox.
-    """
-    import numpy as np
-
-    x0, xN, y0, yN = bbox
-
-    def func(p):
-        min = np.minimum
-        """Signed distance function for rectangle with corners (x1,y1), (x2,y1),
-        (x1,y2), (x2,y2).
-        This has an incorrect distance to the four corners but that isn't a big deal
-        """
-        return -min(min(min(-y0 + p[:, 1], yN - p[:, 1]), -x0 + p[:, 0]), xN - p[:, 0])
-
-    domain = Domain(bbox, func)
-
-    return domain
 
 
 def _generate_samples(bbox, dim, N):
@@ -148,45 +125,6 @@ class Union(Domain):
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
         return np.minimum.reduce(d)
-
-
-class UnionWithCoverings(Domain):
-    def __init__(self, domains, coverings):
-        """`coverings` is a list of polygons representing each domains extents
-        Each SDF representing the domain is enforced only in the extent of its covering.
-        """
-        bbox = _compute_bbox(domains)
-        super().__init__(bbox, domains)
-        self.coverings = coverings
-        self.covering_functions = []
-        for domain_index, _ in enumerate(self.coverings):
-            self.covering_functions.append(self._build_coverings(domain_index))
-
-    def _build_coverings(self, domain_index):
-        def _func(x):
-            if domain_index == 0:
-                # all points inside by design
-                inside = np.ones(len(x), dtype=bool)
-            else:
-                # otherwise domain is 'inside'
-                inside, _ = inpoly2(x, self.coverings[domain_index])
-
-            # all other nested domains are 'outside'
-            for covering in self.coverings[domain_index + 1 :]:
-                _in, _ = inpoly2(x, covering)
-                inside[_in] = False
-
-            return inside
-
-        return _func
-
-    def eval(self, x):
-        d = np.ones(len(x), dtype=float)
-        for domain, c in zip(self.domain, self.covering_functions):
-            inside = c(x)
-            d[inside] = domain.eval(x[inside])
-
-        return d
 
 
 class Intersection(Domain):

@@ -423,17 +423,8 @@ class Shoreline(Region):
     represent irregular shoreline geometries.
     """
 
-    def __init__(
-        self,
-        shp,
-        bbox,
-        h0,
-        crs=4326,
-        refinements=1,
-        minimum_area_mult=4.0,
-        smooth_shoreline=True,
-        verbose=1,
-    ):
+    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0):
+
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:
@@ -457,10 +448,10 @@ class Shoreline(Region):
         self.boubox = _boubox
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
+
         polys = self._read()
 
-        if smooth_shoreline:  # Default, will smooth shoreline
-            polys = _smooth_shoreline(polys, self.refinements, verbose)
+        polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
