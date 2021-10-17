@@ -394,15 +394,16 @@ def bathymetric_gradient_sizing_function(
     dem,
     slope_parameter=20,
     filter_quotient=50,
-    min_edge_length=None,
     max_edge_length=None,
     min_elevation_cutoff=50,
-    rossby_radius_calculation="barotropic",
+    type_of_filter="barotropic",
+    filter_cutoffs=None,
     crs=4326,
 ):
     """Mesh sizes that vary proportional to the bathymetryic gradient.
        Bathymetry is filtered by default using a fraction of the
-       barotropic/baroclinic Rossby radius.
+       barotropic Rossby radius but there are several options for
+       filtering the bathymetric data (see the Parameters below).
 
     Parameters
     ----------
@@ -412,16 +413,16 @@ def bathymetric_gradient_sizing_function(
         The filter length equal to Rossby radius divided by fl
     slope_parameter: integer, optional
         The number of nodes to resolve bathymetryic gradients
-    min_edgelength: float, optional
-        The minimum edge length in meters in the domain. If None, the min
-        of the edgelength function is used.
     max_edge_length: float, optional
-        The maximum edge length in meters in the domain.
+        The maximum allowable edge length in meters in the domain.
     min_elevation_cutoff: float, optional
         abs(elevation) < this value the sizing function is not used.
-    rossby_radius_calculation: str, optional
-        Calculate either barotropic or baroclinic rosbby radius
-        to filter bathymetry
+    type_of_filter: str, optional
+        Calculate either barotropic, baroclinic Rossby radius
+        to filter bathymetry or a bandpass.
+    filter_cutoffs: list, optional
+        If filter is bandpass, then contains the lower and upper
+        bounds for the filter
 
     Returns
     -------
@@ -437,7 +438,6 @@ def bathymetric_gradient_sizing_function(
     grid = Grid(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
-    x0, xN, y0, yN = dem.bbox
     logger.info(f"Enforcing a minimum elevation cutoff of {min_elevation_cutoff}")
     tmpz[np.abs(tmpz) < min_elevation_cutoff] = min_elevation_cutoff
 
@@ -447,19 +447,24 @@ def bathymetric_gradient_sizing_function(
     xg, yg = dem.create_grid()
     coords = (xg, yg)
 
-    if rossby_radius_calculation == "barotropic":
-        barot = True  # barotropic rossby radius
-    elif rossby_radius_calculation == "baroclinic":
-        barot = False
-    else:
-        msg = f"The rossby_radius_calculation {rossby_radius_calculation} is not known"
-        raise ValueError(msg)
-
-    if filter_quotient > 0:
+    if type_of_filter == "barotropic" and filter_quotient > 0:
+        logger.info("Baroptropic Rossby radius calculation...")
         bs, time_taken = rossby_radius_filter(
-            tmpz, dem.bbox, grid_details, coords, filter_quotient, barot
+            tmpz, dem.bbox, grid_details, coords, filter_quotient, True
         )
+
+    elif type_of_filter == "baroclinic" and filter_quotient > 0:
+        logger.info("Baroclinic Rossby radius calculation...")
+        bs, time_taken = rossby_radius_filter(
+            tmpz, dem.bbox, grid_details, coords, filter_quotient, False
+        )
+    elif type_of_filter == "bandpass":
+        logger.info("Using a bandpass filter...")
+        # TODO call the functions (e.g., filt2 etc.) using filter_cutoffs **kwarg
+        pass
     else:
+        msg = f"The type_of_filter {type_of_filter} is not known and remains off"
+        logger.info(msg)
         by, bx = earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
         bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
 
@@ -467,9 +472,6 @@ def bathymetric_gradient_sizing_function(
     eps = 1e-10  # small number to approximate derivative
     dp = np.maximum(1, tmpz)
     grid.values = (2 * np.pi / slope_parameter) * dp / (bs + eps)
-
-    if min_edge_length is None:
-        grid.hmin = np.amin(grid.values)
 
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
