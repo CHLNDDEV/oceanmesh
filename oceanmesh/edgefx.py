@@ -418,7 +418,7 @@ def bathymetric_gradient_sizing_function(
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
     min_elevation_cutoff: float, optional
-        Below this elevation, this sizing function is not used.
+        abs(elevation) < this value the sizing function is not used.
     rossby_radius_calculation: str, optional
         Calculate either barotropic or baroclinic rosbby radius
         to filter bathymetry
@@ -456,7 +456,7 @@ def bathymetric_gradient_sizing_function(
         raise ValueError(msg)
 
     if filter_quotient > 0:
-        bs, time_taken = rossby_filter(
+        bs, time_taken = rossby_radius_filter(
             tmpz, dem.bbox, grid_details, coords, filter_quotient, barot
         )
     else:
@@ -480,7 +480,7 @@ def bathymetric_gradient_sizing_function(
     return grid
 
 
-def rossby_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
+def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     """
     Performs the Rossby radius filtering if filtit==True in
     slope_sizing_function.
