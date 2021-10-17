@@ -402,7 +402,7 @@ def bathymetric_gradient_sizing_function(
 ):
     """Mesh sizes that vary proportional to the bathymetryic gradient.
        Bathymetry is filtered by default using a fraction of the
-       barotropic Rossby radius but there are several options for
+       barotropic Rossby radius however there are several options for
        filtering the bathymetric data (see the Parameters below).
 
     Parameters
@@ -416,13 +416,14 @@ def bathymetric_gradient_sizing_function(
     max_edge_length: float, optional
         The maximum allowable edge length in meters in the domain.
     min_elevation_cutoff: float, optional
-        abs(elevation) < this value the sizing function is not used.
+        abs(elevation) < this value the sizing function is not calculated.
     type_of_filter: str, optional
-        Calculate either barotropic, baroclinic Rossby radius
-        to filter bathymetry or a bandpass.
+        Use the barotropic, baroclinic Rossby radius to lowpass filter bathymetry
+        prior to calculating the sizing function. In addition,
+        bandpass, lowpass, highpass can also be utilized.
     filter_cutoffs: list, optional
-        If filter is bandpass, then contains the lower and upper
-        bounds for the filter
+        If filter is bandpass/lowpass/highpass/bandstop, then contains the lower and upper
+        bounds for the filter (depends on the filter)
 
     Returns
     -------
@@ -458,10 +459,9 @@ def bathymetric_gradient_sizing_function(
         bs, time_taken = rossby_radius_filter(
             tmpz, dem.bbox, grid_details, coords, filter_quotient, False
         )
-    elif type_of_filter == "bandpass":
-        logger.info("Using a bandpass filter...")
-        # TODO call the functions (e.g., filt2 etc.) using filter_cutoffs **kwarg
-        pass
+    elif "pass" in type_of_filter:
+        logger.info("Using a {type_of_filter} filter...")
+        bs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)

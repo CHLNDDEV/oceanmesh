@@ -21,7 +21,7 @@ def filt2(Z, res, wl, filtertype, truncate=2.6):
     if type(res) not in [int, float]:
         raise TypeError("res must be a scalar value.")
 
-    if filtertype not in ["lp", "hp", "bp", "bs"]:
+    if filtertype not in ["lowpass", "highpass", "bandpass", "bandstop"]:
         raise TypeError(
             "filtertype must be either lp (low pass), \
 hp (high pass), bp (band pass) or bs (band stop)"
@@ -36,7 +36,7 @@ hp (high pass), bp (band pass) or bs (band stop)"
               the resolution of the dataset, which is an unmet condition based on these inputs"
         )
 
-    if filtertype in ["bp", "bs"]:
+    if filtertype in ["bandpass", "bandstop"]:
         if hasattr(wl, "__len__"):
             if len(wl) != 2 or type(wl) == str:
                 raise TypeError(
@@ -58,19 +58,21 @@ hp (high pass), bp (band pass) or bs (band stop)"
 
     sigma = (wl / res) / (2 * np.pi)
 
-    if filtertype == "lp":
+    if filtertype == "lowpass":
         return gaussfilter(
             Z, sigma, truncate
         )  # ndnanfilter is Carlos Adrian Vargas Aguilera's excellent function, which is included as a subfunction below.
 
-    elif filtertype == "hp":
+    elif filtertype == "highpass":
         return Z - gaussfilter(Z, sigma, truncate)
 
-    elif filtertype == "bp":
-        return filt2(filt2(Z, res, np.max(wl), "hp"), res, np.min(wl), "lp")
+    elif filtertype == "bandpass":
+        return filt2(filt2(Z, res, np.max(wl), "highpass"), res, np.min(wl), "lowpass")
 
     else:  # Leaves the case of 'bs'
-        return filt2(Z, res, np.max(wl), "lp") - filt2(Z, res, np.min(wl), "hp")
+        return filt2(Z, res, np.max(wl), "lowpass") - filt2(
+            Z, res, np.min(wl), "highpass"
+        )
 
 
 def gaussfilter(Z, sigma, truncate):
@@ -101,28 +103,28 @@ if __name__ == "__main__":
     pt.title("Original with Noise")
     pt.show()
 
-    Zlow = filt2(Z, res, 15, "lp")
+    Zlow = filt2(Z, res, 15, "lowpass")
     pt.matshow(Zlow, aspect="auto", extent=[0, 100, 0, 100])
     pt.xlabel("eastings (km)")
     pt.ylabel("northings (km)")
     pt.title("15 km lowpass filtered data")
     pt.show()
 
-    Zhi = filt2(Z, res, 15, "hp")
+    Zhi = filt2(Z, res, 15, "highpass")
     pt.matshow(Zhi, aspect="auto", extent=[0, 100, 0, 100])
     pt.xlabel("eastings (km)")
     pt.ylabel("northings (km)")
     pt.title("15 km highpass filtered data")
     pt.show()
 
-    Zbp = filt2(Z, res, [4, 7], "bp")
+    Zbp = filt2(Z, res, [4, 7], "bandpass")
     pt.matshow(Zbp, aspect="auto", extent=[0, 100, 0, 100])
     pt.xlabel("eastings (km)")
     pt.ylabel("northings (km)")
     pt.title("4 to 7 km bandpass filtered data")
     pt.show()
 
-    Zbs = filt2(Z, res, [3, 12], "bs")
+    Zbs = filt2(Z, res, [3, 12], "bandstop")
     pt.matshow(Zbs, aspect="auto", extent=[0, 100, 0, 100])
     pt.xlabel("eastings (km)")
     pt.ylabel("northings (km)")
