@@ -68,12 +68,12 @@ python setup.py version
 ```
 in the working directory.
 
-To see what's going on with `oceanmesh` you can turn on logging, which is by default suppressed. 
+To see what's going on with `oceanmesh` you can turn on logging, which is by default suppressed.
 
 ```
 import logging
 import sys
- 
+
 logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
 # logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 # logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -303,6 +303,9 @@ ax = edge_length.plot(
 shoreline.plot(ax=ax)
 ```
 ![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
+
+
+### Resolving bathymetric gradients
 
 
 Cleaning up the mesh
