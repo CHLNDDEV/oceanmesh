@@ -68,16 +68,6 @@ python setup.py version
 ```
 in the working directory.
 
-To see what's going on with `oceanmesh` you can turn on logging, which is by default suppressed.
-
-```
-import logging
-import sys
-
-logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
-# logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-# logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-```
 
 Installation
 ============
@@ -304,7 +294,6 @@ shoreline.plot(ax=ax)
 ```
 ![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
 
-
 ### Resolving bathymetric gradients
 
 
@@ -325,7 +314,7 @@ Here are some of the relevant codes to address these common problems.
 <!--pytest-codeblocks:skip-->
 ```python
 # Address (1) above.
-points, cells, jx = fix_mesh(points, cells)
+points, cells = fix_mesh(points, cells)
 # Addresses (2)-(3) above. Remove degenerate mesh faces and other common problems in the mesh
 points, cells = make_mesh_boundaries_traversable(points, cells)
 # Remove elements (i.e., "faces") connected to only one channel
@@ -442,26 +431,44 @@ points, cells = om.laplacian2(points, cells)
 
 # plot it showing the different levels of resolution
 triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-gs = gridspec.GridSpec(2, 1)
-gs.update(wspace=0.1)
+gs = gridspec.GridSpec(2, 2)
+gs.update(wspace=0.5)
 plt.figure()
+
+bbox3 = np.array(
+    [
+        [-73.78, 40.60],
+        [-73.75, 40.60],
+        [-73.75, 40.64],
+        [-73.78, 40.64],
+        [-73.78, 40.60],
+    ],
+    dtype=float,
+)
 
 ax = plt.subplot(gs[0, 0])  #
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=0.5)
+ax.triplot(triang, "-", lw=1)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
-ax = plt.subplot(gs[1, 0])  #
-buf = 0.07
-ax.set_xlim([min(bbox2[:,0])-buf,max(bbox2[:,0])+buf])
-ax.set_ylim([min(bbox2[:,1])-buf,max(bbox2[:,1])+buf])
+ax = plt.subplot(gs[0, 1])
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=0.5)
+ax.triplot(triang, "-", lw=1)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.set_xlim(np.amin(bbox2[:, 0]), np.amax(bbox2[:, 0]))
+ax.set_ylim(np.amin(bbox2[:, 1]), np.amax(bbox2[:, 1]))
+ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
+ax = plt.subplot(gs[1, :])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.set_xlim(-73.78, -73.75)
+ax.set_ylim(40.60, 40.64)
 plt.show()
 ```
-<img width="747" alt="image" src="https://user-images.githubusercontent.com/21131934/136140049-9eee309a-987f-4128-9fe2-bb207f972be3.png">
+![Multiscale](https://user-images.githubusercontent.com/18619644/136119785-8746552d-4ff6-44c3-9aa1-3e4981ba3518.png)
+
 
 See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 
