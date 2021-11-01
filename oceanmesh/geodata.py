@@ -175,10 +175,11 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     out = np.empty(shape=(0, 2))
 
     if bSGP.geom_type == "Polygon":
-        bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
+        # Convert to `MultiPolygon`
+        bSGP = shapely.geometry.MultiPolygon([bSGP])
 
     # MultiPolygon members can be accessed via iterator protocol using `in`.
-    for b in bSGP:
+    for b in bSGP.geoms:
         xy = np.asarray(b.exterior.coords)
         xy = np.vstack((xy, xy[0]))
         out = np.vstack((out, xy, [nan, nan]))
@@ -344,9 +345,9 @@ def _clip_polys(polys, bbox, delta=0.10):
             elif not pi.is_empty:
                 # assert(pi.geom_type,'MultiPolygon')
                 if pi.geom_type == "Polygon":
-                    pi = [pi]
+                    pi = shapely.geometry.MultiPolygon([pi])
 
-                for ppi in pi:
+                for ppi in pi.geoms:
                     xy = np.asarray(ppi.exterior.coords)
                     xy = np.vstack((xy, xy[0]))
                     out = np.vstack((out, xy, [nan, nan]))
