@@ -8,6 +8,7 @@ import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
+from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
@@ -46,7 +47,7 @@ def _parse_kwargs(kwargs):
             "blend_polynomial",
             "blend_max_iter",
             "blend_nnear",
-            "verbose",
+            "lock_boundary",
         }:
             pass
         else:
@@ -98,11 +99,11 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         "points": None,
         "min_edge_length": None,
         "plot": 999999,
-        "blend_width": 5000,
+        "blend_width": 2500,
         "blend_polynomial": 2,
         "blend_max_iter": 20,
         "blend_nnear": 256,
-        "verbose": 0,
+        "lock_boundary": False,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -134,6 +135,7 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         min_edge_length=global_minimum,
         points=_p,
         max_iter=opts["blend_max_iter"],
+        lock_boundary=True,
         **kwargs,
     )
 
@@ -183,6 +185,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "points": None,
         "min_edge_length": None,
         "plot": 999999,
+        "lock_boundary": False,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -206,6 +209,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
     pfix, nfix = _unpack_pfix(_DIM, opts)
+    lock_boundary = opts["lock_boundary"]
 
     if opts["points"] is None:
         p = _generate_initial_points(
@@ -237,8 +241,13 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Get the current topology of the triangulation
         p, t = _get_topology(dt)
 
-        # Find where pfix went
         ifix = []
+        if lock_boundary:
+            _, bpts = _external_topology(p, t)
+            for fix in bpts:
+                ifix.append(_closest_node(fix, p))
+
+        # Find where pfix went
         if nfix > 0:
             for fix in pfix:
                 ifix.append(_closest_node(fix, p))
@@ -248,7 +257,7 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # plot the mesh every count iterations
         if count % opts["plot"] == 0 and count != 0:
-            plot_mesh(p, t, count=count, pause=0.2)
+            plot_mesh(p, t, count=count, pause=5.0)
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):
@@ -438,11 +447,7 @@ def _unpack_pfix(dim, opts):
     if opts["pfix"] is not None:
         pfix = np.array(opts["pfix"], dtype="d")
         nfix = len(pfix)
-        if opts["verbose"]:
-            print(
-                "Constraining " + str(nfix) + " fixed points..",
-                flush=True,
-            )
+        logger.info(f"Constraining {nfix} fixed points..")
     return pfix, nfix
 
 

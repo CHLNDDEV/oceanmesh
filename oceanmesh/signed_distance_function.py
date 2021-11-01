@@ -93,9 +93,10 @@ def _plot(geo, filename=None, samples=100000):
 
 
 class Domain:
-    def __init__(self, bbox, func):
+    def __init__(self, bbox, func, covering=None):
         self.bbox = bbox
         self.domain = func
+        self.covering = covering
 
     def eval(self, x):
         return self.domain(x)
@@ -124,45 +125,6 @@ class Union(Domain):
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
         return np.minimum.reduce(d)
-
-
-class UnionWithCoverings(Domain):
-    def __init__(self, domains, coverings):
-        """`coverings` is a list of polygons representing each domains extents
-        Each SDF representing the domain is enforced only in the extent of its covering.
-        """
-        bbox = _compute_bbox(domains)
-        super().__init__(bbox, domains)
-        self.coverings = coverings
-        self.covering_functions = []
-        for domain_index, _ in enumerate(self.coverings):
-            self.covering_functions.append(self._build_coverings(domain_index))
-
-    def _build_coverings(self, domain_index):
-        def _func(x):
-            if domain_index == 0:
-                # all points inside by design
-                inside = np.ones(len(x), dtype=bool)
-            else:
-                # otherwise domain is 'inside'
-                inside, _ = inpoly2(x, self.coverings[domain_index])
-
-            # all other nested domains are 'outside'
-            for covering in self.coverings[domain_index + 1 :]:
-                _in, _ = inpoly2(x, covering)
-                inside[_in] = False
-
-            return inside
-
-        return _func
-
-    def eval(self, x):
-        d = np.ones(len(x), dtype=float)
-        for domain, c in zip(self.domain, self.covering_functions):
-            inside = c(x)
-            d[inside] = domain.eval(x[inside])
-
-        return d
 
 
 class Intersection(Domain):
@@ -233,7 +195,27 @@ def signed_distance_function(shoreline):
         dist = (-1) ** (cond) * d
         return dist
 
-    return Domain(shoreline.bbox, func)
+    poly2 = shoreline.boubox
+    tree2 = scipy.spatial.cKDTree(
+        poly2[~np.isnan(poly2[:, 0]), :], balanced_tree=False, leafsize=50
+    )
+
+    def func_covering(x):
+        # Initialize d with some positive number larger than geps
+        dist = np.zeros(len(x)) + 1.0
+        # are points inside the boubox?
+        in_boubox, _ = inpoly2(x, boubox, e_box)
+        # compute dist to shoreline
+        try:
+            d, _ = tree2.query(x, k=1, workers=-1)
+        except (Exception,):
+            d, _ = tree2.query(x, k=1, n_jobs=-1)
+        # d is signed negative if inside the
+        # intersection of two areas and vice versa.
+        dist = (-1) ** (in_boubox) * d
+        return dist
+
+    return Domain(shoreline.bbox, func, covering=func_covering)
 
 
 def _create_boubox(bbox):
@@ -278,13 +260,10 @@ def multiscale_signed_distance_function(signed_distance_functions):
     # calculate the boolean/set difference from the base sdf and subsequent nests
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
-        nests.append(Difference([sdf, *signed_distance_functions[i + 1 :]]))
+        # set eval method to covering
+        tmp = [Domain(s.bbox, s.covering) for s in signed_distance_functions[i + 1 :]]
+        nests.append(Difference([sdf, *tmp]))
 
-    # create coverings
-    coverings = []
-    for sdf in signed_distance_functions:
-        coverings.append(_create_boubox(sdf.bbox))
-
-    union = UnionWithCoverings(signed_distance_functions, coverings)
+    union = Union(nests)
 
     return union, nests
