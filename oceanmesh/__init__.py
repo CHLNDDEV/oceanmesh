@@ -7,12 +7,16 @@ from oceanmesh.clean import (
     make_mesh_boundaries_traversable,
 )
 from oceanmesh.edgefx import (
+    bathymetric_gradient_sizing_function,
     distance_sizing_function,
     enforce_mesh_gradation,
     feature_sizing_function,
     wavelength_sizing_function,
     slope_sizing_function,
     enforce_mesh_size_bounds_elevation,
+    feature_sizing_function,
+    multiscale_sizing_function,
+    wavelength_sizing_function,
 )
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.geodata import DEM, Shoreline
@@ -37,6 +41,7 @@ from .mesh_generator import generate_mesh, generate_multiscale_mesh, plot_mesh
 __all__ = [
     "Region",
     "compute_minimum",
+    "bathymetric_gradient_sizing_function",
     "multiscale_sizing_function",
     "delete_boundary_faces",
     "delete_faces_connected_to_one_face",

@@ -13,7 +13,6 @@ from pyproj import CRS
 
 from .grid import Grid
 from .region import Region
-from .filterfx import filt2
 
 nan = np.nan
 
@@ -424,17 +423,8 @@ class Shoreline(Region):
     represent irregular shoreline geometries.
     """
 
-    def __init__(
-        self,
-        shp,
-        bbox,
-        h0,
-        crs=4326,
-        refinements=1,
-        minimum_area_mult=4.0,
-        smooth_shoreline=True,
-        verbose=1,
-    ):
+    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0):
+
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:
@@ -458,10 +448,10 @@ class Shoreline(Region):
         self.boubox = _boubox
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
+
         polys = self._read()
 
-        if smooth_shoreline:  # Default, will smooth shoreline
-            polys = _smooth_shoreline(polys, self.refinements)
+        polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
@@ -574,7 +564,6 @@ class Shoreline(Region):
         show=True,
         xlim=None,
         ylim=None,
-        loc=None,
     ):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
@@ -600,11 +589,10 @@ class Shoreline(Region):
             ymax - ymin,
             fill=None,
             hatch="////",
-            alpha=0.2
+            alpha=0.2,
         )
 
         border = 0.10 * (xmax - xmin)
-        loc_ = 'best' if loc is None else loc
         if ax is None:
             plt.xlim(xmin - border, xmax + border)
             plt.ylim(ymin - border, ymax + border)
@@ -612,11 +600,11 @@ class Shoreline(Region):
         ax.add_patch(rect)
 
         if flg1 and flg2:
-            ax.legend((line1, line2, line3), ("mainland", "inner", "outer"), loc=loc_)
+            ax.legend((line1, line2, line3), ("mainland", "inner", "outer"))
         elif flg1 and not flg2:
-            ax.legend((line1, line3), ("mainland", "outer"), loc=loc_)
+            ax.legend((line1, line3), ("mainland", "outer"))
         elif flg2 and not flg1:
-            ax.legend((line2, line3), ("inner", "outer"), loc=loc_)
+            ax.legend((line2, line3), ("inner", "outer"))
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)
@@ -654,14 +642,14 @@ class DEM(Grid):
         elif type(dem) == numpy.ndarray:
             topobathy = dem.astype(float)
             reso = ((bbox[1]-bbox[0])/topobathy.shape[0], (bbox[3]-bbox[2])/topobathy.shape[1])
-            self.dem = 'input'
+            self.dem = "input"
 
         elif callable(dem): # if input is a function
             lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(bbox[2], bbox[3], 1001)
             reso = ((bbox[1]-bbox[0])/lon.shape[0], (bbox[3]-bbox[2])/lat.shape[0])
             lon, lat = np.meshgrid(lon, lat)
             topobathy = dem(lon, lat)
-            self.dem = 'function'
+            self.dem = "function"
 
         topobathy[abs(topobathy) > 1e5] = np.NaN
 
@@ -709,7 +697,7 @@ class DEM(Grid):
 
             logger.debug("Exiting: DEM._read")
             return topobathy, r.rio.resolution(), bbox
-
+            
     def filter_bathymetry(self, fl, min_depth=50):
         lon, lat = self.create_grid()
         tmpz = abs(self.eval((lon, lat)))
@@ -760,11 +748,10 @@ class DEM(Grid):
                         "Warning:: Highpass filter on bathymetry in slope - \
         edgelength function in not recommended"
                     )
-                    print('Warning')
                     tmpz_ft = filt2(tmpz, self.dy, slp[1], "hp")
 
                 tmpz_f += tmpz_ft
-        print('done?')
+
         return tmpz_f, fl, filtit, rbfilt
 
     def grad_bathymetric_filter(self, tmpz, fl, filtit, rbfilt, barot):

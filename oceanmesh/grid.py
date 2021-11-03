@@ -329,7 +329,6 @@ class Grid(Region):
         filename=None,
         xlim=None,
         ylim=None,
-        log=False,
     ):
         """Visualize the values in :obj:`Grid`
 
@@ -349,13 +348,10 @@ class Grid(Region):
 
         fig, ax = plt.subplots()
         ax.axis("equal")
-        vals = self.values[:-1:coarsen, :-1:coarsen]
-        vals = np.log10(vals) if log else vals
-
         c = ax.pcolormesh(
             x[:-1:coarsen, :-1:coarsen],
             y[:-1:coarsen, :-1:coarsen],
-            vals,
+            self.values[:-1:coarsen, :-1:coarsen],
             vmin=vmin,
             vmax=vmax,
             shading="auto",
