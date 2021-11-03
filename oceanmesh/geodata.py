@@ -334,11 +334,11 @@ def _clip_polys(polys, bbox, delta=0.10):
             )
             mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
             if mp.geom_type == "Polygon":
-                mp = [mp]  # `Polygon` -> `MultiPolygon` with 1 member
+                mp = shapely.geometry.MultiPolygon([mp])
         else:
-            mp = [mp]
+            mp = shapely.geometry.MultiPolygon([mp])
 
-        for p in mp:
+        for p in mp.geoms:
             pi = p.intersection(b)
             if b.contains(p):
                 out = np.vstack((out, poly))
