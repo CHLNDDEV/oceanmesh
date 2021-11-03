@@ -13,6 +13,7 @@ from pyproj import CRS
 
 from .grid import Grid
 from .region import Region
+from .filterfx import filt2
 
 nan = np.nan
 
@@ -460,7 +461,7 @@ class Shoreline(Region):
         polys = self._read()
 
         if smooth_shoreline:  # Default, will smooth shoreline
-            polys = _smooth_shoreline(polys, self.refinements, verbose)
+            polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
@@ -573,6 +574,7 @@ class Shoreline(Region):
         show=True,
         xlim=None,
         ylim=None,
+        loc=None,
     ):
         """Visualize the content in the shp field of Shoreline"""
         import matplotlib.pyplot as plt
@@ -598,10 +600,11 @@ class Shoreline(Region):
             ymax - ymin,
             fill=None,
             hatch="////",
-            alpha=0.2,
+            alpha=0.2
         )
 
         border = 0.10 * (xmax - xmin)
+        loc_ = 'best' if loc is None else loc
         if ax is None:
             plt.xlim(xmin - border, xmax + border)
             plt.ylim(ymin - border, ymax + border)
@@ -609,11 +612,11 @@ class Shoreline(Region):
         ax.add_patch(rect)
 
         if flg1 and flg2:
-            ax.legend((line1, line2, line3), ("mainland", "inner", "outer"))
+            ax.legend((line1, line2, line3), ("mainland", "inner", "outer"), loc=loc_)
         elif flg1 and not flg2:
-            ax.legend((line1, line3), ("mainland", "outer"))
+            ax.legend((line1, line3), ("mainland", "outer"), loc=loc_)
         elif flg2 and not flg1:
-            ax.legend((line2, line3), ("inner", "outer"))
+            ax.legend((line2, line3), ("inner", "outer"), loc=loc_)
 
         if xlabel is not None:
             ax.set_xlabel(xlabel)
@@ -637,20 +640,37 @@ class DEM(Grid):
     """
 
     def __init__(self, dem, crs=4326, bbox=None):
+        if type(dem) == str:
+            basename, ext = os.path.splitext(dem)
+            if ext.lower() in [".nc"] or [".tif"]:
+                topobathy, reso, bbox = self._read(dem, bbox, crs)
+                topobathy = topobathy.astype(float)
 
-        basename, ext = os.path.splitext(dem)
-        if ext.lower() in [".nc"] or [".tif"]:
-            topobathy, reso, bbox = self._read(dem, bbox, crs)
-        else:
-            raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
+            else:
+                raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
-        self.dem = dem
+            self.dem = dem
+
+        elif type(dem) == numpy.ndarray:
+            topobathy = dem.astype(float)
+            reso = ((bbox[1]-bbox[0])/topobathy.shape[0], (bbox[3]-bbox[2])/topobathy.shape[1])
+            self.dem = 'input'
+
+        elif callable(dem): # if input is a function
+            lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(bbox[2], bbox[3], 1001)
+            reso = ((bbox[1]-bbox[0])/lon.shape[0], (bbox[3]-bbox[2])/lat.shape[0])
+            lon, lat = np.meshgrid(lon, lat)
+            topobathy = dem(lon, lat)
+            self.dem = 'function'
+
+        topobathy[abs(topobathy) > 1e5] = np.NaN
+
         super().__init__(
             bbox=bbox,
             crs=crs,
             dx=reso[0],
             dy=np.abs(reso[1]),
-            values=np.rot90(topobathy, 3),
+            values=np.rot90(topobathy, 1),
         )
         super().build_interpolant()
 
@@ -689,3 +709,323 @@ class DEM(Grid):
 
             logger.debug("Exiting: DEM._read")
             return topobathy, r.rio.resolution(), bbox
+
+    def filter_bathymetry(self, fl, min_depth=50):
+        lon, lat = self.create_grid()
+        tmpz = abs(self.eval((lon, lat)))
+        tmpz[tmpz < min_depth] = min_depth
+        tmpz[tmpz > 5e5] = nan
+
+        tmpz_f = np.zeros(tmpz.shape)
+        rbfilt = None
+
+        # Now filtering bathymetry to obtain only relevant features
+        # Loop through each set of bandpass filter lengths
+        if fl[0] < 0 and fl[0] != -999:
+            logger.info("Rossby radius of deformation filter is on.")
+            rbfilt = abs(fl[0])
+            fl = []
+            filtit = True
+
+        elif fl[0] == 0:
+            logger.info("Slope filter is off.")
+            fl = []
+            tmpz_f[:] = tmpz[:]
+            filtit = False
+
+        elif fl[0] == -999:
+            logger.info("Slope filter is LEGACY.")
+            fl = []
+            tmpz_f[:] = tmpz[:]
+            filtit = -999
+
+        else:
+            filtit = False
+            for slp in fl.T:
+                if np.isscalar(slp):
+                    # Do a low-pass filter
+                    tmpz[tmpz > 3000] = np.NaN #Handling NaN values
+                    tmpz_ft = filt2(tmpz, self.dy, slp, "lp")
+
+                elif slp[1] == 0:
+                    tmpz_ft = filt2(tmpz, self.dy, slp[0], "lp")
+
+                elif np.all(slp != 0):
+                    # Do a bandpass filter
+                    tmpz_ft = filt2(tmpz, self.dy, slp, "bp")
+
+                else:
+                    # Highpass filter not recommended
+                    print(
+                        "Warning:: Highpass filter on bathymetry in slope - \
+        edgelength function in not recommended"
+                    )
+                    print('Warning')
+                    tmpz_ft = filt2(tmpz, self.dy, slp[1], "hp")
+
+                tmpz_f += tmpz_ft
+        print('done?')
+        return tmpz_f, fl, filtit, rbfilt
+
+    def grad_bathymetric_filter(self, tmpz, fl, filtit, rbfilt, barot):
+
+        # Performs bandpass filtering on Rossby radius of deformation
+        if filtit:
+            bs = self.rossby_filter(
+                tmpz, rbfilt, barot
+            )
+
+            # legacy filter
+        elif filtit == -999:
+            bs = self.legacy_filter(tmpz)
+
+        else:
+            # get slope from (possibly filtered) bathymtry (without having
+            # by the localised Rossby radius of deformation filtered)
+
+            # Perform bathymetric gradient
+            by, bx = EarthGradient(tmpz, self.dy, self.dx)
+
+            #Calulates the modulus of bathymetric gradient (a measure of slope)
+            bs = np.sqrt(bx ** 2 + by ** 2)
+
+
+        return bs
+
+
+    def rossby_filter(self, tmpz, rbfilt, barot):
+        """
+        Performs the Rossby radius filtering if filtit==True in
+        slope_sizing_function.
+
+        Parameters
+        ----------
+        tmpz : numpy.ndarray
+            Contains the bathymetric data across the grid formed by coordinate
+            arrays (xg, yg).
+        bbox : tuple
+            Describes the boundary box of our domain.
+        grid_details : tuple
+            Contains the information regarding normals and grid resolutions,
+            (nx, ny, dx, dy).
+        coords : tuple np.ndarray
+            A tuple of two numpy.ndarray describing the longitude and latitude
+            coordinate system of our grid.
+        rbfilt : float
+            Describes the corresponding rossby radius to filter out
+        barot : bool
+            If True, the function uses the barotropic Rossby radius of deformation.
+
+        Returns
+        -------
+        bs : numpy.ndarray
+            This is essentially grad(h) squared after performing the bandpass
+            filtering on the Rossby radius of deformation.
+        time_taken : float
+            the time taken to prform the filtering process.
+
+        """
+        import time
+        import math
+
+        x0, xN, y0, yN = self.bbox
+        xg, yg = self.create_grid()
+
+        start = time.perf_counter()
+        bs = np.empty(tmpz.shape)
+        bs[:] = np.nan
+
+        # Break into 10 deg latitude chuncsm or less if higher resolution
+        div = math.ceil(min(1e7 / self.nx, 10 * self.ny / (yN - y0)))
+        grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
+        # per second
+        print('div, ny', div, self.ny)
+        nb = math.ceil(self.ny / div)
+        n2s = 0
+        dx = self.dy * np.cos(np.pi * np.minimum(yg[0, :], 85) / 180)
+
+        for jj in range(nb):
+            n2e = min(self.ny, n2s + div)
+            # Rossby radius of deformation filter
+            # See Shelton, D. B., et al. (1998): Geographical variability of the
+            # first-baroclinic Rossby radius of deformation. J. Phys. Oceanogr.,
+            # 28, 433-460.
+            ygg = yg[:, n2s:n2e+1]
+            dxx = np.mean(dx[n2s:n2e+1])
+            f = 2 * Rre * abs(np.sin(ygg * np.pi / 180))
+            if barot:
+                # Barotropic case
+                c = np.sqrt(grav * np.maximum(1, -tmpz[:, n2s:n2e+1]))
+
+            else:
+                # Baroclinic case (estimate Nm to be 2.5e-3)
+                Nm = 2.5e-3  # Δz x N, where N is Brunt-Vaisala frequency,
+                # sqrt(-g/ρ0 * dρ/dz), giving sqrt(-g * (Δρ/ρ0) * Δz)
+                c = Nm * np.maximum(1, -tmpz[:, n2s:n2e+1]) / np.pi
+
+            rosb = c / f
+            # Update for equatorial regions
+            indices = abs(ygg) < 5
+            Re = 6.371e6  # Earth radius at equator in SI units of metres
+            twobeta = 4 * Rre * np.cos(ygg[indices] * np.pi / 180) / Re
+            rosb[indices] = np.sqrt(c[indices] / twobeta)
+            # limit rossby radius to 10,000 km for practical purposes
+            rosb[rosb > 1e7] = 1e7
+            # Keep lengthscales rbfilt * barotropic
+            # radius of deformation
+            rosb = np.minimum(10, np.maximum(0, np.floor(np.log2(rosb / \
+                                                        self.dy / rbfilt))))
+            edges = np.unique(np.copy(rosb))
+            bst = rosb * 0
+            for i in range(len(edges)):
+                if edges[i] > 0:
+                    mult = 2 ** edges[i]
+                    xl, xu = 1, self.nx
+                    if ((np.max(xg) > 179 and np.min(xg) < -179)) or (
+                        np.max(xg) > 359 and np.min(xg) < 1
+                    ):
+                        # wraps around
+                        logger.info("wrapping around")
+                        xr = np.concatenate(
+                            [
+                                np.arange(self.nx - mult / 2, self.nx),
+                                np.arange(xl, xu+1),
+                                np.arange(1, mult / 2),
+                            ],
+                            dtype=int,
+                        )
+                    else:
+                        xr = np.arange(xl, xu+1, dtype=int)
+
+                    yl, yu = max(1, n2s - mult / 2), min(self.ny, n2e + mult / 2)
+                    if np.max(yg) > 89 and yu == self.ny:
+                        # create mirror around pole
+                        yr = np.concatenate(
+                            [
+                                np.arange(yl, yu+1),
+                                np.arange(yu - 1, 1 + 2 * self.ny - n2e - mult / 2, -1),
+                            ],
+                            dtype=int,
+                        )
+                    else:
+                        yr = np.arange(yl, yu+1, dtype=int)
+
+                    xr, yr = xr[:, None]-1, yr[None, :]-1
+
+                    if mult == 2:
+                        tmpz_ft = filt2(tmpz[xr, yr], min([self.dx, self.dy]), self.dy * 2.01, "lp")
+                    else:
+                        tmpz_ft = filt2(tmpz[xr, yr], min([self.dx, self.dy]), self.dy * mult, "lp")
+
+                    # delete the padded region
+                    #tmpz_ft[: 1+np.where(xr == 0)[0][0], :] = 0
+                    #tmpz_ft[self.nx:, :] = 0
+                    #tmpz_ft[:, :1+np.where(yr == n2s)[0][0]] = 0
+                    tmpz_ft = tmpz[:, n2s:n2e+1]
+
+                else:
+                    tmpz_ft = tmpz[:, n2s:n2e+1]
+
+                by, bx = EarthGradient(
+                    tmpz_ft, self.dy, self.dx
+                ) # bathymetric gradient
+                tempbs = np.sqrt(bx ** 2 + by ** 2)  #modulus of bathymetric gradient (slope)
+                print(bst.shape, tempbs.shape, rosb.shape, edges.shape, i)
+                print((rosb==edges[i]).shape)
+                bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
+
+            bs[:, n2s:n2e+1] = bst
+            n2s = n2e
+
+        time_taken = time.perf_counter() - start
+        logger.info(f"It took {time_taken} seconds to perform filtering on\
+Rossby radius of deformation")
+
+        return bs
+
+    def legacy_filter(self, tmpz):
+        """
+        Calculates the modulus of the bathymetric gradient having performed a
+        simple filter on the Rossby radius of deformation (but not localised)
+
+        Parameters
+        ----------
+        tmpz : numpy.ndarray
+            Bathymetric data
+
+        Returns
+        -------
+        bs : numpy.ndarray
+            Modulus of bathymetric gradient (a measure of topographic slope)
+            having performed a filter on the Rossby radius of deformation,
+            if specified.
+
+        """
+        from math import sqrt
+        from filterfx import filt2
+
+        x0, xN, y0, yN = self.bbox
+        yg = np.arange(y0, yN+self.dy, self.dy)
+
+        grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
+        # per second
+
+        bs = np.empty((self.nx, self.ny))
+        bs[:] = np.nan
+        # Rossby radius of deformation filter
+        f = 2 * Rre * abs(np.sin(yg * np.pi / 180))  # Local Coriolis coefficient
+        # limit to 1000 km
+        rosb = np.minimum(
+            1000e3, sqrt(grav * abs(tmpz)) / f
+        )  # Gives local Rossby radius everywhere
+        # autmatically divide into discrete bins
+        _, edges = np.histogram(rosb)
+        tmpz_ft = tmpz
+        dyb = self.dy
+        # get slope from filtered bathy for the segment only
+        by, bx = EarthGradient(tmpz_ft, self.dy, self.dx)  # get slope in x and y directions
+        tempbs = np.sqrt(bx ** 2 + by ** 2) #performs the modulus of bathymetric gradient
+        # get overall slope
+        for i in range(len(edges) - 1):
+            sel = (rosb >= edges[i]) & (rosb <= edges[i + 1])
+            rosbylb = np.mean(edges[i : i + 1])
+
+            if rosbylb > 2 * dyb:
+                tmpz_ft = filt2(tmpz_ft, dyb, rosbylb, "lp")
+                dyb = rosbylb
+
+                # get slope from filtered bathy for the segment only
+                by, bx = EarthGradient(tmpz_ft, self.dy, self.dx)  # get slope in x and y directions
+                tempbs = np.sqrt(bx ** 2 + by ** 2)  # #updates modulus of bathymetric gradient
+
+            else:
+                # otherwise just use the same tempbs from before
+                pass
+
+            # put in the full one
+            bs[sel] = tempbs[sel]
+
+        return bs
+
+
+def EarthGradient(F, dy, dx):
+    """
+    EarthGradient(F,HX,HY), where F is 2-D, uses the spacing
+    specified by HX and HY. HX and HY can either be scalars to specify
+    the spacing between coordinates or vectors to specify the
+    coordinates of the points.  If HX and HY are vectors, their length
+    must match the corresponding dimension of F.
+    """
+    Fy, Fx = np.zeros(F.shape), np.zeros(F.shape)
+
+    # Forward diferences on edges
+    Fx[:, 0] = (F[:, 1] - F[:, 0]) / dx
+    Fx[:, -1] = (F[:, -1] - F[:, -2]) / dx
+    Fy[0, :] = (F[1, :] - F[0, :]) / dy
+    Fy[-1, :] = (F[-1, :] - F[-2, :]) / dy
+
+    # Central Differences on interior
+    Fx[:, 1:-1] = (F[:, 2:] - F[:, :-2]) / (2 * dx)
+    Fy[1:-1, :] = (F[2:, :] - F[:-2, :]) / (2 * dy)
+
+    return Fy, Fx

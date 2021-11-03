@@ -14,11 +14,10 @@ __all__ = ["filt2", "gaussfilter"]
 
 def filt2(Z, res, wl, filtertype, truncate=2.6):
     filtertype = filtertype.lower()
-
     if len(Z.shape) != 2:
         raise TypeError("Z should b a 2D array")
 
-    if type(res) not in [int, float]:
+    if not np.isscalar(res):
         raise TypeError("res must be a scalar value.")
 
     if filtertype not in ["lp", "hp", "bp", "bs"]:
@@ -57,7 +56,6 @@ hp (high pass), bp (band pass) or bs (band stop)"
             )
 
     sigma = (wl / res) / (2 * np.pi)
-
     if filtertype == "lp":
         return gaussfilter(
             Z, sigma, truncate
