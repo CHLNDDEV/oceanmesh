@@ -423,7 +423,7 @@ class Shoreline(Region):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0):
+    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0, smooth_shoreline=True):
 
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
@@ -451,7 +451,8 @@ class Shoreline(Region):
 
         polys = self._read()
 
-        polys = _smooth_shoreline(polys, self.refinements)
+        if smooth_shoreline:
+            polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
@@ -624,7 +625,8 @@ class Shoreline(Region):
 
 class DEM(Grid):
     """Digitial elevation model read in from a tif or NetCDF file
-    parent class is a :class:`Grid`
+    parent class is a :class:`Grid` if dem input is a string. If dem is an array,
+    it assumes a 
     """
 
     def __init__(self, dem, crs=4326, bbox=None):

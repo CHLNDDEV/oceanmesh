@@ -19,6 +19,7 @@ __all__ = [
     "Difference",
     "Intersection",
     "create_circle",
+    "create_bbox",
 ]
 
 nan = np.nan
@@ -37,6 +38,27 @@ def create_circle(center, radius):
         t += stepSize
 
     return np.array(positions)
+
+
+def create_bbox(bbox):
+    """
+    Returns a domain class object which gives a bbox and signed-distance function
+    for a domain defined by bbox.
+    """
+    import numpy as np
+
+    x0, xN, y0, yN = bbox
+
+    def func(p):
+        min = np.minimum
+        """Signed distance function for rectangle with corners (x1,y1), (x2,y1),
+        (x1,y2), (x2,y2).
+        This has an incorrect distance to the four corners but that isn't a big deal
+        """
+        return -min(min(min(-y0 + p[:, 1], yN - p[:, 1]), -x0 + p[:, 0]), xN - p[:, 0])
+    domain = Domain(bbox, func)
+
+    return domain
 
 
 def _generate_samples(bbox, dim, N):

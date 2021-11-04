@@ -12,7 +12,6 @@ from oceanmesh.edgefx import (
     enforce_mesh_gradation,
     feature_sizing_function,
     wavelength_sizing_function,
-    slope_sizing_function,
     enforce_mesh_size_bounds_elevation,
     feature_sizing_function,
     multiscale_sizing_function,
