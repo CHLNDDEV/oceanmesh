@@ -1,4 +1,7 @@
 import logging
+import math
+import time
+
 import numpy as np
 import scipy.spatial
 import skfmm
@@ -263,7 +266,7 @@ def bathymetric_gradient_sizing_function(
         )
     elif "pass" in type_of_filter:
         logger.info("Using a {type_of_filter} filter...")
-        bs = filt2(tmpz, dy, filter_cutoff, type_of_filter)
+        bs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
@@ -364,6 +367,8 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         rosb = np.minimum(10, np.maximum(0, np.floor(np.log2(rosb / dy / rbfilt))))
         edges = np.unique(np.copy(rosb))
         bst = rosb * 0
+        print(len(edges))
+        print(np.sum(edges <= 0))
         for i in range(len(edges)):
             if edges[i] > 0:
                 mult = 2 ** edges[i]
@@ -400,9 +405,9 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 xr, yr = xr[:, None], yr[None, :]
 
                 if mult == 2:
-                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * 2.01, "lp")
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * 2.01, "lowpass")
                 else:
-                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lp")
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lowpass")
 
                 # delete the padded region
                 tmpz_ft[: np.where(xr == 1)[0][0], :] = 0

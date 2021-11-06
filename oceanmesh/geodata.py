@@ -423,7 +423,16 @@ class Shoreline(Region):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0, smooth_shoreline=True):
+    def __init__(
+        self,
+        shp,
+        bbox,
+        h0,
+        crs=4326,
+        refinements=1,
+        minimum_area_mult=4.0,
+        smooth_shoreline=True,
+    ):
 
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
@@ -645,12 +654,20 @@ class DEM(Grid):
 
         elif type(dem) == numpy.ndarray:
             topobathy = dem.astype(float)
-            reso = ((bbox[1]-bbox[0])/topobathy.shape[0], (bbox[3]-bbox[2])/topobathy.shape[1])
+            reso = (
+                (bbox[1] - bbox[0]) / topobathy.shape[0],
+                (bbox[3] - bbox[2]) / topobathy.shape[1],
+            )
             self.dem = "input"
 
-        elif callable(dem): # if input is a function
-            lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(bbox[2], bbox[3], 1001)
-            reso = ((bbox[1]-bbox[0])/lon.shape[0], (bbox[3]-bbox[2])/lat.shape[0])
+        elif callable(dem):  # if input is a function
+            lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(
+                bbox[2], bbox[3], 1001
+            )
+            reso = (
+                (bbox[1] - bbox[0]) / lon.shape[0],
+                (bbox[3] - bbox[2]) / lat.shape[0],
+            )
             lon, lat = np.meshgrid(lon, lat)
             topobathy = dem(lon, lat)
             self.dem = "function"
