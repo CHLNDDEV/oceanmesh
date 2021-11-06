@@ -328,14 +328,14 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     bs = np.empty(tmpz.shape)
     bs[:] = np.nan
 
-    # Break into 10 deg latitude chuncsm or less if higher resolution
+    # Break into 10 deg latitude chunks or less if higher resolution
     div = math.ceil(min(1e7 / nx, 10 * ny / (yN - y0)))
     grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
     # per second
-    nb = math.ceil(ny / div)
+    number_of_blocks = math.ceil(ny / div)
     n2s = 0
 
-    for jj in range(nb):
+    for jj in range(number_of_blocks):
         n2e = min(ny, n2s + div - 1)
         # Rossby radius of deformation filter
         # See Shelton, D. B., et al. (1998): Geographical variability of the
@@ -367,8 +367,6 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         rosb = np.minimum(10, np.maximum(0, np.floor(np.log2(rosb / dy / rbfilt))))
         edges = np.unique(np.copy(rosb))
         bst = rosb * 0
-        print(len(edges))
-        print(np.sum(edges <= 0))
         for i in range(len(edges)):
             if edges[i] > 0:
                 mult = 2 ** edges[i]
@@ -414,7 +412,6 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft[nx:, :] = 0
                 tmpz_ft[:, : np.where(yr == n2s)[0][0]] = 0
                 tmpz_ft[:, n2e - n2s + 2 :] = 0
-
             else:
                 tmpz_ft = tmpz[:, n2s:n2e]
 
@@ -422,7 +419,11 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-            bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
+            # the indices that were calculated for this edge bin
+            # for the current block
+            calc_ind = rosb == edges[i]
+            R, C = np.where(calc_ind)
+            bst[R, C] = tempbs
 
         bs[:, n2s:n2e] = bst
         n2s = n2e + 1
