@@ -56,6 +56,7 @@ def create_bbox(bbox):
         This has an incorrect distance to the four corners but that isn't a big deal
         """
         return -min(min(min(-y0 + p[:, 1], yN - p[:, 1]), -x0 + p[:, 0]), xN - p[:, 0])
+
     domain = Domain(bbox, func)
 
     return domain

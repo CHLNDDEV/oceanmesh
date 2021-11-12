@@ -1,4 +1,7 @@
 import logging
+import math
+import time
+
 import numpy as np
 import scipy.spatial
 import skfmm
@@ -263,7 +266,7 @@ def bathymetric_gradient_sizing_function(
         )
     elif "pass" in type_of_filter:
         logger.info("Using a {type_of_filter} filter...")
-        bs = filt2(tmpz, dy, filter_cutoff, type_of_filter)
+        bs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
@@ -325,14 +328,14 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     bs = np.empty(tmpz.shape)
     bs[:] = np.nan
 
-    # Break into 10 deg latitude chuncsm or less if higher resolution
+    # Break into 10 deg latitude chunks or less if higher resolution
     div = math.ceil(min(1e7 / nx, 10 * ny / (yN - y0)))
     grav, Rre = 9.807, 7.29e-5  # Gravity and Rotation rate of Earth in radians
     # per second
-    nb = math.ceil(ny / div)
+    number_of_blocks = math.ceil(ny / div)
     n2s = 0
 
-    for jj in range(nb):
+    for jj in range(number_of_blocks):
         n2e = min(ny, n2s + div - 1)
         # Rossby radius of deformation filter
         # See Shelton, D. B., et al. (1998): Geographical variability of the
@@ -409,7 +412,6 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft[nx:, :] = 0
                 tmpz_ft[:, : np.where(yr == n2s)[0][0]] = 0
                 tmpz_ft[:, n2e - n2s + 2 :] = 0
-
             else:
                 tmpz_ft = tmpz[:, n2s:n2e]
 
@@ -417,7 +419,11 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-            bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
+            # the indices that were calculated for this edge bin
+            # for the current block
+            calc_ind = rosb == edges[i]
+            R, C = np.where(calc_ind)
+            bst[R, C] = tempbs
 
         bs[:, n2s:n2e] = bst
         n2s = n2e + 1
