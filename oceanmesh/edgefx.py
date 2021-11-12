@@ -316,7 +316,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-
+    import time, math
     x0, xN, y0, yN = bbox
     nx, ny, dx, dy = grid_details
     xg, yg = coords
@@ -400,9 +400,9 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 xr, yr = xr[:, None], yr[None, :]
 
                 if mult == 2:
-                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * 2.01, "lp")
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * 2.01, "lowpass")
                 else:
-                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lp")
+                    tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lowpass")
 
                 # delete the padded region
                 tmpz_ft[: np.where(xr == 1)[0][0], :] = 0
@@ -609,6 +609,7 @@ def wavelength_sizing_function(
     grid.hmin = min_edgelength
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
+
     grid.build_interpolant()
     return grid
 

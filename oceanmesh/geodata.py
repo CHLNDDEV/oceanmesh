@@ -652,9 +652,10 @@ class DEM(Grid):
             lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(bbox[2], bbox[3], 1001)
             reso = ((bbox[1]-bbox[0])/lon.shape[0], (bbox[3]-bbox[2])/lat.shape[0])
             lon, lat = np.meshgrid(lon, lat)
-            topobathy = dem(lon, lat)
+            topobathy = np.rot90(dem(lon, lat), 2)
             self.dem = "function"
-
+        print(self.dem)
+        print(topobathy)
         topobathy[abs(topobathy) > 1e5] = np.NaN
 
         super().__init__(
@@ -662,7 +663,7 @@ class DEM(Grid):
             crs=crs,
             dx=reso[0],
             dy=np.abs(reso[1]),
-            values=np.rot90(topobathy, 1),
+            values=np.rot90(topobathy, 3),
         )
         super().build_interpolant()
 

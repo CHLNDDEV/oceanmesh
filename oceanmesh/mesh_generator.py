@@ -250,7 +250,9 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Find where pfix went
         if nfix > 0:
             for fix in pfix:
-                ifix.append(_closest_node(fix, p))
+                ind = _closest_node(fix, p)
+                ifix.append(ind)
+                p[ind] = fix
 
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
@@ -285,7 +287,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         )
 
         end = time.time()
-        logger.info(f"  Elapsed wall-clock time {end-start} seconds")
+        logger.info(f"Elapsed wall-clock time {end-start} seconds")
 
 
 def _unpack_sizing(edge_length, opts):
