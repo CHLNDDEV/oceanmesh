@@ -1,3 +1,5 @@
+import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
@@ -5,6 +7,8 @@ from scipy.interpolate import RegularGridInterpolator
 
 from .idw import Invdisttree
 from .region import Region
+
+logger = logging.getLogger(__name__)
 
 
 def compute_minimum(edge_lengths):
@@ -267,10 +271,12 @@ class Grid(Region):
         if not isinstance(coarse, Grid):
             raise ValueError("Object must be Grid.")
         # check if they overlap
-        x1min, x1max, y1min, y1max = self.bbox
+        x1min, x1max, y1min, y1max = coarse.bbox
         x2min, x2max, y2min, y2max = self.bbox
-        overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
-        assert overlap, "Grid objects do not overlap."
+        overlap = (x1min < x2min) & (x1max > x2max) & (y1min < y2min) & (y1max > y2max)
+        if not overlap:
+            logger.warning("Grid objects do not overlap.")
+            return coarse
         _fine = self.values
         # 1. Pad the finer grid's values
         _fine_w_pad_values = np.pad(
