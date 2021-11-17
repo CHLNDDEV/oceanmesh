@@ -330,9 +330,11 @@ def _clip_polys(polys, bbox, delta=0.10):
         mp = shapely.geometry.Polygon(poly[:-2, :])
         if not mp.is_valid:
             logger.warning(
-                f"polygon {shapely.validation.explain_validity(mp)} Try to make valid."
+                "Shapely.geometry.Polygon "
+                + f"{shapely.validation.explain_validity(mp)}."
+                + " Applying tiny buffer to make valid."
             )
-            mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
+            mp = mp.buffer(1.0e-6)  # ~0.1m
             if mp.geom_type == "Polygon":
                 mp = shapely.geometry.MultiPolygon([mp])
         else:
