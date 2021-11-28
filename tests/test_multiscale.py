@@ -12,8 +12,8 @@ EPSG = 4326  # EPSG:4326 or WGS84
 
 def test_multiscale_overlap():
     extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
-    min_edge_length1 = 1000.e-5   # ~1.0km
-    max_edge_length1 = 12500.e-5  # ~12.5km
+    min_edge_length1 = 1000.0e-5  # ~1.0km
+    max_edge_length1 = 12500.0e-5  # ~12.5km
 
     bbox2 = np.array(
         [
@@ -28,7 +28,7 @@ def test_multiscale_overlap():
         dtype=float,
     )
     extent2 = om.Region(extent=bbox2, crs=EPSG)
-    min_edge_length2 = 600.e-5  # ~500m
+    min_edge_length2 = 600.0e-5  # ~500m
 
     bbox3 = np.array(
         [
@@ -41,7 +41,7 @@ def test_multiscale_overlap():
         dtype=float,
     )
     extent3 = om.Region(extent=bbox3, crs=EPSG)
-    min_edge_length3 = 300.e-5  # ~300m
+    min_edge_length3 = 300.0e-5  # ~300m
 
     s1 = om.Shoreline(fname, extent1.bbox, min_edge_length1)
     sdf1 = om.signed_distance_function(s1)
@@ -58,10 +58,7 @@ def test_multiscale_overlap():
     # Control the element size transition
     # from coarse to fine with the kwargs prefixed with `blend`
     points, cells = om.generate_multiscale_mesh(
-        [sdf1, sdf2, sdf3],
-        [el1, el2, el3],
-        blend_width=1000,
-        blend_max_iter=100
+        [sdf1, sdf2, sdf3], [el1, el2, el3], blend_width=1000, blend_max_iter=100
     )
     # remove degenerate mesh faces and other common problems in the mesh
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
@@ -105,8 +102,8 @@ def test_multiscale_overlap():
 
 def test_multiscale_non_overlap():
     extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
-    min_edge_length1 = 1000.e-5   # ~1.0km
-    max_edge_length1 = 12500.e-5  # ~12.5km
+    min_edge_length1 = 1000.0e-5  # ~1.0km
+    max_edge_length1 = 12500.0e-5  # ~12.5km
 
     bbox2 = np.array(
         [
@@ -121,7 +118,7 @@ def test_multiscale_non_overlap():
         dtype=float,
     )
     extent2 = om.Region(extent=bbox2, crs=EPSG)
-    min_edge_length2 = 500.e-5  # ~500m
+    min_edge_length2 = 500.0e-5  # ~500m
 
     bbox3 = np.array(
         [
@@ -134,7 +131,7 @@ def test_multiscale_non_overlap():
         dtype=float,
     )
     extent3 = om.Region(extent=bbox3, crs=EPSG)
-    min_edge_length3 = 500.e-5  # ~500m
+    min_edge_length3 = 500.0e-5  # ~500m
 
     s1 = om.Shoreline(fname, extent1.bbox, min_edge_length1)
     sdf1 = om.signed_distance_function(s1)
@@ -152,10 +149,7 @@ def test_multiscale_non_overlap():
     # coarse to fine with the kwargs prefixed with `blend`.
     # Function objects must appear in order of descending `min_edge_length`.
     points, cells = om.generate_multiscale_mesh(
-        [sdf1, sdf2, sdf3],
-        [el1, el2, el3],
-        blend_width=1000,
-        blend_max_iter=100
+        [sdf1, sdf2, sdf3], [el1, el2, el3], blend_width=1000, blend_max_iter=100
     )
     # remove degenerate mesh faces and other common problems in the mesh
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
