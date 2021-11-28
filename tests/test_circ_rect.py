@@ -1,4 +1,5 @@
 import os
+import logging
 import fiona
 import geopandas as gpd
 import matplotlib.pyplot as pyplot
@@ -8,9 +9,12 @@ import oceanmesh
 shp0 = os.path.join(os.path.dirname(__file__), "ocean.shp")
 shp = os.path.join(os.path.dirname(__file__), "islands.shp")
 
+logger = logging.getLogger(__name__)
+
 
 def test_circ():
-    fiona_version = fiona.__version__
+    logger.info(f"--> Fiona version: {fiona.__version__}")
+    logger.info(f"--> Geopandas version: {gpd.__version__}")
     file = gpd.read_file(shp0)
     for g in file.geometry:
         bbox = numpy.asarray(g.exterior.coords.xy).T
