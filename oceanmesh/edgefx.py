@@ -3,11 +3,13 @@ import logging
 import numpy as np
 import scipy.spatial
 import skfmm
+import skimage.draw
 from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
 
 from . import edges
 from .grid import Grid
+from .geodata import _convert_to_list
 
 logger = logging.getLogger(__name__)
 
@@ -215,27 +217,48 @@ def linear_attractor_sizing_function(
     """
     logger.info("Building a linear attractor sizing function...")
 
+    lineL = _convert_to_list(lines)
     if hasattr(base_edge_length.values, "mask"):
         mask = base_edge_length.values.mask
     else:
         mask = None
 
     if min_edge_length is None:
-        min_edge_length = base_edge_length.values.min()
+        min_edge_length = base_edge_length.hmin
 
     # construct a new grid object with base_edge_length values
     grid = Grid(
         bbox=base_edge_length.bbox,
         dx=base_edge_length.dx,
         dy=base_edge_length.dy,
-        hmin=base_edge_length.hmin,
+        hmin=min_edge_length,
         values=0.0,
         extrapolate=True,
         crs=crs,
     )
     lon, lat = grid.create_grid()
+    phi = np.ones_like(grid.values)
+    for line in lineL:
+        if line.shape[0] == 2:
+            line = np.vstack((line[0], line))
 
-    grid.values = min_edge_length + 999.
+        for i in range(1, line.shape[0] - 1):
+            pnts = line[[i - 1, i], :]
+            j = grid.find_indices(pnts, lon, lat)
+            rr, cc = skimage.draw.line(j[0][0], j[1][0], j[0][1], j[1][1])
+            phi[rr, cc] = -1
+
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        logger.info("0-level set not found in domain")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
+
+    tmp = min_edge_length + dis * rate
+    if max_edge_length is not None:
+        tmp[tmp > max_edge_length] = max_edge_length
+
+    grid.values = tmp
     if mask is not None:
         grid.values = np.ma.array(grid.values, mask=mask)
     grid.build_interpolant()
