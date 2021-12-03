@@ -15,6 +15,7 @@ __all__ = [
     "enforce_mesh_gradation",
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
+    "linear_attractor_sizing_function",
     "wavelength_sizing_function",
     "multiscale_sizing_function",
     "feature_sizing_function",
@@ -186,6 +187,57 @@ def distance_sizing_function(
         tmp[tmp > max_edge_length] = max_edge_length
 
     grid.values = np.ma.array(tmp, mask=mask)
+    grid.build_interpolant()
+    return grid
+
+
+def linear_attractor_sizing_function(
+    base_edge_length,
+    lines,
+    rate=0.15,
+    max_edge_length=None,
+    min_edge_length=None,
+    crs=4326,
+):
+    """Mesh sizes that vary linearly at `rate` from coordinates in `lines`:
+    Parameters
+    ----------
+    base_edge_length: `Grid`
+        reference data from :class:`Grid`.
+    rate: float, optional
+        The rate of expansion in decimal percent from the shoreline.
+    max_edge_length: float, optional
+        The maximum allowable edge length
+    Returns
+    -------
+    :class:`Grid` object
+        A sizing function that takes a point and returns a value
+    """
+    logger.info("Building a linear attractor sizing function...")
+
+    if hasattr(base_edge_length.values, "mask"):
+        mask = base_edge_length.values.mask
+    else:
+        mask = None
+
+    if min_edge_length is None:
+        min_edge_length = base_edge_length.values.min()
+
+    # construct a new grid object with base_edge_length values
+    grid = Grid(
+        bbox=base_edge_length.bbox,
+        dx=base_edge_length.dx,
+        dy=base_edge_length.dy,
+        hmin=base_edge_length.hmin,
+        values=0.0,
+        extrapolate=True,
+        crs=crs,
+    )
+    lon, lat = grid.create_grid()
+
+    grid.values = min_edge_length + 999.
+    if mask is not None:
+        grid.values = np.ma.array(grid.values, mask=mask)
     grid.build_interpolant()
     return grid
 

@@ -8,6 +8,7 @@ from oceanmesh.clean import (
 )
 from oceanmesh.edgefx import (
     distance_sizing_function,
+    linear_attractor_sizing_function,
     enforce_mesh_gradation,
     enforce_mesh_size_bounds_elevation,
     feature_sizing_function,
@@ -55,6 +56,7 @@ __all__ = [
     "Shoreline",
     "generate_multiscale_mesh",
     "distance_sizing_function",
+    "linear_attractor_sizing_function",
     "enforce_mesh_gradation",
     "wavelength_sizing_function",
     "multiscale_signed_distance_function",
