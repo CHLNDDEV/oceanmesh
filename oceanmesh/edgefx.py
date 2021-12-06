@@ -206,10 +206,15 @@ def linear_attractor_sizing_function(
     ----------
     base_edge_length: `Grid`
         reference data from :class:`Grid`.
+    lines: numpy array
+        List of points delimited with numpy.nan.
     rate: float, optional
         The rate of expansion in decimal percent from the shoreline.
     max_edge_length: float, optional
         The maximum allowable edge length
+    min_edge_length: float, list | numpy array, optional
+        The minimum allowable edge length (constant or list
+        of edge lengths equivalent to size of length lines)
     Returns
     -------
     :class:`Grid` object
@@ -217,14 +222,25 @@ def linear_attractor_sizing_function(
     """
     logger.info("Building a linear attractor sizing function...")
 
-    lineL = _convert_to_list(lines)
     if hasattr(base_edge_length.values, "mask"):
         mask = base_edge_length.values.mask
     else:
         mask = None
 
+    lineL = _convert_to_list(lines)
+    edgeL = None
     if min_edge_length is None:
         min_edge_length = base_edge_length.hmin
+    elif isinstance(min_edge_length, float):
+        pass
+    elif isinstance(min_edge_length, (list, np.ndarray)):
+        min_edge_length = np.array(min_edge_length, dtype=float)
+        edgeL = min_edge_length.tolist()
+        err_list_len = (
+            f"Mismatch between number of lines={len(lineL)} and"
+            f" number of `minimum_edge_lengths`={len(edgeL)}."
+        )
+        assert len(lineL) == len(edgeL), err_list_len
 
     # construct a new grid object with base_edge_length values
     grid = Grid(
@@ -237,28 +253,47 @@ def linear_attractor_sizing_function(
         crs=crs,
     )
     lon, lat = grid.create_grid()
+
     phi = np.ones_like(grid.values)
-    for line in lineL:
+    val = np.ones_like(grid.values) + 999.
+    for j, line in enumerate(lineL):
+        # Assume point as line with same start/end
         if line.shape[0] == 2:
             line = np.vstack((line[0], line))
 
         for i in range(1, line.shape[0] - 1):
             pnts = line[[i - 1, i], :]
-            j = grid.find_indices(pnts, lon, lat)
-            rr, cc = skimage.draw.line(j[0][0], j[1][0], j[0][1], j[1][1])
-            phi[rr, cc] = -1
+            ij = grid.find_indices(pnts, lon, lat)
+            rr, cc = skimage.draw.line(ij[0][0], ij[1][0], ij[0][1], ij[1][1])
+            phi[rr, cc] = -1.
 
-    try:
-        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-    except ValueError:
-        logger.info("0-level set not found in domain")
-        dis = np.zeros((grid.nx, grid.ny)) + 999
+        if edgeL is not None:
+            try:
+                dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+            except ValueError:
+                logger.error(
+                    f"Line feature {j}: 0-level set not found in domain"
+                )
+                dis = np.zeros((grid.nx, grid.ny)) + 999
 
-    tmp = min_edge_length + dis * rate
+            val = np.minimum(val, edgeL[j] + dis * rate)
+            phi[:] = 1.
+
+    if edgeL is None:
+        try:
+            dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+        except ValueError:
+            logger.error(
+                f"0-level set not found in domain"
+            )
+            dis = np.zeros((grid.nx, grid.ny)) + 999
+
+        val = min_edge_length + dis * rate
+
     if max_edge_length is not None:
-        tmp[tmp > max_edge_length] = max_edge_length
+        val[val > max_edge_length] = max_edge_length
 
-    grid.values = tmp
+    grid.values = val
     if mask is not None:
         grid.values = np.ma.array(grid.values, mask=mask)
     grid.build_interpolant()
