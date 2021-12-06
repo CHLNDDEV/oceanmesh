@@ -8,8 +8,8 @@ from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
 
 from . import edges
-from .grid import Grid
 from .geodata import _convert_to_list
+from .grid import Grid
 
 logger = logging.getLogger(__name__)
 
@@ -230,9 +230,9 @@ def linear_attractor_sizing_function(
     lineL = _convert_to_list(lines)
     edgeL = None
     if min_edge_length is None:
-        min_edge_length = base_edge_length.hmin
+        min_edge_length = [base_edge_length.hmin] * len(lineL)
     elif isinstance(min_edge_length, float):
-        pass
+        min_edge_length = [min_edge_length] * len(lineL)
     elif isinstance(min_edge_length, (list, np.ndarray)):
         min_edge_length = np.array(min_edge_length, dtype=float)
         edgeL = min_edge_length.tolist()
@@ -255,8 +255,8 @@ def linear_attractor_sizing_function(
     lon, lat = grid.create_grid()
 
     phi = np.ones_like(grid.values)
-    val = np.ones_like(grid.values) + 999.
-    for j, line in enumerate(lineL):
+    val = np.ones_like(grid.values) + 999.0
+    for j, (line, _edgeL) in enumerate(zip(lineL, edgeL)):
         # Assume point as line with same start/end
         if line.shape[0] == 2:
             line = np.vstack((line[0], line))
@@ -265,30 +265,15 @@ def linear_attractor_sizing_function(
             pnts = line[[i - 1, i], :]
             ij = grid.find_indices(pnts, lon, lat)
             rr, cc = skimage.draw.line(ij[0][0], ij[1][0], ij[0][1], ij[1][1])
-            phi[rr, cc] = -1.
+            phi[rr, cc] = -1.0
+            val[rr, cc] = _edgeL
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        logger.error(f"Line feature {j}: 0-level set not found in domain")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
 
-        if edgeL is not None:
-            try:
-                dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-            except ValueError:
-                logger.error(
-                    f"Line feature {j}: 0-level set not found in domain"
-                )
-                dis = np.zeros((grid.nx, grid.ny)) + 999
-
-            val = np.minimum(val, edgeL[j] + dis * rate)
-            phi[:] = 1.
-
-    if edgeL is None:
-        try:
-            dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
-        except ValueError:
-            logger.error(
-                "0-level set not found in domain"
-            )
-            dis = np.zeros((grid.nx, grid.ny)) + 999
-
-        val = min_edge_length + dis * rate
+    val = val + dis * rate
 
     if max_edge_length is not None:
         val[val > max_edge_length] = max_edge_length
