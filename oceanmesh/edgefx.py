@@ -284,7 +284,7 @@ def linear_attractor_sizing_function(
             dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
         except ValueError:
             logger.error(
-                f"0-level set not found in domain"
+                "0-level set not found in domain"
             )
             dis = np.zeros((grid.nx, grid.ny)) + 999
 
