@@ -235,12 +235,11 @@ def linear_attractor_sizing_function(
         min_edge_length = [min_edge_length] * len(lineL)
     elif isinstance(min_edge_length, (list, np.ndarray)):
         min_edge_length = np.array(min_edge_length, dtype=float)
-        edgeL = min_edge_length.tolist()
         err_list_len = (
             f"Mismatch between number of lines={len(lineL)} and"
             f" number of `minimum_edge_lengths`={len(edgeL)}."
         )
-        assert len(lineL) == len(edgeL), err_list_len
+        assert len(lineL) == len(min_edge_length), err_list_len
 
     # construct a new grid object with base_edge_length values
     grid = Grid(
@@ -255,8 +254,7 @@ def linear_attractor_sizing_function(
     lon, lat = grid.create_grid()
 
     phi = np.ones_like(grid.values)
-    val = np.ones_like(grid.values) + 999.0
-    for j, (line, _edgeL) in enumerate(zip(lineL, edgeL)):
+    for j, (line, _edgeL) in enumerate(zip(lineL, min_edge_length)):
         # Assume point as line with same start/end
         if line.shape[0] == 2:
             line = np.vstack((line[0], line))
@@ -266,14 +264,15 @@ def linear_attractor_sizing_function(
             ij = grid.find_indices(pnts, lon, lat)
             rr, cc = skimage.draw.line(ij[0][0], ij[1][0], ij[0][1], ij[1][1])
             phi[rr, cc] = -1.0
-            val[rr, cc] = _edgeL
     try:
         dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     except ValueError:
         logger.error(f"Line feature {j}: 0-level set not found in domain")
         dis = np.zeros((grid.nx, grid.ny)) + 999
 
-    val = val + dis * rate
+    val = np.ones_like(grid.values) + 999.0
+    for _edgeL in min_edge_length:
+        val = np.minimum(_edgeL + dis * rate, val)
 
     if max_edge_length is not None:
         val[val > max_edge_length] = max_edge_length
