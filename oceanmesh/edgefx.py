@@ -105,8 +105,7 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
-    if grid.dx != grid.dy:
-        assert "Structured grids with unequal grid spaces not yet supported"
+    assert grid.dx == grid.dy, "Structured grids with unequal grid spaces not yet supported"
     cell_size = grid.values.copy()
     sz = cell_size.shape
     sz = (sz[0], sz[1], 1)
@@ -199,6 +198,7 @@ def bathymetric_gradient_sizing_function(
     dem,
     slope_parameter=20,
     filter_quotient=50,
+    min_edge_length=None,
     max_edge_length=None,
     min_elevation_cutoff=50,
     type_of_filter="barotropic",
@@ -281,7 +281,13 @@ def bathymetric_gradient_sizing_function(
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
-    grid.hmin = np.min(grid.values)
+    if min_edge_length is not None:
+        grid.values[grid.values < min_edge_length] = min_edge_length
+        grid.hmin = min_edge_length
+
+    else:
+        grid.hmin = np.min(grid.values)
+
     grid.build_interpolant()
 
     return grid
@@ -542,7 +548,12 @@ def feature_sizing_function(
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
-    grid.hmin = shoreline.h0
+    if min_edge_length is not None:
+        grid.values[grid.values < min_edge_length] = min_edge_length
+        grid.hmin = min_edge_length
+    else:
+        grid.hmin = shoreline.h0
+
     grid.extrapolate = True
     grid.build_interpolant()
     return grid

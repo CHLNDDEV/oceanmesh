@@ -661,18 +661,15 @@ class DEM(Grid):
             self.dem = "input"
 
         elif callable(dem):  # if input is a function
-            lon, lat = np.linspace(bbox[0], bbox[1], 1001), np.linspace(
-                bbox[2], bbox[3], 1001
+            dx = (bbox[1] - bbox[0]) / 1001
+            lon, lat = np.arange(bbox[0], bbox[1]+dx, dx), np.arange(
+                bbox[2], bbox[3]+dx, dx
             )
-            reso = (
-                (bbox[1] - bbox[0]) / lon.shape[0],
-                (bbox[3] - bbox[2]) / lat.shape[0],
-            )
+            reso = (dx, dx)
             lon, lat = np.meshgrid(lon, lat)
             topobathy = np.rot90(dem(lon, lat), 2)
             self.dem = "function"
-        print(self.dem)
-        print(topobathy)
+
         topobathy[abs(topobathy) > 1e5] = np.NaN
 
         super().__init__(
