@@ -183,7 +183,7 @@ def distance_sizing_function(
     try:
         dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     except ValueError:
-        print("0-level set not found in domain")
+        logger.info("0-level set not found in domain")
         dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:

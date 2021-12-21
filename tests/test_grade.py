@@ -1,10 +1,11 @@
+import os
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import oceanmesh as om
 
 
 def test_grade():
-    fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+    fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
     region = om.Region((-75.000, -70.001, 40.0001, 41.9000), 4326)
     min_edge_length = 0.01
