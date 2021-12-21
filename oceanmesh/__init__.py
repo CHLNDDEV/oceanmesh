@@ -10,8 +10,6 @@ from oceanmesh.edgefx import (
     bathymetric_gradient_sizing_function,
     distance_sizing_function,
     enforce_mesh_gradation,
-    feature_sizing_function,
-    wavelength_sizing_function,
     enforce_mesh_size_bounds_elevation,
     feature_sizing_function,
     multiscale_sizing_function,
@@ -31,13 +29,12 @@ from oceanmesh.signed_distance_function import (
     multiscale_signed_distance_function,
     signed_distance_function,
 )
-from oceanmesh.filterfx import (
-    filt2
-)
+from oceanmesh.filterfx import filt2
 from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import generate_mesh, generate_multiscale_mesh, plot_mesh
 
 __all__ = [
+    "create_bbox",
     "Region",
     "compute_minimum",
     "bathymetric_gradient_sizing_function",

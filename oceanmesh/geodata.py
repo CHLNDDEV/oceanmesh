@@ -670,8 +670,8 @@ class DEM(Grid):
 
         elif callable(dem):  # if input is a function
             dx = (bbox[1] - bbox[0]) / 1001
-            lon, lat = np.arange(bbox[0], bbox[1]+dx, dx), np.arange(
-                bbox[2], bbox[3]+dx, dx
+            lon, lat = np.arange(bbox[0], bbox[1] + dx, dx), np.arange(
+                bbox[2], bbox[3] + dx, dx
             )
             reso = (dx, dx)
             lon, lat = np.meshgrid(lon, lat)
