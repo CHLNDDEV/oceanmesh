@@ -1,6 +1,4 @@
 import logging
-import math
-import time
 
 import numpy as np
 import scipy.spatial
@@ -105,7 +103,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     logger.info(f"Enforcing mesh size gradation of {gradation} decimal percent...")
 
     elen = grid.dx
-    assert grid.dx == grid.dy, "Structured grids with unequal grid spaces not yet supported"
+    assert (
+        grid.dx == grid.dy
+    ), "Structured grids with unequal grid spaces not yet supported"
     cell_size = grid.values.copy()
     sz = cell_size.shape
     sz = (sz[0], sz[1], 1)
@@ -183,7 +183,7 @@ def distance_sizing_function(
     try:
         dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     except ValueError:
-        print("0-level set not found in domain")
+        logger.info("0-level set not found in domain")
         dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
@@ -295,8 +295,7 @@ def bathymetric_gradient_sizing_function(
 
 def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     """
-    Performs the Rossby radius filtering if filtit==True in
-    slope_sizing_function.
+    Performs the Rossby radius filtering
 
     Parameters
     ----------
@@ -325,7 +324,9 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-    import time, math
+    import time
+    import math
+
     x0, xN, y0, yN = bbox
     
     nx, ny, dx, dy = grid_details
@@ -548,7 +549,6 @@ def feature_sizing_function(
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
-    grid.values[grid.values < shoreline.h0] = shoreline.h0
     grid.hmin = shoreline.h0
 
     grid.extrapolate = True

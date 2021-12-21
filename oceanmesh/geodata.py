@@ -2,6 +2,7 @@ import errno
 import logging
 import os
 
+import fiona
 import geopandas as gpd
 import matplotlib.path as mpltPath
 import numpy as np
@@ -15,6 +16,7 @@ from .grid import Grid
 from .region import Region
 
 nan = np.nan
+fiona_version = fiona.__version__
 
 logger = logging.getLogger(__name__)
 
@@ -173,10 +175,11 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     out = np.empty(shape=(0, 2))
 
     if bSGP.geom_type == "Polygon":
-        bSGP = [bSGP]  # Convert to `MultiPolygon` with 1 member
+        # Convert to `MultiPolygon`
+        bSGP = shapely.geometry.MultiPolygon([bSGP])
 
     # MultiPolygon members can be accessed via iterator protocol using `in`.
-    for b in bSGP:
+    for b in bSGP.geoms:
         xy = np.asarray(b.exterior.coords)
         xy = np.vstack((xy, xy[0]))
         out = np.vstack((out, xy, [nan, nan]))
@@ -327,21 +330,26 @@ def _clip_polys(polys, bbox, delta=0.10):
         mp = shapely.geometry.Polygon(poly[:-2, :])
         if not mp.is_valid:
             logger.warning(
-                f"polygon {shapely.validation.explain_validity(mp)} Try to make valid."
+                "Shapely.geometry.Polygon "
+                + f"{shapely.validation.explain_validity(mp)}."
+                + " Applying tiny buffer to make valid."
             )
-            mp = mp.buffer(1.0e-5)  # Apply 1 metre buffer
-        mp = [mp]
+            mp = mp.buffer(1.0e-6)  # ~0.1m
+            if mp.geom_type == "Polygon":
+                mp = shapely.geometry.MultiPolygon([mp])
+        else:
+            mp = shapely.geometry.MultiPolygon([mp])
 
-        for p in mp:
+        for p in mp.geoms:
             pi = p.intersection(b)
             if b.contains(p):
                 out = np.vstack((out, poly))
             elif not pi.is_empty:
                 # assert(pi.geom_type,'MultiPolygon')
                 if pi.geom_type == "Polygon":
-                    pi = [pi]  # `Polygon` -> `MultiPolygon` with 1 member
+                    pi = shapely.geometry.MultiPolygon([pi])
 
-                for ppi in pi:
+                for ppi in pi.geoms:
                     xy = np.asarray(ppi.exterior.coords)
                     xy = np.vstack((xy, xy[0]))
                     out = np.vstack((out, xy, [nan, nan]))
@@ -661,7 +669,7 @@ class DEM(Grid):
             self.dem = "input"
 
         elif callable(dem):  # if input is a function
-            dx = (bbox[1] - bbox[0]) / nnodes
+            dx = (bbox[1] - bbox[0]) /nnodes
             lon, lat = np.arange(bbox[0], bbox[1]+dx, dx), np.arange(
                 bbox[2], bbox[3]+dx, dx
             )
