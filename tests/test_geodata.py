@@ -7,6 +7,8 @@ fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 dfname = os.path.join(os.path.dirname(__file__), "galv_sub.nc")
 tfname = os.path.join(os.path.dirname(__file__), "galv_sub.tif")
 
+print(fname)
+
 
 @pytest.mark.parametrize(
     "boxes_h0",

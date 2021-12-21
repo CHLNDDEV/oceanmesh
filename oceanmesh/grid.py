@@ -20,14 +20,11 @@ def compute_minimum(edge_lengths):
         for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
-    for edge_length in edge_lengths:
-        print(np.min(edge_length.values), np.max(edge_length.values))
     
     minimum_values = np.minimum.reduce(
         [edge_length.values for edge_length in edge_lengths]
     )
     min_edgelength = np.amin(minimum_values)
-    print(min_edgelength, np.min(minimum_values))
     # construct a new grid object with these values
     grid = Grid(
         bbox=base_edge_length.bbox,
