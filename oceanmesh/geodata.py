@@ -640,7 +640,7 @@ class DEM(Grid):
     1001 points in both horizontal directions.
     """
 
-    def __init__(self, dem, crs=4326, bbox=None):
+    def __init__(self, dem, crs=4326, bbox=None, nnodes=1000):
         if type(dem) == str:
             basename, ext = os.path.splitext(dem)
             if ext.lower() in [".nc"] or [".tif"]:
@@ -661,7 +661,7 @@ class DEM(Grid):
             self.dem = "input"
 
         elif callable(dem):  # if input is a function
-            dx = (bbox[1] - bbox[0]) / 1001
+            dx = (bbox[1] - bbox[0]) / nnodes
             lon, lat = np.arange(bbox[0], bbox[1]+dx, dx), np.arange(
                 bbox[2], bbox[3]+dx, dx
             )
@@ -671,12 +671,11 @@ class DEM(Grid):
             self.dem = "function"
 
         topobathy[abs(topobathy) > 1e5] = np.NaN
-
         super().__init__(
             bbox=bbox,
             crs=crs,
-            dx=reso[0],
-            dy=np.abs(reso[1]),
+            dx=abs(reso[0]),
+            dy=abs(reso[1]),
             values=np.rot90(topobathy, 3),
         )
         super().build_interpolant()

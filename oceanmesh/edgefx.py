@@ -327,6 +327,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     """
     import time, math
     x0, xN, y0, yN = bbox
+    
     nx, ny, dx, dy = grid_details
     xg, yg = coords
 
@@ -342,7 +343,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     n2s = 0
 
     for jj in range(number_of_blocks):
-        n2e = min(ny, n2s + div - 1)
+        n2e = min(ny, n2s + div)
         # Rossby radius of deformation filter
         # See Shelton, D. B., et al. (1998): Geographical variability of the
         # first-baroclinic Rossby radius of deformation. J. Phys. Oceanogr.,
@@ -414,10 +415,12 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                     tmpz_ft = filt2(tmpz[xr, yr], min([dxx, dy]), dy * mult, "lowpass")
 
                 # delete the padded region
-                tmpz_ft[: np.where(xr == 1)[0][0], :] = 0
+                tmpz_ft[: np.where(xr == 0)[0][0], :] = 0
                 tmpz_ft[nx:, :] = 0
                 tmpz_ft[:, : np.where(yr == n2s)[0][0]] = 0
                 tmpz_ft[:, n2e - n2s + 2 :] = 0
+                tmpz_ft = tmpz[:, n2s:n2e]
+
             else:
                 tmpz_ft = tmpz[:, n2s:n2e]
 
@@ -425,14 +428,11 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-            # the indices that were calculated for this edge bin
-            # for the current block
-            calc_ind = rosb == edges[i]
-            R, C = np.where(calc_ind)
-            bst[R, C] = tempbs
+            
+            bst[rosb==edges[i]] = tempbs[rosb==edges[i]]
 
         bs[:, n2s:n2e] = bst
-        n2s = n2e + 1
+        n2s = n2e
 
     time_taken = time.perf_counter() - start
 
@@ -548,11 +548,8 @@ def feature_sizing_function(
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
-    if min_edge_length is not None:
-        grid.values[grid.values < min_edge_length] = min_edge_length
-        grid.hmin = min_edge_length
-    else:
-        grid.hmin = shoreline.h0
+    grid.values[grid.values < shoreline.h0] = shoreline.h0
+    grid.hmin = shoreline.h0
 
     grid.extrapolate = True
     grid.build_interpolant()
