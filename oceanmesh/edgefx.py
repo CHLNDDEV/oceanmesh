@@ -328,7 +328,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
     import math
 
     x0, xN, y0, yN = bbox
-    
+
     nx, ny, dx, dy = grid_details
     xg, yg = coords
 
@@ -429,8 +429,8 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
-            
-            bst[rosb==edges[i]] = tempbs[rosb==edges[i]]
+
+            bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
 
         bs[:, n2s:n2e] = bst
         n2s = n2e

@@ -1,4 +1,9 @@
+import os
+
 import oceanmesh as om
+
+fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
+fdem = os.path.join(os.path.dirname(__file__), "../datasets/EastCoast.nc")
 
 
 def generate_mesh(name, signed_distance, edge_length, max_iterations=500):
@@ -43,11 +48,8 @@ def mesh_plot(points, cells, plot_title=""):
     pt.show()
 
 
-if __name__ == "__main__":
-    import os
+def test_bathymetric_gradient_function():
 
-    fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
-    fdem = "../datasets/EastCoast.nc"
     EPSG = 4326  # EPSG:4326 or WGS84
     bbox = (-74.4, -73.4, 40.2, 41.2)
     extent = om.Region(extent=bbox, crs=EPSG)

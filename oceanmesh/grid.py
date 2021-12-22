@@ -20,7 +20,7 @@ def compute_minimum(edge_lengths):
         for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
-    
+
     minimum_values = np.minimum.reduce(
         [edge_length.values for edge_length in edge_lengths]
     )
