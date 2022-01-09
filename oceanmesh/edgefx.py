@@ -89,6 +89,8 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
         A grid object with its values field populated
     gradation: float
         The decimal percent mesh size gradation rate to-be-enforced.
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
 
     Returns
     -------
@@ -143,6 +145,9 @@ def distance_sizing_function(
         The maximum allowable edge length
     coarsen: integer, optional
         Downsample the grid by a constant factor in x and y axes
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
+
     Returns
     -------
     :class:`Grid` object
@@ -219,6 +224,8 @@ def bathymetric_gradient_sizing_function(
         The filter length equal to Rossby radius divided by fl
     slope_parameter: integer, optional
         The number of nodes to resolve bathymetryic gradients
+    min_edge_length: float, optional
+        The minimum allowable edge length in meters in the domain.
     max_edge_length: float, optional
         The maximum allowable edge length in meters in the domain.
     min_elevation_cutoff: float, optional
@@ -230,6 +237,8 @@ def bathymetric_gradient_sizing_function(
     filter_cutoff: list, optional
         If filter is bandpass/lowpass/highpass/bandstop, then contains the lower and upper
         bounds for the filter (depends on the filter)
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
 
     Returns
     -------
@@ -277,7 +286,7 @@ def bathymetric_gradient_sizing_function(
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
-        by, bx = earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
+        by, bx = _earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
         bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
 
     # Calculating the slope function
@@ -430,7 +439,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
             else:
                 tmpz_ft = tmpz[:, n2s:n2e]
 
-            by, bx = earth_gradient(
+            by, bx = _earth_gradient(
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
             tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
@@ -449,14 +458,12 @@ def feature_sizing_function(
     shoreline,
     signed_distance_function,
     r=3,
+    min_edge_length=None,
     max_edge_length=None,
     plot=False,
     crs=4326,
 ):
     """Mesh sizes vary proportional to the width or "thickness" of the shoreline
-    Implements roughly the approximate medial axis calculation from Eq. 7.1:
-
-    "A MATLAB MESH GENERATOR FOR THE TWO-DIMENSIONAL FINITE ELEMENT METHOD" by Jonas Koko
 
     Parameters
     ----------
@@ -467,8 +474,15 @@ def feature_sizing_function(
     r: float, optional
         The number of times to divide the shoreline thickness/width to calculate
         the local element size.
+    min_edge_length: float, optional
+        The minimum allowable edge length in meters in the domain.
+    max_edge_length: float, optional
+        The maximum allowable edge length in meters in the domain.
     plot: boolean, optional
         Visualize the medial points ontop of the shoreline
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
+
 
     Returns
     -------
@@ -545,6 +559,8 @@ def feature_sizing_function(
     grid_calc.build_interpolant()
     # interpolate the finer grid used for calculations to the final coarser grid
     grid = grid_calc.interpolate_to(grid)
+    if min_edge_length is not None:
+        grid.values[grid.values < min_edge_length] = min_edge_length
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
@@ -560,11 +576,12 @@ def wavelength_sizing_function(
     wl=10,
     min_edgelength=None,
     max_edge_length=None,
-    verbose=True,
+    period=12.42 * 3600,  # M2 period in seconds
+    gravity=9.81,  # m/s^2
     crs=4326,
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
-       of the M2 tidal constituent
+       of a period (default M2-period)
 
     Parameters
     ----------
@@ -577,6 +594,14 @@ def wavelength_sizing_function(
         of the edgelength function is used.
     max_edge_length: float, optional
         The maximum edge length in meters in the domain.
+    period: float, optional
+        The wavelength is estimated with shallow water theory and this period
+        in seconds
+    gravity: float, optional
+        The acceleration due to gravity in m/s^2
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
+
 
     Returns
     -------
@@ -590,7 +615,6 @@ def wavelength_sizing_function(
     tmpz = dem.eval((lon, lat))
 
     grav = 9.807
-    period = 12.42 * 3600  # M2 period in seconds
     grid = Grid(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
@@ -607,7 +631,10 @@ def wavelength_sizing_function(
 
 
 def multiscale_sizing_function(
-    list_of_grids, p=3, nnear=28, blend_width=1000, verbose=True
+    list_of_grids,
+    p=3,
+    nnear=28,
+    blend_width=1000,
 ):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
@@ -684,7 +711,7 @@ def multiscale_sizing_function(
     return func, new_list_of_grids
 
 
-def earth_gradient(F, dy, dx):
+def _earth_gradient(F, dy, dx):
     """
     earth_gradient(F,HX,HY), where F is 2-D, uses the spacing
     specified by HX and HY. HX and HY can either be scalars to specify
