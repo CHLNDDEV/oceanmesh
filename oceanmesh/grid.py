@@ -36,7 +36,7 @@ def compute_minimum(edge_lengths):
         dy=base_edge_length.dy,
         hmin=min_edgelength,
         values=minimum_values,
-        extrapolate=False,
+        extrapolate=True,
         crs=base_edge_length.crs,
     )
 

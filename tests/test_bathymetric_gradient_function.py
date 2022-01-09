@@ -75,6 +75,7 @@ def test_bathymetric_gradient_function():
         crs=EPSG,
     )
     edge_length3 = om.compute_minimum([edge_length1, edge_length2])
+    edge_length3 = om.enforce_mesh_gradation(edge_length3, gradation=0.15)
 
     for name_, edge_length in zip(
         [
