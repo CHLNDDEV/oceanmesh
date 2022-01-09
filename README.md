@@ -111,6 +111,8 @@ Setting the region
 `oceanmesh` can mesh a polygonal region in the vast majority of coordinate reference systems (CRS). Thus, all `oceanmesh` scripts begin with declaring the extent and CRS to be used and/or transofmring to a different CRS like this.
 
 ```python
+import oceanmesh as om
+
 EPSG = 32619 # A Python int, dict, or str containing the CRS information (in this case UTM19N)
 bbox = (-70.29637, -43.56508, -69.65537, 43.88338) # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
 extent = om.Region(extent=bbox, crs=4326) # set the region (the bbox is given here in EPSG:4326 or WGS84)
