@@ -6,25 +6,25 @@ fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 fdem = os.path.join(os.path.dirname(__file__), "../datasets/EastCoast.nc")
 
 
-def generate_mesh(name, signed_distance, edge_length, max_iterations=500):
+def generate_mesh(name, signed_distance, edge_length, max_iterations=50):
     points, cells = om.generate_mesh(
         signed_distance, edge_length, max_iter=max_iterations
     )
     # Makes sure the vertices of each triangle are arranged in an anti-clockwise manner
     points, cells, jx = om.fix_mesh(points, cells)
-    mesh_plot(points, cells, "1 Original Mesh")
+    # mesh_plot(points, cells, "1 Original Mesh")
 
     # remove degenerate mesh faces and other common problems in the mesh
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
-    mesh_plot(points, cells, "2 Degenerate Elements Removed")
+    # mesh_plot(points, cells, "2 Degenerate Elements Removed")
 
     # Removes faces connected by a single face
     points, cells = om.delete_faces_connected_to_one_face(points, cells)
-    mesh_plot(points, cells, "3 Deleted Faces Connected to One Face")
+    # mesh_plot(points, cells, "3 Deleted Faces Connected to One Face")
 
     # remove low quality boundary elements less than 15%
     points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
-    mesh_plot(points, cells, "4 Deleted Boundary Faces")
+    # mesh_plot(points, cells, "4 Deleted Boundary Faces")
 
     # apply a Laplacian smoother
     P, T = om.laplacian2(points, cells)  # Final poost-processed mesh
@@ -54,33 +54,27 @@ def test_bathymetric_gradient_function():
     bbox = (-74.4, -73.4, 40.2, 41.2)
     extent = om.Region(extent=bbox, crs=EPSG)
     dem = om.DEM(fdem, crs=4326)
-    dem.plot()
 
-    min_edge_length = 0.005  # minimum mesh size in domain in projection
-    max_edge_length = 0.02  # maximum mesh size in domain in projection
-    print("Creating shoreline")
+    min_edge_length = 0.0025  # minimum mesh size in domain in projection
+    max_edge_length = 0.10  # maximum mesh size in domain in projection
     shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
-    shoreline.plot(
-        xlim=[extent.bbox[0], extent.bbox[1]], ylim=[extent.bbox[2], extent.bbox[3]]
-    )
-    print("Creating signed-distance function")
     sdf = om.signed_distance_function(shoreline)
 
     edge_length1 = om.feature_sizing_function(
         shoreline,
         sdf,
         max_edge_length=max_edge_length,
-        crs=4326,
+        crs=EPSG,
     )
     edge_length2 = om.bathymetric_gradient_sizing_function(
         dem,
-        slope_parameter=0.01,
+        slope_parameter=5.0,
         filter_quotient=50,
+        min_edge_length=min_edge_length,
         max_edge_length=max_edge_length,
         crs=EPSG,
     )
-
-    edge_length3 = om.compute_minimum([edge_length2, edge_length1])
+    edge_length3 = om.compute_minimum([edge_length1, edge_length2])
 
     for name_, edge_length in zip(
         [

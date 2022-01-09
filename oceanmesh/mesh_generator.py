@@ -12,7 +12,8 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +197,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     _check_bbox(bbox)
     bbox = np.array(bbox).reshape(-1, 2)
 
+    print(min_edge_length)
     assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
     assert opts["max_iter"] > 0, "`max_iter` must be > 0"

@@ -5,6 +5,7 @@ import scipy.spatial
 import skfmm
 from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
+from skimage.morphology import medial_axis
 
 from oceanmesh.filterfx import filt2
 
@@ -242,7 +243,13 @@ def bathymetric_gradient_sizing_function(
     x, y = dem.create_grid()
     tmpz = dem.eval((x, y))
     grid = Grid(
-        bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
+        bbox=dem.bbox,
+        dx=dem.dx,
+        dy=dem.dy,
+        extrapolate=True,
+        values=0.0,
+        crs=crs,
+        hmin=dem.dx,
     )
     logger.info(f"Enforcing a minimum elevation cutoff of {min_elevation_cutoff}")
     tmpz[np.abs(tmpz) < min_elevation_cutoff] = min_elevation_cutoff
@@ -281,12 +288,10 @@ def bathymetric_gradient_sizing_function(
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 
-    if min_edge_length is not None:
-        grid.values[grid.values < min_edge_length] = min_edge_length
-        grid.hmin = min_edge_length
+    if min_edge_length is None:
+        min_edge_length = grid.dx
 
-    else:
-        grid.hmin = np.min(grid.values)
+    grid.values[grid.values < min_edge_length] = min_edge_length
 
     grid.build_interpolant()
 
@@ -324,8 +329,8 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-    import time
     import math
+    import time
 
     x0, xN, y0, yN = bbox
 
@@ -491,45 +496,39 @@ def feature_sizing_function(
         extrapolate=True,
         crs=crs,
     )
-    # create phi (-1 where shoreline point intersects grid points 1 elsewhere)
-    phi = np.ones(shape=(grid_calc.nx, grid_calc.ny))
     lon, lat = grid_calc.create_grid()
+    qpts = np.column_stack((lon.flatten(), lat.flatten()))
+    phi = signed_distance_function.eval(qpts)
+    phi[phi > 0] = 999
+    phi[phi <= 0] = 1.0
+    phi[phi == 999] = 0.0
+    phi = np.reshape(phi, grid_calc.values.shape)
+
+    skel = medial_axis(phi, return_distance=False)
+
+    indicies_medial_points = skel == 1
+    medial_points_x = lon[indicies_medial_points]
+    medial_points_y = lat[indicies_medial_points]
+    medial_points = np.column_stack((medial_points_x, medial_points_y))
+
+    phi2 = np.ones(shape=(grid_calc.nx, grid_calc.ny))
     points = np.vstack((shoreline.inner, shoreline.mainland))
     # find location of points on grid
     indices = grid_calc.find_indices(points, lon, lat)
-    phi[indices] = -1.0
-    dis = np.abs(skfmm.distance(phi, [grid_calc.dx, grid_calc.dy]))
-    # calculate the sign
-    qpts = np.column_stack((lon.flatten(), lat.flatten()))
-    sgn = np.sign(signed_distance_function.eval(qpts))
-    sgn = sgn.reshape(*dis.shape)
-    dis *= sgn
-    gradx, grady = np.gradient(dis, grid_calc.dx, grid_calc.dy)
-    grad_mag = np.sqrt(gradx ** 2 + grady ** 2)
-    indicies_medial_points = np.where((grad_mag < 0.9) & (dis < -grid_calc.dx))
-    medial_points_x, medial_points_y = (
-        lon[indicies_medial_points],
-        lat[indicies_medial_points],
-    )
-    medial_points = np.column_stack((medial_points_x, medial_points_y))
-    # prune the points twice over to remove spurious medial points
-    # (seems to work better than once)
-    for _ in range(2):
-        medial_points = _prune(medial_points, grid_calc.dx)
+    phi2[indices] = -1.0
+    dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
 
     if plot:
         import matplotlib.pyplot as plt
 
-        plt.plot(medial_points[:, 0], medial_points[:, 1], "r.", label="medial points")
-        plt.plot(points[:, 0], points[:, 1], "b-", label="shoreline boundaries")
-        plt.plot(
-            shoreline.boubox[:, 0],
-            shoreline.boubox[:, 1],
-            "k--",
-            label="bounding extents",
-        )
-        plt.gca().set_aspect("equal", adjustable="box")
-        plt.legend()
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
+        ax1.pcolor(lon, lat, skel, cmap=plt.cm.gray)
+        ax1.axis("off")
+        ax2.pcolor(lon, lat, skel)
+        ax2.contour(lon, lat, phi, [0.5], colors="w")
+        ax2.axis("off")
+
+        fig.subplots_adjust(hspace=0.01, wspace=0.01, top=1, bottom=0, left=0, right=1)
         plt.show()
 
     # calculate distance to medial axis
@@ -554,27 +553,6 @@ def feature_sizing_function(
     grid.extrapolate = True
     grid.build_interpolant()
     return grid
-
-
-def _prune(points, dx):
-    # Prune medial points
-    # Note: We want a line of points larger than around 7.
-    # This corresponds to having three points back or forward
-    # up the line. Let's check for those three closest points
-    # and ensure tehy are within about co*h0 distance from
-    # each other where co is the cutoff distance = 0.75*sqrt(2)
-    tree = scipy.spatial.cKDTree(points)
-    co = 0.75 * np.sqrt(2)
-    # build a KDtree w/ the medial points
-    try:
-        dmed, _ = tree.query(points, k=4, workers=-1)
-    except (Exception,):
-        dmed, _ = tree.query(points, k=4, n_jobs=-1)
-    prune = np.where(
-        (dmed[:, 1] > co * dx) | (dmed[:, 2] > 2 * co * dx) | (dmed[:, 3] > 3 * co * dx)
-    )
-    points = np.delete(points, prune, axis=0)
-    return points
 
 
 def wavelength_sizing_function(
