@@ -196,6 +196,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     _check_bbox(bbox)
     bbox = np.array(bbox).reshape(-1, 2)
 
+    print(min_edge_length)
     assert min_edge_length > 0, "`min_edge_length` must be > 0"
 
     assert opts["max_iter"] > 0, "`max_iter` must be > 0"
@@ -250,7 +251,9 @@ def generate_mesh(domain, edge_length, **kwargs):
         # Find where pfix went
         if nfix > 0:
             for fix in pfix:
-                ifix.append(_closest_node(fix, p))
+                ind = _closest_node(fix, p)
+                ifix.append(ind)
+                p[ind] = fix
 
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
@@ -285,7 +288,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         )
 
         end = time.time()
-        logger.info(f"  Elapsed wall-clock time {end-start} seconds")
+        logger.info(f"Elapsed wall-clock time {end-start} seconds")
 
 
 def _unpack_sizing(edge_length, opts):
@@ -410,7 +413,15 @@ def _project_points_back(p, fd, deps):
             a[i] = deps
             return a
 
-        dgrads = [(fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)]
+        try:
+            dgrads = [
+                (fd(p[ix] + _deps_vec(i)) - d[ix]) / deps for i in range(2)
+            ]  # old method
+        except ValueError:  # an error is thrown if all points in fd are outside
+            # bbox domain, so instead calulate all fd and then
+            # take the solely ones outside domain
+            dgrads = [(fd(p + _deps_vec(i)) - d) / deps for i in range(2)]
+            dgrads = list(np.array(dgrads)[:, ix])
         dgrad2 = sum(dgrad ** 2 for dgrad in dgrads)
         dgrad2 = np.where(dgrad2 < deps, deps, dgrad2)
         p[ix] -= (d[ix] * np.vstack(dgrads) / dgrad2).T  # Project

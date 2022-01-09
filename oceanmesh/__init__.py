@@ -7,6 +7,7 @@ from oceanmesh.clean import (
     make_mesh_boundaries_traversable,
 )
 from oceanmesh.edgefx import (
+    bathymetric_gradient_sizing_function,
     distance_sizing_function,
     enforce_mesh_gradation,
     enforce_mesh_size_bounds_elevation,
@@ -24,22 +25,24 @@ from oceanmesh.signed_distance_function import (
     Intersection,
     Union,
     create_circle,
+    create_bbox,
     multiscale_signed_distance_function,
     signed_distance_function,
 )
-
+from oceanmesh.filterfx import filt2
 from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import generate_mesh, generate_multiscale_mesh, plot_mesh
 
 __all__ = [
+    "create_bbox",
     "Region",
     "compute_minimum",
+    "bathymetric_gradient_sizing_function",
     "multiscale_sizing_function",
     "delete_boundary_faces",
     "delete_faces_connected_to_one_face",
     "plot_mesh",
     "make_mesh_boundaries_traversable",
-    "feature_sizing_function",
     "enforce_mesh_size_bounds_elevation",
     "laplacian2",
     "delete_interior_faces",
@@ -49,16 +52,20 @@ __all__ = [
     "DEM",
     "Domain",
     "create_circle",
+    "crate_bbox",
     "Union",
     "Difference",
     "Intersection",
     "Shoreline",
     "generate_multiscale_mesh",
     "distance_sizing_function",
+    "feature_sizing_function",
     "enforce_mesh_gradation",
     "wavelength_sizing_function",
+    "slope_sizing_function",
     "multiscale_signed_distance_function",
     "signed_distance_function",
+    "filt2",
     "get_poly_edges",
     "draw_edges",
     "generate_mesh",

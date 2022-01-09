@@ -18,6 +18,7 @@ Table of contents
    * [Questions or problems](#questions-or-problems)
    * [Installation](#installation)
    * [Examples](#examples)
+     * [Setting the region](#setting-the-region)
      * [Reading in geophysical data](#reading-in-geophysical-data)
      * [Building mesh sizing functions](#building-mesh-sizing-functions)
      * [Mesh generation](#mesh-generation)
@@ -31,7 +32,7 @@ Table of contents
 Functionality
 =============
 
-* A Python package for the development of unstructured triangular meshes that are used in the simulation of coastal ocean circulation. The software integrates mesh generation directly with geophysical datasets such as topobathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
+* A Python package for the development of unstructured triangular meshes that are used in the simulation of coastal ocean circulation. The software integrates mesh generation directly with geophysical datasets such as topo-bathymetric rasters/digital elevation models and shapefiles representing coastal features. It provides some necessary pre- and post-processing tools to inevitably perform a successful numerical simulation with the developed model.
     * Automatically deal with arbitrarily complex shoreline vector datasets that represent complex coastal boundaries and incorporate the data in an automatic-sense into the mesh generation process.
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
@@ -68,12 +69,11 @@ python setup.py version
 ```
 in the working directory.
 
-To see what's going on with `oceanmesh` you can turn on logging, which is by default suppressed. 
-
+To see what's going on with `oceanmesh` when running scripts, you can turn on logging (which is by default suppressed) by importing the two modules `sys` and `logging` and then placing one of the three following logging commands after your imports in your calling script. The amount of information returned is the greatest with `logging.DEBUG` and leas with `logging.WARNING`.
 ```
 import logging
 import sys
- 
+
 logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
 # logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 # logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -82,7 +82,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
 Installation
 ============
 
-For installation, oceanmesh needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/):
+For installation, `oceanmesh` needs [cmake](https://cmake.org/), [CGAL](https://www.cgal.org/):
 
     sudo apt install cmake libcgal-dev
 
@@ -90,7 +90,7 @@ CGAL and can also be installed with [`conda`](https://www.anaconda.com/products/
 
     conda install -c conda-forge cgal
 
-After that, clone the repo and oceanmesh can be updated/installed using pip.
+After that, clone the repo and `oceanmesh` can be updated/installed using pip.
 
     pip install -U -e .
 
@@ -106,9 +106,24 @@ For example, to install:
 Examples
 ==========
 
+Setting the region
+------------------
+`oceanmesh` can mesh a polygonal region in the vast majority of coordinate reference systems (CRS). Thus, all `oceanmesh` scripts begin with declaring the extent and CRS to be used and/or transofmring to a different CRS like this.
+
+```python
+import oceanmesh as om
+
+EPSG = 32619 # A Python int, dict, or str containing the CRS information (in this case UTM19N)
+bbox = (-70.29637, -43.56508, -69.65537, 43.88338) # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
+extent = om.Region(extent=bbox, crs=4326) # set the region (the bbox is given here in EPSG:4326 or WGS84)
+extent = extent.transform_to(EPSG) # Now I transform to the desired EPSG (UTM19N)
+print(extent.bbox) # now the extents are in the desired CRS and can be passed to various functions later on
+```
+
+
 Reading in geophysical data
 ---------------------------
-`oceanmesh` uses shoreline vector datasets (i.e., ESRI shapefiles) and digitial elevation models (DEMs) to construct mesh size functions and signed distance functions to adapt mesh resolution for complex and irregularly shaped coastal ocean domains.
+`oceanmesh` uses shoreline vector datasets (i.e., ESRI shapefiles) and digital elevation models (DEMs) to construct mesh size functions and signed distance functions to adapt mesh resolution for complex and irregularly shaped coastal ocean domains.
 
 Shoreline datasets are necessary to build signed distance functions which define the meshing domain. Here we show how to download a world shoreline dataset referred to as [GSHHG](https://www.ngdc.noaa.gov/mgg/shorelines/) and read it into to `oceanmesh`.
 
@@ -166,6 +181,7 @@ fdem = "datasets/EastCoast.nc"
 
 # If no extents are passed (i.e., the kwarg bbox), then the entire extent of the
 # DEM is read into memory.
+# Note: the DEM will be projected to the desired CRS automatically.
 EPSG = 4326
 dem = om.DEM(
     fdem, crs=EPSG
@@ -185,7 +201,7 @@ Building mesh sizing functions
 ------------------------------
 In `oceanmesh` mesh resolution can be controlled according to a variety of feature-driven geometric and topo-bathymetric functions. In this section, we briefly explain the major functions and present examples and code. Reasonable values for some of these mesh sizing functions and their affect on the numerical simulation of barotropic tides was investigated in [Roberts et. al, 2019](https://www.sciencedirect.com/science/article/abs/pii/S1463500319301222)
 
-All mesh size functions are defined on regular Caretesian grids. The properties of these grids are abstracted by the [Grid](https://github.com/CHLNDDEV/oceanmesh/blob/40baeeae313eb8ef285acc395c671c36c1b9605f/oceanmesh/grid.py#L33) class.
+All mesh size functions are defined on regular Cartesian grids. The properties of these grids are abstracted by the [Grid](https://github.com/CHLNDDEV/oceanmesh/blob/40baeeae313eb8ef285acc395c671c36c1b9605f/oceanmesh/grid.py#L33) class.
 
 ### Distance and feature size
 
@@ -272,7 +288,7 @@ shoreline.plot(ax=ax)
 
 ### Wavelength-to-gridscale
 
-In shallow water theory, the wave celerity, and hence the wavelength λ, is proportional to the square root of the depth of the water column. This relationship indicates that more mesh resolution at shallower depths is required to resolve waves that are shorter than those in deep water. With this considered, a mesh size function hwl that ensures a certain number of elements are present per wavelength (usually of the M2-dominant semi-diurnal tidal species) can be deduced.
+In shallow water theory, the wave celerity, and hence the wavelength λ, is proportional to the square root of the depth of the water column. This relationship indicates that more mesh resolution at shallower depths is required to resolve waves that are shorter than those in deep water. With this considered, a mesh size function hwl that ensures a certain number of elements are present per wavelength (usually of the M2-dominant semi-diurnal tidal species but the frequency of the dominant wave can be specified via kwargs) can be deduced.
 
 In this snippet, as before we compute the feature size function, but now we also compute the wavelength-to-gridscale sizing function using the SRTM dataset and compute the minimum of all the functions before grading. We discretize the wavelength of the M2 by 30 elements (e.g., wl=30)
 ```python
@@ -287,7 +303,7 @@ dem = om.DEM(fdem, crs=4326)
 shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
-edge_length2 = om.wavelength_sizing_function(dem, wl=100)
+edge_length2 = om.wavelength_sizing_function(dem, wl=100, period=12.42*3600) # use the M2-tide period (in seconds)
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
@@ -304,6 +320,43 @@ shoreline.plot(ax=ax)
 ```
 ![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
 
+### Resolving bathymetric gradients
+
+The distance, feature size, and/or wavelength mesh size functions can lead to coarse mesh resolution in deeper waters that under-resolve and smooth over the sharp topographic gradients that characterize the continental shelf break. These slope features can be important for coastal ocean models in order to capture dissipative effects driven by the internal tides, transmissional reflection at the shelf break that controls the astronomical tides, and trapped shelf waves. The bathymetry field contains often excessive details that are not relevant for most flows, thus the bathymetry can be smoothed by a variety of filters (e.g., lowpass, bandpass, and highpass filters) before calculating the mesh sizes.
+
+```python
+import oceanmesh as om
+
+fdem = "datasets/EastCoast.nc"
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+
+EPSG = 4326  # EPSG:4326 or WGS84
+bbox = (-74.4, -73.4, 40.2, 41.2)
+extent = om.Region(extent=bbox, crs=EPSG)
+dem = om.DEM(fdem, crs=4326)
+
+min_edge_length = 0.0025  # minimum mesh size in domain in projection
+max_edge_length = 0.10  # maximum mesh size in domain in projection
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
+
+edge_length1 = om.feature_sizing_function(
+    shoreline,
+    sdf,
+    max_edge_length=max_edge_length,
+    crs=EPSG,
+)
+edge_length2 = om.bathymetric_gradient_sizing_function(
+    dem,
+    slope_parameter=5.0,
+    filter_quotient=50,
+    min_edge_length=min_edge_length,
+    max_edge_length=max_edge_length,
+    crs=EPSG,
+)
+edge_length3 = om.compute_minimum([edge_length1, edge_length2])
+edge_length3 = om.enforce_mesh_gradation(edge_length3, gradation=0.15)
+```
 
 Cleaning up the mesh
 --------------------
@@ -386,7 +439,7 @@ meshio.write_points_cells(
 Multiscale mesh generation
 ---------------------------
 
-The major downside of the DistMesh algorithm is that it cannot handle regional domains with fine mesh refinement or variable datasets due to the intense memory requirements. The multiscale mesh generation technique addresses these problems and enables an arbitrary number of refinment zones to be incorporated seamlessy into the domain.
+The major downside of the DistMesh algorithm is that it cannot handle regional domains with fine mesh refinement or variable datasets due to the intense memory requirements. The multiscale mesh generation technique addresses these problems and enables an arbitrary number of refinement zones to be incorporated seamlessly into the domain.
 
 Areas of finer refinement can be incorporated seamlessly by using the `generate_multiscale_mesh` function. In this case, the user passes lists of signed distance and edge length functions to the mesh generator but besides this the user API remains the same to the previous mesh generation example. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM numerical simulations through the parameters prefixed with "blend".
 
@@ -439,26 +492,44 @@ points, cells = om.laplacian2(points, cells)
 
 # plot it showing the different levels of resolution
 triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-gs = gridspec.GridSpec(2, 1)
-gs.update(wspace=0.1)
+gs = gridspec.GridSpec(2, 2)
+gs.update(wspace=0.5)
 plt.figure()
+
+bbox3 = np.array(
+    [
+        [-73.78, 40.60],
+        [-73.75, 40.60],
+        [-73.75, 40.64],
+        [-73.78, 40.64],
+        [-73.78, 40.60],
+    ],
+    dtype=float,
+)
 
 ax = plt.subplot(gs[0, 0])  #
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=0.5)
+ax.triplot(triang, "-", lw=1)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
-ax = plt.subplot(gs[1, 0])  #
-buf = 0.07
-ax.set_xlim([min(bbox2[:,0])-buf,max(bbox2[:,0])+buf])
-ax.set_ylim([min(bbox2[:,1])-buf,max(bbox2[:,1])+buf])
+ax = plt.subplot(gs[0, 1])
 ax.set_aspect("equal")
-ax.triplot(triang, "-", lw=0.5)
+ax.triplot(triang, "-", lw=1)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.set_xlim(np.amin(bbox2[:, 0]), np.amax(bbox2[:, 0]))
+ax.set_ylim(np.amin(bbox2[:, 1]), np.amax(bbox2[:, 1]))
+ax.plot(bbox3[:, 0], bbox3[:, 1], "m--")
 
+ax = plt.subplot(gs[1, :])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.set_xlim(-73.78, -73.75)
+ax.set_ylim(40.60, 40.64)
 plt.show()
 ```
-<img width="747" alt="image" src="https://user-images.githubusercontent.com/21131934/136140049-9eee309a-987f-4128-9fe2-bb207f972be3.png">
+![Multiscale](https://user-images.githubusercontent.com/18619644/136119785-8746552d-4ff6-44c3-9aa1-3e4981ba3518.png)
+
 
 See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 

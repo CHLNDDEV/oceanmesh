@@ -431,7 +431,16 @@ class Shoreline(Region):
     represent irregular shoreline geometries.
     """
 
-    def __init__(self, shp, bbox, h0, crs=4326, refinements=1, minimum_area_mult=4.0):
+    def __init__(
+        self,
+        shp,
+        bbox,
+        h0,
+        crs=4326,
+        refinements=1,
+        minimum_area_mult=4.0,
+        smooth_shoreline=True,
+    ):
 
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
@@ -459,7 +468,8 @@ class Shoreline(Region):
 
         polys = self._read()
 
-        polys = _smooth_shoreline(polys, self.refinements)
+        if smooth_shoreline:
+            polys = _smooth_shoreline(polys, self.refinements)
 
         polys = _densify(polys, self.h0, self.bbox)
 
@@ -631,24 +641,49 @@ class Shoreline(Region):
 
 
 class DEM(Grid):
-    """Digitial elevation model read in from a tif or NetCDF file
-    parent class is a :class:`Grid`
+    """
+    Digitial elevation model read in from a tif or NetCDF file
+    parent class is a :class:`Grid` if dem input is a string. If dem is an array,
+    it assumes a uniform grid-spacing, while if a function is given, the grid will consist of
+    1001 points in both horizontal directions.
     """
 
-    def __init__(self, dem, crs=4326, bbox=None):
+    def __init__(self, dem, crs=4326, bbox=None, nnodes=1000):
+        if type(dem) == str:
+            basename, ext = os.path.splitext(dem)
+            if ext.lower() in [".nc"] or [".tif"]:
+                topobathy, reso, bbox = self._read(dem, bbox, crs)
+                topobathy = topobathy.astype(float)
 
-        basename, ext = os.path.splitext(dem)
-        if ext.lower() in [".nc"] or [".tif"]:
-            topobathy, reso, bbox = self._read(dem, bbox, crs)
-        else:
-            raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
+            else:
+                raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
 
-        self.dem = dem
+            self.dem = dem
+
+        elif type(dem) == numpy.ndarray:
+            topobathy = dem.astype(float)
+            reso = (
+                (bbox[1] - bbox[0]) / topobathy.shape[0],
+                (bbox[3] - bbox[2]) / topobathy.shape[1],
+            )
+            self.dem = "input"
+
+        elif callable(dem):  # if input is a function
+            dx = (bbox[1] - bbox[0]) / nnodes
+            lon, lat = np.arange(bbox[0], bbox[1] + dx, dx), np.arange(
+                bbox[2], bbox[3] + dx, dx
+            )
+            reso = (dx, dx)
+            lon, lat = np.meshgrid(lon, lat)
+            topobathy = np.rot90(dem(lon, lat), 2)
+            self.dem = "function"
+
+        topobathy[abs(topobathy) > 1e5] = np.NaN
         super().__init__(
             bbox=bbox,
             crs=crs,
-            dx=reso[0],
-            dy=np.abs(reso[1]),
+            dx=abs(reso[0]),
+            dy=abs(reso[1]),
             values=np.rot90(topobathy, 3),
         )
         super().build_interpolant()

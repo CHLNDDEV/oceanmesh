@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 
 def compute_minimum(edge_lengths):
     """Determine the minimum of all edge lengths in the domain"""
+    _crs = edge_lengths[0].crs
+    msg = "All edgelengths must have the same CRS"
+    for el in edge_lengths[1::]:
+        assert _crs == el.crs, msg
     # project all edge_lengths onto the grid of the first one
     base_edge_length = edge_lengths[0]
     edge_lengths = [
@@ -20,6 +24,7 @@ def compute_minimum(edge_lengths):
         for edge_length in edge_lengths[1::]
     ]
     edge_lengths.insert(0, base_edge_length)
+
     minimum_values = np.minimum.reduce(
         [edge_length.values for edge_length in edge_lengths]
     )
@@ -31,7 +36,10 @@ def compute_minimum(edge_lengths):
         dy=base_edge_length.dy,
         hmin=min_edgelength,
         values=minimum_values,
+        extrapolate=True,
+        crs=base_edge_length.crs,
     )
+
     grid.build_interpolant()
     return grid
 
@@ -165,9 +173,9 @@ class Grid(Region):
         x, y = self.create_vectors()
         return np.meshgrid(x, y, sparse=False, indexing="ij")
 
-    def find_indices(self, points, lon, lat, tree=None):
+    def find_indices(self, points, lon, lat, tree=None, k=1):
         """Find linear indices `indices` into a 2D array such that they
-        return the closest point in the structured grid defined by `x` and `y`
+        return the closest k point(s) in the structured grid defined by `x` and `y`
         to `points`.
 
         Parameters
@@ -180,6 +188,8 @@ class Grid(Region):
             Grid points in y-dimension. 2D array with `float` type.
         tree: :obj:`scipy.spatial.ckdtree`, optional
             A KDtree with coordinates from :class:`Shoreline`
+        k: int, optional
+            Number of closest points to return
 
         Returns
         -------
@@ -192,19 +202,19 @@ class Grid(Region):
             lonlat = np.column_stack((lon.ravel(), lat.ravel()))
             tree = scipy.spatial.cKDTree(lonlat)
         try:
-            dist, idx = tree.query(points, k=1, workers=-1)
+            dist, idx = tree.query(points, k=k, workers=-1)
         except (Exception,):
-            dist, idx = tree.query(points, k=1, n_jobs=-1)
+            dist, idx = tree.query(points, k=k, n_jobs=-1)
         return np.unravel_index(idx, lon.shape)
 
-    def interpolate_to(self, grid2, method="linear"):
-        """Interpolates linearly self.values onto :class`Grid` grid2 forming a new
+    def interpolate_to(self, grid2, method="nearest"):
+        """Interpolates self.values onto :class`Grid` grid2 forming a new
         :class:`Grid` object grid3.
         Note
         ----
         In other words, in areas of overlap, grid1 values
         take precedence elsewhere grid2 values are retained. Grid3 has
-        dx and resolution of grid2.
+        dx & dy grid spacing following the resolution of grid2.
         Parameters
         ----------
         grid2: :obj:`Grid`
@@ -245,7 +255,9 @@ class Grid(Region):
             bbox=grid2.bbox,
             dx=grid2.dx,
             dy=grid2.dy,
+            hmin=grid2.hmin,
             values=new_values,
+            crs=grid2.crs,
         )
 
     def blend_into(self, coarse, blend_width=10, p=1, nnear=6, eps=0.0):
