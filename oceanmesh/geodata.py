@@ -558,11 +558,15 @@ class Shoreline(Region):
         delimiter = np.empty((1, 2))
         delimiter[:] = np.nan
         re = numpy.array([0, 2, 1, 3], dtype=int)
+
         for g in s.geometry:
             # extent of geometry
             bbox2 = [g.bounds[r] for r in re]
             if _is_overlapping(_bbox, bbox2):
-                poly = np.asarray(g.exterior.coords.xy).T
+                if g.type == "LineString":
+                    poly = np.asarray(g.coords)
+                else:  # a polygon
+                    poly = np.asarray(g.exterior.coords.xy).T
                 polys.append(np.row_stack((poly, delimiter)))
 
         if len(polys) == 0:
