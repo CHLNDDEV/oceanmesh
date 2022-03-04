@@ -137,7 +137,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     """
     logger.debug("Entering:_classify_shoreline")
 
-    _AREAMIN = minimum_area_mult * h0 ** 2
+    _AREAMIN = minimum_area_mult * h0**2
 
     if len(boubox) == 0:
         boubox = _create_boubox(bbox)

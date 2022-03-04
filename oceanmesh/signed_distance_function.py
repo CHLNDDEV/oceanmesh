@@ -181,8 +181,8 @@ def signed_distance_function(shoreline, invert=False):
     ----------
     shoreline: a :class:`Shoreline` object
         The processed shapefile data from :class:`Geodata`
-    invert: boolean, optional 
-        Invert the definition of the domain. 
+    invert: boolean, optional
+        Invert the definition of the domain.
 
     Returns
     -------
@@ -218,7 +218,7 @@ def signed_distance_function(shoreline, invert=False):
         # intersection of two areas and vice versa.
         cond = np.logical_and(in_shoreline, in_boubox)
         dist = (-1) ** (cond) * d
-        if invert: 
+        if invert:
             dist *= 1
         return dist
 
