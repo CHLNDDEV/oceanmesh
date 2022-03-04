@@ -171,7 +171,7 @@ class Difference(Domain):
         )
 
 
-def signed_distance_function(shoreline):
+def signed_distance_function(shoreline, invert=False):
     """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
     and calculates a signed distance function with it under the assumption that all polygons are closed.
     The returned function `func` becomes a bound method of the :class:`Domain` and is queried during
@@ -181,6 +181,8 @@ def signed_distance_function(shoreline):
     ----------
     shoreline: a :class:`Shoreline` object
         The processed shapefile data from :class:`Geodata`
+    invert: boolean, optional 
+        Invert the definition of the domain. 
 
     Returns
     -------
@@ -216,6 +218,8 @@ def signed_distance_function(shoreline):
         # intersection of two areas and vice versa.
         cond = np.logical_and(in_shoreline, in_boubox)
         dist = (-1) ** (cond) * d
+        if invert: 
+            dist *= 1
         return dist
 
     poly2 = shoreline.boubox
