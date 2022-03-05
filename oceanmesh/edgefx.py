@@ -128,7 +128,11 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
 
 
 def distance_sizing_function(
-    shoreline, rate=0.15, max_edge_length=None, coarsen=1, crs=4326,
+    shoreline,
+    rate=0.15,
+    max_edge_length=None,
+    coarsen=1,
+    crs=4326,
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
     Parameters
@@ -283,7 +287,7 @@ def bathymetric_gradient_sizing_function(
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
         by, bx = _earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
-        bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+        bs = np.sqrt(bx**2 + by**2)  # get overall slope
 
     # Calculating the slope function
     eps = 1e-10  # small number to approximate derivative
@@ -438,7 +442,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
             by, bx = _earth_gradient(
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
-            tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+            tempbs = np.sqrt(bx**2 + by**2)  # get overall slope
 
             bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
 
@@ -627,7 +631,10 @@ def wavelength_sizing_function(
 
 
 def multiscale_sizing_function(
-    list_of_grids, p=3, nnear=28, blend_width=1000,
+    list_of_grids,
+    p=3,
+    nnear=28,
+    blend_width=1000,
 ):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),

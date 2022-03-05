@@ -69,7 +69,13 @@ def _generate_samples(bbox, dim, N):
     _yrange = (bbox[2] - 0.01, bbox[3] + 0.01)
     if dim == 2:
         points.append(
-            [(random.uniform(*_xrange), random.uniform(*_yrange),) for i in range(N)]
+            [
+                (
+                    random.uniform(*_xrange),
+                    random.uniform(*_yrange),
+                )
+                for i in range(N)
+            ]
         )
     elif dim == 3:
         _zrange = (bbox[4] - 0.01, bbox[5] + 0.01)
@@ -243,7 +249,13 @@ def _create_boubox(bbox):
     """Create a bounding box from domain extents `bbox`. Path orientation will be CCW."""
     xmin, xmax, ymin, ymax = bbox
     return np.array(
-        [[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax], [xmin, ymin],],
+        [
+            [xmin, ymin],
+            [xmax, ymin],
+            [xmax, ymax],
+            [xmin, ymax],
+            [xmin, ymin],
+        ],
         dtype=float,
     )
 
