@@ -1,6 +1,12 @@
-import versioneer
+import os
+import sys
+
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup
+
+import versioneer
+
+sys.path.append(os.path.dirname(__file__))
 
 # https://github.com/pybind/python_example/
 is_called = [

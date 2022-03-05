@@ -13,7 +13,7 @@ def simp_qual(p, t):
     assert p.ndim == 2 and t.ndim == 2 and p.shape[1] + 1 == t.shape[1]
 
     def length(p1):
-        return np.sqrt((p1**2).sum(1))
+        return np.sqrt((p1 ** 2).sum(1))
 
     a = length(p[t[:, 1]] - p[t[:, 0]])
     b = length(p[t[:, 2]] - p[t[:, 0]])
