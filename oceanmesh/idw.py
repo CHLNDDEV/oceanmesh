@@ -92,7 +92,7 @@ class Invdisttree:
             elif dist[0] < 1e-10:
                 wz = self.z[ix[0]]
             else:  # weight z s by 1/dist --
-                w = 1 / dist**p
+                w = 1 / dist ** p
                 if weights is not None:
                     w *= weights[ix]  # >= 0
                 w /= np.sum(w)

@@ -1763,7 +1763,7 @@ def get_version():
     return get_versions()["version"]
 
 
-def get_cmdclass(cmdclass=None):
+def get_cmdclass(cmdclass=None):  # noqa: C901
     """Get the custom setuptools/distutils subclasses used by Versioneer.
 
     If the package uses a different cmdclass (e.g. one from numpy), it
