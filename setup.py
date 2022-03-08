@@ -15,11 +15,25 @@ files = [
     "oceanmesh/cpp/fast_geometry.cpp",
 ]
 
-# no CGAL libraries necessary from CGAL 5.0 onwards
-ext_modules = [
-    Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
-    for fi, loc in zip(files, is_called)
-]
+
+import os
+if os.name == 'nt':
+    pwd = os.path.dirname(os.path.abspath(__file__)).replace('\\', '/')
+    vcpkg = f'{pwd}/support/vcpkg/installed/x64-windows' # DPZ
+    ext_modules = [
+        Pybind11Extension(loc, [fi], 
+            include_dirs=[f'{vcpkg}/include'], 
+            extra_link_args=[f'/LIBPATH:{vcpkg}/lib'], 
+            libraries=["gmp", "mpfr"]
+        )
+        for fi, loc in zip(files, is_called)
+    ]
+else:
+    # no CGAL libraries necessary from CGAL 5.0 onwards
+    ext_modules = [
+        Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
+        for fi, loc in zip(files, is_called)
+    ]
 
 cmdclass = versioneer.get_cmdclass()
 cmdclass.update({"build_ext": build_ext})

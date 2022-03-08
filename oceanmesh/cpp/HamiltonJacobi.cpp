@@ -22,24 +22,23 @@
 #define EPS 1e-9
 
 namespace py = pybind11;
+using py::ssize_t;
 
-// for column major order with 1-based indexing
+// for column major order with 1-based indexing [zpos,row,col] returning zero-based linear index
 int sub2ind(const int row, const int col, const int zpos, const int nrows,
             const int ncols) {
   return (col - 1) * nrows + row +
-         (zpos - 1) * (nrows * ncols); // trailing -1 is for zero-based indexing
+         (zpos - 1) * (nrows * ncols);
 }
 
-//
+// for column major order with zero-based linear index returning 1-based indexing [k,j,i]
 void ind2sub(const int index, const int nrows, const int ncols, int *i, int *j,
              int *k) {
-  int tmp2;
-  double tmp = (double)index;
-  double a = nrows * ncols;
-  *k = std::ceil(tmp / a);
-  tmp2 = (int)tmp - (*k - 1) * nrows * ncols;
-  *j = 1 + std::floor((tmp2 - 1) / nrows);
-  *i = tmp2 - (*j - 1) * nrows;
+  int nij = nrows * ncols;
+  int ij = index % nij;
+  *k = 1 + index / nij;
+  *j = 1 + ij / ncols;
+  *i = 1 + ij % ncols;
   assert(*i > 0);
   assert(*j > 0);
   assert(*k > 0);
@@ -53,7 +52,7 @@ std::vector<int> findIndices(const std::vector<int> &A, const int value) {
   std::vector<int> B;
   for (std::size_t i = 0; i < A.size(); i++) {
     if (A[i] == value) {
-      B.push_back(i);
+      B.push_back((int)i);
     }
   }
   return B;
@@ -176,7 +175,7 @@ py::array
 gradient_limit(py::array_t<int, py::array::c_style | py::array::forcecast> dims,
         const double elen, const double dfdx, const int imax,
         py::array_t<double, py::array::c_style | py::array::forcecast> ffun) {
-  int num_points = ffun.size();
+  int num_points = (int)ffun.size();
 
   std::vector<double> cffun(num_points);
   std::vector<int> cdims(3);
@@ -186,7 +185,7 @@ gradient_limit(py::array_t<int, py::array::c_style | py::array::forcecast> dims,
 
   std::vector<double> sffun = c_gradient_limit(cdims, elen, dfdx, imax, cffun);
 
-  ssize_t sodble = sizeof(double);
+  ssize_t sodble = (ssize_t)sizeof(double);
   std::vector<ssize_t> shape = {num_points, 1};
   std::vector<ssize_t> strides = {sodble, sodble};
 

@@ -8,9 +8,12 @@
 
 #include <ctime>
 #include <iostream>
+#include <chrono>
 
 namespace py = pybind11;
+using py::ssize_t;
 
+#if 0 // DPZ non-portable
 class Timer {
 public:
   Timer() { clock_gettime(CLOCK_REALTIME, &beg_); }
@@ -26,6 +29,23 @@ public:
 private:
   timespec beg_, end_;
 };
+#endif
+class Timer {
+public:
+  Timer() { reset(); }
+
+  double elapsed() {
+    end_ = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> dur = end_ - beg_;
+    return dur.count();
+  }
+
+  void reset() { beg_ = std::chrono::high_resolution_clock::now();  }
+
+private:
+  std::chrono::time_point<std::chrono::high_resolution_clock> beg_, end_;
+};
+
 
 template <typename T>
 std::vector<T> vectorSortIntArr(std::vector<std::array<T, 2>> v) {
@@ -62,7 +82,7 @@ py::array unique_edges(
 
   auto u_edges = vectorSortIntArr<int>(std::move(tl));
 
-  int num_edges = u_edges.size();
+  int num_edges = (int)u_edges.size();
   ssize_t sint = sizeof(int);
   std::vector<ssize_t> shape = {num_edges / 2, 2};
   std::vector<ssize_t> strides = {sint * 2, sint};
