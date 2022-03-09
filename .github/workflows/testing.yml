@@ -41,9 +41,10 @@ jobs:
       run: |
         sudo apt install -y libopenmpi3 libopenmpi-dev openmpi-bin
         sudo apt install -y libhdf5-dev
-    - name: pre install numpy (for inpoly)
+    - name: pre install numpy (for inpoly) and pathlib (for tox)
       run: |
         pip install numpy
+        pip install pathlib
     - name: Test with tox
       run: |
         pip install tox
