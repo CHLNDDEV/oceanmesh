@@ -219,7 +219,7 @@ def signed_distance_function(shoreline, invert=False):
         cond = np.logical_and(in_shoreline, in_boubox)
         dist = (-1) ** (cond) * d
         if invert:
-            dist *= 1
+            dist *= -1
         return dist
 
     poly2 = shoreline.boubox
