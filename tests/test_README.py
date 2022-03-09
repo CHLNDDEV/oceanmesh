@@ -1,9 +1,9 @@
 import os
-import pathlib
 
-this_dir = pathlib.Path(__file__).resolve().parent
+current_dir = os.path.abspath(os.path.dirname(__file__))
+parent_dir = os.path.abspath(current_dir + "/../")
 
 
 def test_readme():
 
-    os.system(f"pytest --codeblocks {this_dir.parent}/README.md")
+    os.system(f"pytest --codeblocks {parent_dir}/README.md")
