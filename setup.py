@@ -1,6 +1,6 @@
 import versioneer
 from pybind11.setup_helpers import Pybind11Extension, build_ext
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # https://github.com/pybind/python_example/
 is_called = [
@@ -15,11 +15,10 @@ files = [
     "oceanmesh/cpp/fast_geometry.cpp",
 ]
 
-
 import os
 if os.name == 'nt':
-    pwd = os.path.dirname(os.path.abspath(__file__)).replace('\\', '/')
-    vcpkg = f'{pwd}/support/vcpkg/installed/x64-windows' # DPZ
+    home = os.environ['USERPROFILE'].replace('\\', '/')
+    vcpkg = f'{home}/OceanMesh/vcpkg/installed/x64-windows'
     ext_modules = [
         Pybind11Extension(loc, [fi], 
             include_dirs=[f'{vcpkg}/include'], 
@@ -45,3 +44,4 @@ if __name__ == "__main__":
         ext_modules=ext_modules,
         zip_safe=False,
     )
+

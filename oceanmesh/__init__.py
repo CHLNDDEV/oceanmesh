@@ -3,8 +3,8 @@ import os
 # DPZ patches for miniconda on windows using vcpkg to install cgal and dependencies
 #
 if os.name == 'nt':
-    assert os.environ.get('CGAL_PATH', None)
-    os.add_dll_directory(os.environ['CGAL_PATH'])
+    assert os.environ.get('CGAL_BIN', None), "The environment variable CGAL_BIN must be set."
+    os.add_dll_directory(os.environ['CGAL_BIN'])
 
 from oceanmesh.clean import (
     delete_boundary_faces,

@@ -24,21 +24,18 @@
 namespace py = pybind11;
 using py::ssize_t;
 
-// for column major order with 1-based indexing [zpos,row,col] returning zero-based linear index
-int sub2ind(const int row, const int col, const int zpos, const int nrows,
-            const int ncols) {
-  return (col - 1) * nrows + row +
-         (zpos - 1) * (nrows * ncols);
+// for column major order component indexes [zpos][col][row] returning linear index (all indexes 1-based)
+int sub2ind(const int row, const int col, const int zpos, const int nrows, const int ncols) {
+  return 1 + (zpos - 1)*ncols*nrows + (col - 1)*nrows + (row - 1);
 }
 
-// for column major order with zero-based linear index returning 1-based indexing [k,j,i]
-void ind2sub(const int index, const int nrows, const int ncols, int *i, int *j,
-             int *k) {
+// for column major order linear index returning [k][j][i] component indexes (all indexes 1-based)
+void ind2sub(const int index, const int nrows, const int ncols, int *i, int *j, int *k) {
   int nij = nrows * ncols;
-  int ij = index % nij;
-  *k = 1 + index / nij;
-  *j = 1 + ij / ncols;
-  *i = 1 + ij % ncols;
+  int ij = (index - 1) % nij;
+  *k = 1 + (index - 1) / nij;
+  *j = 1 + ij / nrows;
+  *i = 1 + ij % nrows;
   assert(*i > 0);
   assert(*j > 0);
   assert(*k > 0);
@@ -100,6 +97,9 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
       //----- map triply indexed to singly indexed
       int inod = aidx[i] + 1; // add one to match 1-based indexing
 
+      // NOTE: 1-based indexing is used by ind2sub(), sub2ind(), and min/max clamping below.
+      //       could easily refactor to maintain 0-based indexing throughout.
+
       //----- calculate the i,j,k position
       int ipos, jpos, kpos;
       ind2sub(inod, dims[0], dims[1], &ipos, &jpos, &kpos);
@@ -125,7 +125,7 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
       // bottom right diagonal
       npos[8] = sub2ind(std::min(ipos +1 , dims[0]), std::min(jpos+1, dims[1]), kpos, dims[0], dims[1]);
 
-      for (std::size_t u = 0; u < 9; u++)
+      for (std::size_t u = 0; u < 9; u++) // subtract one to revert to 0-based indexing
         npos[u]--;
 
       int nod1 = npos[0];
