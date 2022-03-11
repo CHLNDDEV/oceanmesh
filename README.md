@@ -108,20 +108,22 @@ Python under Windows can easily experience DLL hell due to version incompatibili
 
 Prerequisites to build CGAL using the provided batch file are as follows:
 
-    * Windows 10 or later
-    * Visual Studio with C++
-    * CMake
-    * Git
+* Windows 10 or later
+* Visual Studio with C++
+* CMake
+* Git
+
+After successful intallation of a CGAL development package, proceed via one of the two options below to generate a python environment with OceanMesh installed.
  
 If you are using a conda-based Python distribution, then 'install_oceanmesh.bat' should take care of everything, provided no package conflicts arise.
 
 If you have a different Python distribution, or if you do not want to use packages from conda forge, then the following process may be required:
 
-    1. Obtain binary wheels for your python distribution for the latest GDAL, Fiona, and Rasterio (https://www.lfd.uci.edu/~gohlke/pythonlibs).
-    2. Create a new virtual environment and activate it.
-    3. Exectute: cmd.exe /C "for %f in (GDAL*.whl Fiona*.whl rasterio*.whl) do pip install %f"
-    4. Exectute: pip install geopandas rasterio scikit-fmm pybind11
-    5. Exectute: python setup.py install
+1. Obtain binary wheels for your python distribution for the latest GDAL, Fiona, and Rasterio (https://www.lfd.uci.edu/~gohlke/pythonlibs).
+2. Create a new virtual environment and activate it.
+3. Execute: cmd.exe /C "for %f in (GDAL\*.whl Fiona\*.whl rasterio\*.whl) do pip install %f"
+4. Execute: pip install geopandas rasterio scikit-fmm pybind11
+5. Execute: python setup.py install
 
 :warning:
 
