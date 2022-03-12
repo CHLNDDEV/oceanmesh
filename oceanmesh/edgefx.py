@@ -287,7 +287,7 @@ def bathymetric_gradient_sizing_function(
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
         by, bx = _earth_gradient(tmpz, dy, dx)  # get slope in x and y directions
-        bs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+        bs = np.sqrt(bx**2 + by**2)  # get overall slope
 
     # Calculating the slope function
     eps = 1e-10  # small number to approximate derivative
@@ -442,7 +442,7 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
             by, bx = _earth_gradient(
                 tmpz_ft, dy, dx
             )  # [n2s:n2e]) # get slope in x and y directions
-            tempbs = np.sqrt(bx ** 2 + by ** 2)  # get overall slope
+            tempbs = np.sqrt(bx**2 + by**2)  # get overall slope
 
             bst[rosb == edges[i]] = tempbs[rosb == edges[i]]
 

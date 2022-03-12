@@ -223,6 +223,31 @@ dem.plot(
 ```
 ![Figure_2](https://user-images.githubusercontent.com/18619644/133544110-44497a6b-4a5a-482c-9447-cdc2f3663f17.png)
 
+# Defining the domain
+---------------------
+The domain is defined by a signed distance function. A signed distance function can be automatically generated from a complex coastal ocean domain as such
+
+```python
+import oceanmesh as om
+
+fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
+EPSG = 4326  # EPSG:4326 or WGS84
+extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length = 0.01  # minimum mesh size in domain in projection
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+
+# build a signed distance functiona automatically
+sdf = om.signed_distance_function(shoreline)
+```
+In some situations, it is necessary to flip the definition of what's `inside` the meshing domain. This can be accomplished via the `invert` kwarg for the `signed_distance_function`.
+
+<!--pytest-codeblocks:skip-->
+```python
+sdf = om.signed_distance_function(shoreline, invert=True)
+```
+
+Setting `invert=True` will be mesh the 'land side' of the domain rather than the ocean.
+
 Building mesh sizing functions
 ------------------------------
 In `oceanmesh` mesh resolution can be controlled according to a variety of feature-driven geometric and topo-bathymetric functions. In this section, we briefly explain the major functions and present examples and code. Reasonable values for some of these mesh sizing functions and their affect on the numerical simulation of barotropic tides was investigated in [Roberts et. al, 2019](https://www.sciencedirect.com/science/article/abs/pii/S1463500319301222)

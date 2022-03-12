@@ -137,7 +137,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     """
     logger.debug("Entering:_classify_shoreline")
 
-    _AREAMIN = minimum_area_mult * h0 ** 2
+    _AREAMIN = minimum_area_mult * h0**2
 
     if len(boubox) == 0:
         boubox = _create_boubox(bbox)
@@ -674,8 +674,9 @@ class DEM(Grid):
 
         elif callable(dem):  # if input is a function
             dx = (bbox[1] - bbox[0]) / nnodes
-            lon, lat = np.arange(bbox[0], bbox[1] + dx, dx), np.arange(
-                bbox[2], bbox[3] + dx, dx
+            lon, lat = (
+                np.arange(bbox[0], bbox[1] + dx, dx),
+                np.arange(bbox[2], bbox[3] + dx, dx),
             )
             reso = (dx, dx)
             lon, lat = np.meshgrid(lon, lat)
