@@ -281,7 +281,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         p = _project_points_back(p, fd, deps)
 
         # Show the user some progress so they know something is happening
-        maxdp = delta_t * np.sqrt((Ftot ** 2).sum(1)).max()
+        maxdp = delta_t * np.sqrt((Ftot**2).sum(1)).max()
 
         logger.info(
             f"Iteration #{count+1}, max movement is {maxdp}, there are {len(p)} vertices and {len(t)}"
@@ -331,10 +331,10 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult):
     N = p.shape[0]
     bars = _get_bars(t)
     barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
-    L = np.sqrt((barvec ** 2).sum(1))  # L = Bar lengths
+    L = np.sqrt((barvec**2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     hbars = fh(p[bars].sum(1) / 2)
-    L0 = hbars * L0mult * ((L ** 2).sum() / (hbars ** 2).sum()) ** (1.0 / 2)
+    L0 = hbars * L0mult * ((L**2).sum() / (hbars**2).sum()) ** (1.0 / 2)
     F = L0 - L
     F[F < 0] = 0  # Bar forces (scalars)
     Fvec = (
@@ -422,7 +422,7 @@ def _project_points_back(p, fd, deps):
             # take the solely ones outside domain
             dgrads = [(fd(p + _deps_vec(i)) - d) / deps for i in range(2)]
             dgrads = list(np.array(dgrads)[:, ix])
-        dgrad2 = sum(dgrad ** 2 for dgrad in dgrads)
+        dgrad2 = sum(dgrad**2 for dgrad in dgrads)
         dgrad2 = np.where(dgrad2 < deps, deps, dgrad2)
         p[ix] -= (d[ix] * np.vstack(dgrads) / dgrad2).T  # Project
     return p
@@ -436,7 +436,7 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
     p = p.reshape(2, -1).T
     r0 = fh(p)
     r0m = np.min(r0[r0 >= min_edge_length])
-    p = p[np.random.rand(p.shape[0]) < r0m ** 2 / r0 ** 2]
+    p = p[np.random.rand(p.shape[0]) < r0m**2 / r0**2]
     p = p[fd(p) < geps]  # Keep only d<0 points
     return np.vstack(
         (
