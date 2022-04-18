@@ -22,24 +22,20 @@
 #define EPS 1e-9
 
 namespace py = pybind11;
+using py::ssize_t;
 
-// for column major order with 1-based indexing
-int sub2ind(const int row, const int col, const int zpos, const int nrows,
-            const int ncols) {
-  return (col - 1) * nrows + row +
-         (zpos - 1) * (nrows * ncols); // trailing -1 is for zero-based indexing
+// for column major order component indexes [zpos][col][row] returning linear index (all indexes 1-based)
+int sub2ind(const int row, const int col, const int zpos, const int nrows, const int ncols) {
+  return 1 + (zpos - 1)*ncols*nrows + (col - 1)*nrows + (row - 1);
 }
 
-//
-void ind2sub(const int index, const int nrows, const int ncols, int *i, int *j,
-             int *k) {
-  int tmp2;
-  double tmp = (double)index;
-  double a = nrows * ncols;
-  *k = std::ceil(tmp / a);
-  tmp2 = (int)tmp - (*k - 1) * nrows * ncols;
-  *j = 1 + std::floor((tmp2 - 1) / nrows);
-  *i = tmp2 - (*j - 1) * nrows;
+// for column major order linear index returning [k][j][i] component indexes (all indexes 1-based)
+void ind2sub(const int index, const int nrows, const int ncols, int *i, int *j, int *k) {
+  int nij = nrows * ncols;
+  int ij = (index - 1) % nij;
+  *k = 1 + (index - 1) / nij;
+  *j = 1 + ij / nrows;
+  *i = 1 + ij % nrows;
   assert(*i > 0);
   assert(*j > 0);
   assert(*k > 0);
@@ -53,7 +49,7 @@ std::vector<int> findIndices(const std::vector<int> &A, const int value) {
   std::vector<int> B;
   for (std::size_t i = 0; i < A.size(); i++) {
     if (A[i] == value) {
-      B.push_back(i);
+      B.push_back((int)i);
     }
   }
   return B;
@@ -101,6 +97,9 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
       //----- map triply indexed to singly indexed
       int inod = aidx[i] + 1; // add one to match 1-based indexing
 
+      // NOTE: 1-based indexing is used by ind2sub(), sub2ind(), and min/max clamping below.
+      //       could easily refactor to maintain 0-based indexing throughout.
+
       //----- calculate the i,j,k position
       int ipos, jpos, kpos;
       ind2sub(inod, dims[0], dims[1], &ipos, &jpos, &kpos);
@@ -126,7 +125,7 @@ std::vector<double> c_gradient_limit(const std::vector<int> &dims,
       // bottom right diagonal
       npos[8] = sub2ind(std::min(ipos +1 , dims[0]), std::min(jpos+1, dims[1]), kpos, dims[0], dims[1]);
 
-      for (std::size_t u = 0; u < 9; u++)
+      for (std::size_t u = 0; u < 9; u++) // subtract one to revert to 0-based indexing
         npos[u]--;
 
       int nod1 = npos[0];
@@ -176,7 +175,7 @@ py::array
 gradient_limit(py::array_t<int, py::array::c_style | py::array::forcecast> dims,
         const double elen, const double dfdx, const int imax,
         py::array_t<double, py::array::c_style | py::array::forcecast> ffun) {
-  int num_points = ffun.size();
+  int num_points = (int)ffun.size();
 
   std::vector<double> cffun(num_points);
   std::vector<int> cdims(3);
@@ -186,7 +185,7 @@ gradient_limit(py::array_t<int, py::array::c_style | py::array::forcecast> dims,
 
   std::vector<double> sffun = c_gradient_limit(cdims, elen, dfdx, imax, cffun);
 
-  ssize_t sodble = sizeof(double);
+  ssize_t sodble = (ssize_t)sizeof(double);
   std::vector<ssize_t> shape = {num_points, 1};
   std::vector<ssize_t> strides = {sodble, sodble};
 

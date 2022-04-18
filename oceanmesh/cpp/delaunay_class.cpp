@@ -1,3 +1,7 @@
+#if _MSC_VER
+# pragma warning(disable : 4267) // size_t to int warning on line 91
+#endif
+
 #include <pybind11/complex.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -19,6 +23,7 @@
 #include <CGAL/Triangulation_face_base_with_info_2.h>
 
 namespace py = pybind11;
+using py::ssize_t;
 
 using K = CGAL::Exact_predicates_inexact_constructions_kernel;
 using Vb = CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>;
