@@ -22,13 +22,13 @@ def get_poly_edges(poly):
         A 2D array of integers containing indexes into the `poly` array.
 
     """
-    ix = np.argwhere(np.isnan(poly[:, 0]))
-    ix = np.insert(ix, 0, 0)
+    ix = np.argwhere(np.isnan(poly[:, 0])).ravel()
+    ix = np.insert(ix, 0, -1)
 
     edges = []
     for s in range(len(ix) - 1):
-        col1 = np.arange(ix[s], ix[s + 1] - 1)
-        col2 = np.arange(ix[s] + 1, ix[s + 1])
+        col1 = np.arange(ix[s] + 1, ix[s + 1] - 2)
+        col2 = np.arange(ix[s] + 2, ix[s + 1] - 1)
         tmp = np.vstack((col1, col2)).T
         tmp = np.append(tmp, [[ix[s + 1] - 1, ix[s] + 1]], axis=0)
         edges.append(tmp)
