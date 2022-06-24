@@ -168,7 +168,7 @@ def distance_sizing_function(
     lon, lat = grid.create_grid()
     points = np.vstack((shoreline.inner, shoreline.mainland))
     # remove shoreline components outside the shoreline.boubox
-    boubox = np.nan_to_num(shoreline.boubox) # remove nan for inpoly2
+    boubox = np.nan_to_num(shoreline.boubox)  # remove nan for inpoly2
     e_box = edges.get_poly_edges(shoreline.boubox)
     mask = np.ones((grid.nx, grid.ny), dtype=bool)
     if len(points) > 0:
