@@ -61,10 +61,7 @@ def test_bathymetric_gradient_function():
     sdf = om.signed_distance_function(shoreline)
 
     edge_length1 = om.feature_sizing_function(
-        shoreline,
-        sdf,
-        max_edge_length=max_edge_length,
-        crs=EPSG,
+        shoreline, sdf, max_edge_length=max_edge_length, crs=EPSG,
     )
     edge_length2 = om.bathymetric_gradient_sizing_function(
         dem,

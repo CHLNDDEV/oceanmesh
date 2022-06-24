@@ -1,9 +1,11 @@
-import os
 import logging
+import os
+
 import fiona
 import geopandas as gpd
 import matplotlib.pyplot as pyplot
 import numpy
+
 import oceanmesh
 
 shp0 = os.path.join(os.path.dirname(__file__), "ocean.shp")
