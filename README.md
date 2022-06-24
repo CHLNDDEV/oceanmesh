@@ -139,11 +139,20 @@ Setting the region
 ```python
 import oceanmesh as om
 
-EPSG = 32619 # A Python int, dict, or str containing the CRS information (in this case UTM19N)
-bbox = (-70.29637, -43.56508, -69.65537, 43.88338) # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
-extent = om.Region(extent=bbox, crs=4326) # set the region (the bbox is given here in EPSG:4326 or WGS84)
-extent = extent.transform_to(EPSG) # Now I transform to the desired EPSG (UTM19N)
-print(extent.bbox) # now the extents are in the desired CRS and can be passed to various functions later on
+EPSG = 32619  # A Python int, dict, or str containing the CRS information (in this case UTM19N)
+bbox = (
+    -70.29637,
+    -43.56508,
+    -69.65537,
+    43.88338,
+)  # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
+extent = om.Region(
+    extent=bbox, crs=4326
+)  # set the region (the bbox is given here in EPSG:4326 or WGS84)
+extent = extent.transform_to(EPSG)  # Now I transform to the desired EPSG (UTM19N)
+print(
+    extent.bbox
+)  # now the extents are in the desired CRS and can be passed to various functions later on
 ```
 
 
@@ -209,9 +218,7 @@ fdem = "datasets/EastCoast.nc"
 # DEM is read into memory.
 # Note: the DEM will be projected to the desired CRS automatically.
 EPSG = 4326
-dem = om.DEM(
-    fdem, crs=EPSG
-)
+dem = om.DEM(fdem, crs=EPSG)
 dem.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -354,7 +361,9 @@ dem = om.DEM(fdem, crs=4326)
 shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
-edge_length2 = om.wavelength_sizing_function(dem, wl=100, period=12.42*3600) # use the M2-tide period (in seconds)
+edge_length2 = om.wavelength_sizing_function(
+    dem, wl=100, period=12.42 * 3600
+)  # use the M2-tide period (in seconds)
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
@@ -392,10 +401,7 @@ shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 
 edge_length1 = om.feature_sizing_function(
-    shoreline,
-    sdf,
-    max_edge_length=max_edge_length,
-    crs=EPSG,
+    shoreline, sdf, max_edge_length=max_edge_length, crs=EPSG,
 )
 edge_length2 = om.bathymetric_gradient_sizing_function(
     dem,
@@ -478,10 +484,7 @@ points, cells = om.laplacian2(points, cells)
 
 # write the mesh with meshio
 meshio.write_points_cells(
-    "new_york.vtk",
-    points,
-    [("triangle", cells)],
-    file_format="vtk",
+    "new_york.vtk", points, [("triangle", cells)], file_format="vtk",
 )
 ```
 
@@ -528,10 +531,7 @@ sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 # Control the element size transition
 # from coarse to fine with the kwargs prefixed with `blend`
-points, cells = om.generate_multiscale_mesh(
-    [sdf1, sdf2],
-    [el1, el2],
-)
+points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2],)
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = om.make_mesh_boundaries_traversable(points, cells)
 # remove singly connected elements (elements connected to only one other element)
