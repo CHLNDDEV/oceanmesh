@@ -168,8 +168,8 @@ def distance_sizing_function(
     lon, lat = grid.create_grid()
     points = np.vstack((shoreline.inner, shoreline.mainland))
     # remove shoreline components outside the shoreline.boubox
-    boubox = shoreline.boubox
-    e_box = edges.get_poly_edges(boubox)
+    boubox = np.nan_to_num(shoreline.boubox) # remove nan for inpoly2
+    e_box = edges.get_poly_edges(shoreline.boubox)
     mask = np.ones((grid.nx, grid.ny), dtype=bool)
     if len(points) > 0:
         try:
@@ -177,10 +177,11 @@ def distance_sizing_function(
             points = points[in_boubox]
 
             qpts = np.column_stack((lon.flatten(), lat.flatten()))
-            in_boubox, _ = inpoly2(qpts, shoreline.boubox, e_box)
+            in_boubox, _ = inpoly2(qpts, boubox, e_box)
             mask_indices = grid.find_indices(qpts[in_boubox, :], lon, lat)
             mask[mask_indices] = False
-        except (Exception,):
+        except Exception as e:
+            logger.error(e)
             ...
 
     # find location of points on grid

@@ -206,9 +206,9 @@ def signed_distance_function(shoreline, invert=False):
         # Initialize d with some positive number larger than geps
         dist = np.zeros(len(x)) + 1.0
         # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, boubox, e_box)
+        in_boubox, _ = inpoly2(x, np.nan_to_num(boubox), e_box)
         # are points inside the shoreline?
-        in_shoreline, _ = inpoly2(x, poly, e)
+        in_shoreline, _ = inpoly2(x, np.nan_to_num(poly), e)
         # compute dist to shoreline
         try:
             d, _ = tree.query(x, k=1, workers=-1)
