@@ -69,7 +69,13 @@ def _generate_samples(bbox, dim, N):
     _yrange = (bbox[2] - 0.01, bbox[3] + 0.01)
     if dim == 2:
         points.append(
-            [(random.uniform(*_xrange), random.uniform(*_yrange),) for i in range(N)]
+            [
+                (
+                    random.uniform(*_xrange),
+                    random.uniform(*_yrange),
+                )
+                for i in range(N)
+            ]
         )
     elif dim == 3:
         _zrange = (bbox[4] - 0.01, bbox[5] + 0.01)

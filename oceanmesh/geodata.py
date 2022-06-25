@@ -96,7 +96,9 @@ def _densify(poly, maxdiff, bbox, radius=0):
         else:
             ni = int(ni)
             icoords = _create_ranges(
-                np.array([lat[i], lon[i]]), np.array([lat[i + 1], lon[i + 1]]), ni + 2,
+                np.array([lat[i], lon[i]]),
+                np.array([lat[i + 1], lon[i + 1]]),
+                ni + 2,
             )
             latout[n : n + ni + 1] = icoords[0, : ni + 1]
             lonout[n : n + ni + 1] = icoords[1, : ni + 1]
@@ -135,7 +137,7 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     """
     logger.debug("Entering:_classify_shoreline")
 
-    _AREAMIN = minimum_area_mult * h0 ** 2
+    _AREAMIN = minimum_area_mult * h0**2
 
     if len(boubox) == 0:
         boubox = _create_boubox(bbox)
@@ -604,7 +606,12 @@ class Shoreline(Region):
 
         xmin, xmax, ymin, ymax = self.bbox
         rect = plt.Rectangle(
-            (xmin, ymin), xmax - xmin, ymax - ymin, fill=None, hatch="////", alpha=0.2,
+            (xmin, ymin),
+            xmax - xmin,
+            ymax - ymin,
+            fill=None,
+            hatch="////",
+            alpha=0.2,
         )
 
         border = 0.10 * (xmax - xmin)

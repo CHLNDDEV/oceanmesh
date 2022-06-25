@@ -28,8 +28,14 @@ def test_shoreline(boxes_h0):
 @pytest.mark.parametrize(
     "files_bboxes",
     [
-        (dfname, (-95.24, -95.21, 28.95, 29.00),),
-        (tfname, (-95.24, -95.21, 28.95, 29.00),),
+        (
+            dfname,
+            (-95.24, -95.21, 28.95, 29.00),
+        ),
+        (
+            tfname,
+            (-95.24, -95.21, 28.95, 29.00),
+        ),
     ],
 )
 def test_geodata(files_bboxes):

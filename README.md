@@ -401,7 +401,10 @@ shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 
 edge_length1 = om.feature_sizing_function(
-    shoreline, sdf, max_edge_length=max_edge_length, crs=EPSG,
+    shoreline,
+    sdf,
+    max_edge_length=max_edge_length,
+    crs=EPSG,
 )
 edge_length2 = om.bathymetric_gradient_sizing_function(
     dem,
@@ -484,7 +487,10 @@ points, cells = om.laplacian2(points, cells)
 
 # write the mesh with meshio
 meshio.write_points_cells(
-    "new_york.vtk", points, [("triangle", cells)], file_format="vtk",
+    "new_york.vtk",
+    points,
+    [("triangle", cells)],
+    file_format="vtk",
 )
 ```
 
@@ -531,7 +537,10 @@ sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
 # Control the element size transition
 # from coarse to fine with the kwargs prefixed with `blend`
-points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2],)
+points, cells = om.generate_multiscale_mesh(
+    [sdf1, sdf2],
+    [el1, el2],
+)
 # remove degenerate mesh faces and other common problems in the mesh
 points, cells = om.make_mesh_boundaries_traversable(points, cells)
 # remove singly connected elements (elements connected to only one other element)
