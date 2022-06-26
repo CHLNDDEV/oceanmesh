@@ -2,10 +2,11 @@ oceanmesh: Automatic coastal ocean mesh generation
 =====================================================
 :ocean: :cyclone:
 
-[![CircleCI](https://circleci.com/gh/circleci/circleci-docs.svg?style=svg)](https://circleci.com/gh/CHLNDDEV/oceanmesh)
+[![Tests](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml/badge.svg)](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml)
+
 [![CodeCov](https://codecov.io/gh/CHLNDDEV/oceanmesh/branch/master/graph/badge.svg)](https://codecov.io/gh/CHLNDDEV/oceanmesh)
 
-Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
+Coastal ocean mesh generation from vector and raster GIS data.
 
 Table of contents
 =================
