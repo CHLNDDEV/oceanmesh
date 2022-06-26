@@ -21,15 +21,17 @@ files = [
     "oceanmesh/cpp/fast_geometry.cpp",
 ]
 
-if os.name == 'nt':
-    home = os.environ['USERPROFILE'].replace('\\', '/')
-    vcpkg = f'{home}/OceanMesh/vcpkg/installed/x64-windows'
+if os.name == "nt":
+    home = os.environ["USERPROFILE"].replace("\\", "/")
+    vcpkg = f"{home}/OceanMesh/vcpkg/installed/x64-windows"
     ext_modules = [
-        Pybind11Extension(loc, [fi],
-                          include_dirs=[f'{vcpkg}/include'],
-                          extra_link_args=[f'/LIBPATH:{vcpkg}/lib'],
-                          libraries=["gmp", "mpfr"]
-                          )
+        Pybind11Extension(
+            loc,
+            [fi],
+            include_dirs=[f"{vcpkg}/include"],
+            extra_link_args=[f"/LIBPATH:{vcpkg}/lib"],
+            libraries=["gmp", "mpfr"],
+        )
         for fi, loc in zip(files, is_called)
     ]
 else:

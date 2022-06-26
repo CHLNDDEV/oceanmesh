@@ -11,5 +11,5 @@ clean:
 
 format:
 	isort -rc oceanmesh/ tests/*.py
-	black oceanmesh/ tests/*.py
+	black setup.py oceanmesh/ tests/*.py
 	blacken-docs README.md
