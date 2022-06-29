@@ -199,14 +199,14 @@ def signed_distance_function(shoreline, invert=False):
     )
     e = edges.get_poly_edges(poly)
 
-    boubox = shoreline.boubox
-    e_box = edges.get_poly_edges(boubox)
+    boubox = np.nan_to_num(shoreline.boubox)
+    e_box = edges.get_poly_edges(shoreline.boubox)
 
     def func(x):
         # Initialize d with some positive number larger than geps
         dist = np.zeros(len(x)) + 1.0
         # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, np.nan_to_num(boubox), e_box)
+        in_boubox, _ = inpoly2(x, boubox, e_box)
         # are points inside the shoreline?
         in_shoreline, _ = inpoly2(x, np.nan_to_num(poly), e)
         # compute dist to shoreline
