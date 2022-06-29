@@ -27,10 +27,12 @@ def get_poly_edges(poly):
 
     edges = []
     for s in range(len(ix) - 1):
-        col1 = np.arange(ix[s] + 1, ix[s + 1] - 2)
-        col2 = np.arange(ix[s] + 2, ix[s + 1] - 1)
+        ix_start = ix[s] + 1
+        ix_end = ix[s + 1] - 1
+        col1 = np.arange(ix_start, ix_end - 1)
+        col2 = np.arange(ix_start + 1, ix_end)
         tmp = np.vstack((col1, col2)).T
-        tmp = np.append(tmp, [[ix[s + 1] - 1, ix[s] + 1]], axis=0)
+        tmp = np.append(tmp, [[ix_end, ix_start]], axis=0)
         edges.append(tmp)
     return np.concatenate(edges, axis=0)
 
