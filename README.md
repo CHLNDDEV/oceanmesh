@@ -2,10 +2,11 @@ oceanmesh: Automatic coastal ocean mesh generation
 =====================================================
 :ocean: :cyclone:
 
-[![CircleCI](https://circleci.com/gh/circleci/circleci-docs.svg?style=svg)](https://circleci.com/gh/CHLNDDEV/oceanmesh)
+[![Tests](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml/badge.svg)](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml)
+
 [![CodeCov](https://codecov.io/gh/CHLNDDEV/oceanmesh/branch/master/graph/badge.svg)](https://codecov.io/gh/CHLNDDEV/oceanmesh)
 
-Coastal ocean mesh generation from ESRI Shapefiles and digital elevation models.
+Coastal ocean mesh generation from vector and raster GIS data.
 
 Table of contents
 =================
@@ -139,11 +140,20 @@ Setting the region
 ```python
 import oceanmesh as om
 
-EPSG = 32619 # A Python int, dict, or str containing the CRS information (in this case UTM19N)
-bbox = (-70.29637, -43.56508, -69.65537, 43.88338) # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
-extent = om.Region(extent=bbox, crs=4326) # set the region (the bbox is given here in EPSG:4326 or WGS84)
-extent = extent.transform_to(EPSG) # Now I transform to the desired EPSG (UTM19N)
-print(extent.bbox) # now the extents are in the desired CRS and can be passed to various functions later on
+EPSG = 32619  # A Python int, dict, or str containing the CRS information (in this case UTM19N)
+bbox = (
+    -70.29637,
+    -43.56508,
+    -69.65537,
+    43.88338,
+)  # the extent of the domain (can also be a multi-polygon delimited by rows of np.nan)
+extent = om.Region(
+    extent=bbox, crs=4326
+)  # set the region (the bbox is given here in EPSG:4326 or WGS84)
+extent = extent.transform_to(EPSG)  # Now I transform to the desired EPSG (UTM19N)
+print(
+    extent.bbox
+)  # now the extents are in the desired CRS and can be passed to various functions later on
 ```
 
 
@@ -209,9 +219,7 @@ fdem = "datasets/EastCoast.nc"
 # DEM is read into memory.
 # Note: the DEM will be projected to the desired CRS automatically.
 EPSG = 4326
-dem = om.DEM(
-    fdem, crs=EPSG
-)
+dem = om.DEM(fdem, crs=EPSG)
 dem.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -354,7 +362,9 @@ dem = om.DEM(fdem, crs=4326)
 shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
-edge_length2 = om.wavelength_sizing_function(dem, wl=100, period=12.42*3600) # use the M2-tide period (in seconds)
+edge_length2 = om.wavelength_sizing_function(
+    dem, wl=100, period=12.42 * 3600
+)  # use the M2-tide period (in seconds)
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)

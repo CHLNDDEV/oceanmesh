@@ -2,9 +2,11 @@ import os
 
 # DPZ patches for miniconda on windows using vcpkg to install cgal and dependencies
 #
-if os.name == 'nt':
-    assert os.environ.get('CGAL_BIN', None), "The environment variable CGAL_BIN must be set."
-    os.add_dll_directory(os.environ['CGAL_BIN'])
+if os.name == "nt":
+    assert os.environ.get(
+        "CGAL_BIN", None
+    ), "The environment variable CGAL_BIN must be set."
+    os.add_dll_directory(os.environ["CGAL_BIN"])
 
 from oceanmesh.clean import (
     delete_boundary_faces,
@@ -24,6 +26,7 @@ from oceanmesh.edgefx import (
     wavelength_sizing_function,
 )
 from oceanmesh.edges import draw_edges, get_poly_edges
+from oceanmesh.filterfx import filt2
 from oceanmesh.geodata import DEM, Shoreline
 from oceanmesh.grid import Grid, compute_minimum
 from oceanmesh.region import Region, warp_coordinates
@@ -32,12 +35,12 @@ from oceanmesh.signed_distance_function import (
     Domain,
     Intersection,
     Union,
-    create_circle,
     create_bbox,
+    create_circle,
     multiscale_signed_distance_function,
     signed_distance_function,
 )
-from oceanmesh.filterfx import filt2
+
 from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import generate_mesh, generate_multiscale_mesh, plot_mesh
 

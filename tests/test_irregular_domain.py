@@ -1,7 +1,9 @@
 import os
-import matplotlib.tri as tri
+
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import numpy as np
+
 import oceanmesh as om
 
 

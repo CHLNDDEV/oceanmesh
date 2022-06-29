@@ -424,6 +424,13 @@ def _is_overlapping(bbox1, bbox2):
     return x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
 
 
+def remove_dup(arr: np.ndarray):
+    """Remove duplicate element from np.ndarray"""
+    result = np.concatenate((arr[np.nonzero(np.diff(arr))[0]], [arr[-1]]))
+
+    return result
+
+
 class Shoreline(Region):
     """
     The shoreline class extends :class:`Region` to store data
@@ -567,6 +574,7 @@ class Shoreline(Region):
                     poly = np.asarray(g.coords)
                 else:  # a polygon
                     poly = np.asarray(g.exterior.coords.xy).T
+                poly = remove_dup(poly)
                 polys.append(np.row_stack((poly, delimiter)))
 
         if len(polys) == 0:
