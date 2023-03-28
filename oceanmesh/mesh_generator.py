@@ -89,7 +89,6 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
 
     return f"Wrote the mesh to {filepath}..."
 
-
 def write_to_t3s(points, cells, filepath):
     """
     Write mesh data to a t3s file.
@@ -166,6 +165,7 @@ def write_to_t3s(points, cells, filepath):
             )
 
     return f"Wrote the mesh to {filepath}..."
+
 
 
 def plot_mesh(points, cells, count=0, show=True, pause=999):
