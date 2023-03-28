@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import numpy as np
 import scipy.sparse as spsparse
-
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
@@ -17,7 +16,69 @@ from .signed_distance_function import Domain, multiscale_signed_distance_functio
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
+__all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh", "write_to_fort14"]
+
+
+def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanmesh"):
+    """
+    Write mesh data to a fort.14 file.
+
+    Parameters:
+    points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
+    cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
+    filepath (str): The file path to write the fort.14 file to.
+
+    Returns:
+    Message indicating file written.
+    """
+    logger.info("Exporting mesh to fort.14 file...")
+
+    # Calculate number of nodes and elements
+    npoints = np.size(points, 0)
+    nelements = np.size(cells, 0)
+
+    # Shift cell indices by 1 (fort.14 uses 1-based indexing)
+    cells += 1
+
+    # Open file for writing
+    with open(filepath, "w") as f_id:
+        # Write mesh name
+        f_id.write(f"{project_name} \n")
+
+        # Write number of nodes and elements
+        np.savetxt(
+            f_id,
+            np.column_stack((nelements, npoints)),
+            delimiter=" ",
+            fmt="%i",
+            newline="\n",
+        )
+
+        # Write node coordinates
+        for k in range(npoints):
+            np.savetxt(
+                f_id,
+                np.column_stack((k + 1, points[k][0], points[k][1], 0.0)),
+                delimiter=" ",
+                fmt="%i %f %f %f",
+                newline="\n",
+            )
+
+        # Write element connectivity
+        for k in range(nelements):
+            np.savetxt(
+                f_id,
+                np.column_stack((k + 1, 3, cells[k][0], cells[k][1], cells[k][2])),
+                delimiter=" ",
+                fmt="%i %i %i %i %i ",
+                newline="\n",
+            )
+
+        # Write zero for each boundary condition (4 total)
+        for k in range(4):
+            f_id.write("%d \n" % 0)
+
+    return f"Wrote the mesh to {filepath}..."
 
 
 def plot_mesh(points, cells, count=0, show=True, pause=999):

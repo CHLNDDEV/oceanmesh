@@ -157,7 +157,6 @@ def make_mesh_boundaries_traversable(vertices, faces, min_disconnected_area=0.05
     logger.info("Performing mesh cleaning operations...")
     # NB: when this inequality is not met, the mesh boundary is  not valid and non-manifold
     while len(boundary_edges) > len(boundary_vertices):
-
         faces = delete_exterior_faces(vertices, faces, min_disconnected_area)
         vertices, faces, _ = fix_mesh(vertices, faces, delete_unused=True)
 
