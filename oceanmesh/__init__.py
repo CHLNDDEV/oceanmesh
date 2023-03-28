@@ -29,7 +29,7 @@ from oceanmesh.signed_distance_function import (
 
 from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import (generate_mesh, generate_multiscale_mesh,
-                             plot_mesh, write_to_fort14)
+                             plot_mesh, write_to_fort14, write_to_t3s)
 
 __all__ = [
     "create_bbox",
@@ -72,6 +72,7 @@ __all__ = [
     "simp_qual",
     "warp_coordinates",
     "write_to_fort14",
+    "write_to_t3s",
 ]
 
 from . import _version
