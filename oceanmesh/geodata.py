@@ -7,7 +7,7 @@ import geopandas as gpd
 import matplotlib.path as mpltPath
 import numpy as np
 import numpy.linalg
-import rioxarray as rxr
+import rasterio
 import shapely.geometry
 import shapely.validation
 from pyproj import CRS
@@ -100,8 +100,8 @@ def _densify(poly, maxdiff, bbox, radius=0):
                 np.array([lat[i + 1], lon[i + 1]]),
                 ni + 2,
             )
-            latout[n : n + ni + 1] = icoords[0, : ni + 1]
-            lonout[n : n + ni + 1] = icoords[1, : ni + 1]
+            latout[n: n + ni + 1] = icoords[0, : ni + 1]
+            lonout[n: n + ni + 1] = icoords[1, : ni + 1]
             nstep = ni + 1
         n += nstep
 
@@ -407,7 +407,7 @@ def _is_path_ccw(_p):
     i = 0
     while (i + 3 < _p.shape[0]) and np.isclose(detO, 0.0):
         # Colinear vectors detected. Try again with next 3 indices.
-        O3[:, 1:] = _p[i : (i + 3), :]
+        O3[:, 1:] = _p[i: (i + 3), :]
         detO = np.linalg.det(O3)
         i += 1
 
@@ -493,7 +493,8 @@ class Shoreline(Region):
     @shp.setter
     def shp(self, filename):
         if not os.path.isfile(filename):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), filename)
         self.__shp = filename
 
     @property
@@ -668,7 +669,8 @@ class DEM(Grid):
                 topobathy = topobathy.astype(float)
 
             else:
-                raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
+                raise ValueError(
+                    f"DEM file {dem} has unknown format {ext[1:]}.")
 
             self.dem = dem
 
@@ -713,6 +715,18 @@ class DEM(Grid):
             xry = xry.rio.reproject(dst_crs)
         return xry
 
+    @staticmethod
+    def transform_raster(src, target_crs):
+        # Check the CRS of the raster
+        if src.crs != target_crs:
+            # Transform the raster to the target CRS
+            transformed = src.transform(target_crs)
+            # Update the metadata of the raster to reflect the new CRS
+            profile = src.profile
+            profile.update(transform=transformed, crs=target_crs)
+
+        return src
+
     def _read(self, filename, bbox, crs):
         """Read in a digitial elevation model from a NetCDF or GeoTif file"""
         logger.debug("Entering: DEM._read")
@@ -720,9 +734,10 @@ class DEM(Grid):
         msg = f"Reading in {filename}"
         logger.info(msg)
 
-        with rxr.open_rasterio(filename) as r:
+        # with rxr.open_rasterio(filename) as r:
+        with rasterio.open(filename) as src:
             # warp/reproject it if necessary
-            r = self.transform_to(r, crs)
+            r = self.transform_raster(src, crs)
             # entire DEM is read in
             if bbox is None:
                 bnds = r.rio.bounds()
