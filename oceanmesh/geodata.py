@@ -1,6 +1,7 @@
 import errno
 import logging
 import os
+from pathlib import Path
 
 import fiona
 import geopandas as gpd
@@ -8,9 +9,12 @@ import matplotlib.path as mpltPath
 import numpy as np
 import numpy.linalg
 import rasterio
+import rasterio.crs
+import rasterio.warp
 import shapely.geometry
 import shapely.validation
 from pyproj import CRS
+from rasterio.windows import from_bounds
 
 from .grid import Grid
 from .region import Region
@@ -100,8 +104,8 @@ def _densify(poly, maxdiff, bbox, radius=0):
                 np.array([lat[i + 1], lon[i + 1]]),
                 ni + 2,
             )
-            latout[n: n + ni + 1] = icoords[0, : ni + 1]
-            lonout[n: n + ni + 1] = icoords[1, : ni + 1]
+            latout[n : n + ni + 1] = icoords[0, : ni + 1]
+            lonout[n : n + ni + 1] = icoords[1, : ni + 1]
             nstep = ni + 1
         n += nstep
 
@@ -407,7 +411,7 @@ def _is_path_ccw(_p):
     i = 0
     while (i + 3 < _p.shape[0]) and np.isclose(detO, 0.0):
         # Colinear vectors detected. Try again with next 3 indices.
-        O3[:, 1:] = _p[i: (i + 3), :]
+        O3[:, 1:] = _p[i : (i + 3), :]
         detO = np.linalg.det(O3)
         i += 1
 
@@ -493,8 +497,7 @@ class Shoreline(Region):
     @shp.setter
     def shp(self, filename):
         if not os.path.isfile(filename):
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), filename)
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), filename)
         self.__shp = filename
 
     @property
@@ -661,93 +664,42 @@ class DEM(Grid):
     1001 points in both horizontal directions.
     """
 
-    def __init__(self, dem, crs=4326, bbox=None, nnodes=1000):
-        if type(dem) == str:
-            basename, ext = os.path.splitext(dem)
-            if ext.lower() in [".nc"] or [".tif"]:
-                topobathy, reso, bbox = self._read(dem, bbox, crs)
-                topobathy = topobathy.astype(float)
+    def __init__(self, dem, crs=None, bbox=None, nnodes=1000):
 
-            else:
-                raise ValueError(
-                    f"DEM file {dem} has unknown format {ext[1:]}.")
+        if isinstance(dem, str):
+            dem = Path(dem)
 
-            self.dem = dem
+        if dem.exists():
+            topobathy, reso, bbox = self._read(self, dem, bbox=bbox, crs=crs)
+        elif not dem.exists():
+            raise FileNotFoundError(f"File {dem} could not be located.")
 
-        elif type(dem) == numpy.ndarray:
-            topobathy = dem.astype(float)
-            reso = (
-                (bbox[1] - bbox[0]) / topobathy.shape[0],
-                (bbox[3] - bbox[2]) / topobathy.shape[1],
-            )
-            self.dem = "input"
-
-        elif callable(dem):  # if input is a function
-            dx = (bbox[1] - bbox[0]) / nnodes
-            lon, lat = (
-                np.arange(bbox[0], bbox[1] + dx, dx),
-                np.arange(bbox[2], bbox[3] + dx, dx),
-            )
-            reso = (dx, dx)
-            lon, lat = np.meshgrid(lon, lat)
-            topobathy = np.rot90(dem(lon, lat), 2)
-            self.dem = "function"
-
-        topobathy[abs(topobathy) > 1e5] = np.NaN
         super().__init__(
             bbox=bbox,
             crs=crs,
             dx=abs(reso[0]),
             dy=abs(reso[1]),
-            values=np.rot90(topobathy, 3),
+            values=topobathy,
         )
         super().build_interpolant()
 
-    @staticmethod
-    def transform_to(xry, dst_crs):
-        """Transform xarray ``xry`` representing
-        a raster to dst_crs
-        """
-        dst_crs = CRS.from_user_input(dst_crs)
-        if not xry.crs.equals(dst_crs):
-            msg = f"Reprojecting raster from {xry.crs} to {dst_crs}"
-            logger.debug(msg)
-            xry = xry.rio.reproject(dst_crs)
-        return xry
-
-    @staticmethod
-    def transform_raster(src, target_crs):
-        # Check the CRS of the raster
-        if src.crs != target_crs:
-            # Transform the raster to the target CRS
-            transformed = src.transform(target_crs)
-            # Update the metadata of the raster to reflect the new CRS
-            profile = src.profile
-            profile.update(transform=transformed, crs=target_crs)
-
-        return src
-
-    def _read(self, filename, bbox, crs):
-        """Read in a digitial elevation model from a NetCDF or GeoTif file"""
+    def _read(self, filename, bbox=None, crs=None):
+        """Read in a digital elevation model from a NetCDF or GeoTiff file"""
         logger.debug("Entering: DEM._read")
 
         msg = f"Reading in {filename}"
         logger.info(msg)
 
-        # with rxr.open_rasterio(filename) as r:
+        # Open the raster file using rasterio
         with rasterio.open(filename) as src:
-            # warp/reproject it if necessary
-            r = self.transform_raster(src, crs)
             # entire DEM is read in
             if bbox is None:
-                bnds = r.rio.bounds()
-                bbox = (bnds[0], bnds[2], bnds[1], bnds[3])
+                bbox = src.bounds
+                topobathy = src.read(1)
             else:
                 # then we clip the DEM to the box
-                r = r.rio.clip_box(
-                    minx=bbox[0], miny=bbox[2], maxx=bbox[1], maxy=bbox[3]
-                )
-            topobathy = r.data[0]
-
+                window = from_bounds(*bbox, transform=src.transform)
+                topobathy = src.read(1, window=window, masked=True)
+            topobathy = src.read(1, masked=True)
             logger.debug("Exiting: DEM._read")
-            return topobathy, r.rio.resolution(), bbox
+            return topobathy, src.res, bbox
