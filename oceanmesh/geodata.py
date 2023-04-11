@@ -30,9 +30,13 @@ __all__ = ["Shoreline", "DEM", "get_polygon_coordinates"]
 
 
 def get_polygon_coordinates(vector_file):
-    """Get the coordinates of a polygon from a vector file"""
-    gdf = gpd.read_file(vector_file)
-    polygon = np.array(gdf.iloc[0].geometry.exterior.coords.xy).T
+    """Get the coordinates of a polygon from a vector file or plain csv file"""
+    # detect if file is a shapefile or a geojson or geopackage 
+    if vector_file.endswith(    '.shp') or vector_file.endswith('.geojson') or vector_file.endswith('.gpkg'):
+        gdf = gpd.read_file(vector_file)
+        polygon = np.array(gdf.iloc[0].geometry.exterior.coords.xy).T
+    elif vector_file.endswith('.csv'):
+        polygon = np.loadtxt(vector_file, delimiter=",")
     return polygon
 
 
