@@ -16,7 +16,16 @@ __all__ = [
     "delete_faces_connected_to_one_face",
     "delete_boundary_faces",
     "laplacian2",
+    "mesh_clean"
 ]
+
+def mesh_clean(points, cells, min_qual=0.01):
+    '''Clean a mesh by removing bad quality elements and boundary faces.'''
+    points, cells = make_mesh_boundaries_traversable(points, cells)
+    points, cells = delete_faces_connected_to_one_face(points, cells)
+    points, cells = delete_boundary_faces(points, cells, min_qual=min_qual)
+    points, cells = laplacian2(points, cells)
+    return points, cells
 
 
 def _arg_sortrows(arr):

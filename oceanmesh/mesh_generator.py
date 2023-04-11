@@ -28,7 +28,7 @@ __all__ = [
 ]
 
 
-def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanmesh"):
+def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="Created with pyoceanmesh"):
     """
     Write mesh data to a fort.14 file.
 
@@ -46,6 +46,10 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
     npoints = np.size(points, 0)
     nelements = np.size(cells, 0)
 
+    if topobathymetry is not None: 
+        assert len(topobathymetry) == npoints, "topobathymetry must be the same length as points"
+    else:
+        topobathymetry = np.zeros((npoints,1))
     # Shift cell indices by 1 (fort.14 uses 1-based indexing)
     cells += 1
 
@@ -67,7 +71,7 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
         for k in range(npoints):
             np.savetxt(
                 f_id,
-                np.column_stack((k + 1, points[k][0], points[k][1], 0.0)),
+                np.column_stack((k + 1, points[k][0], points[k][1], topobathymetry[k])),
                 delimiter=" ",
                 fmt="%i %f %f %f",
                 newline="\n",

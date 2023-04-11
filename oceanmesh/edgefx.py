@@ -3,11 +3,14 @@ import logging
 import numpy as np
 import scipy.spatial
 import skfmm
+from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
 from skimage.morphology import medial_axis
-
-from _HamiltonJacobi import gradient_limit
+import matplotlib.pyplot as plt
+import math
+import time
 from oceanmesh.filterfx import filt2
+import geopandas as gpd
 
 from . import edges
 from .grid import Grid
@@ -18,6 +21,7 @@ __all__ = [
     "enforce_mesh_gradation",
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
+    "distance_sizing_from_point_function",
     "wavelength_sizing_function",
     "multiscale_sizing_function",
     "feature_sizing_function",
@@ -80,7 +84,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
+def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -127,12 +131,88 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs=4326):
     return grid_limited
 
 
+def distance_sizing_from_point_function(
+    point_file,
+    bbox, 
+    min_edge_length,
+    rate=0.15,
+    max_edge_length=None,
+    coarsen=1,
+    crs="EPSG:4326",
+):
+    '''Mesh sizes that vary linearly at `rate` from a point or points
+    contained within a geopandas dataframe.
+
+     Parameters
+    ----------
+    point_geodataframe: str
+        A vector file containing Points
+    bbox: list or tuple
+        A list or tuple of the form [xmin, xmax, ymin, ymax] denoting the bounding box of the 
+        domain
+    min_edge_length: float
+        The minimum edge length of the mesh
+    rate: float
+        The decimal percent mesh expansion rate from the point(s)
+    coarsen: int
+        The coarsening factor of the background grid
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
+
+    Returns
+    -------
+    grid: class:`Grid`
+        A grid ojbect with its values field gradient limited
+
+    """
+
+
+    '''
+    logger.info("Building a distance sizing from point function...")
+    point_geodataframe=gpd.read_file(point_file)
+    assert (
+        point_geodataframe.crs == crs
+    ), "The crs of the point geodataframe must match the crs of the grid"
+    # check all the geometries are points
+    assert all(
+        point_geodataframe.geometry.geom_type == "Point"
+    ), "All geometries must be points"
+    # Get the coordinates of the points from the geodataframe
+    points = np.array(point_geodataframe.geometry.apply(lambda x: (x.x, x.y)).tolist())
+    # Create a mesh size function grid
+    grid = Grid(
+        bbox=bbox,
+        dx=min_edge_length * coarsen,
+        hmin=min_edge_length,
+        extrapolate=True,
+        values=0.0,
+        crs=crs,
+    )
+    # create phi (-1 where point(s) intersect grid points -1 elsewhere 0)
+    phi = np.ones(shape=(grid.nx, grid.ny))
+    lon, lat = grid.create_grid()
+    # find location of points on grid
+    indices = grid.find_indices(points, lon, lat)
+    phi[indices] = -1.0
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        logger.info("0-level set not found in domain or grid malformed")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
+    tmp = min_edge_length + dis * rate
+    if max_edge_length is not None:
+        tmp[tmp > max_edge_length] = max_edge_length
+    grid.values = np.ma.array(tmp)
+    grid.build_interpolant()
+    return grid
+
+
 def distance_sizing_function(
     shoreline,
     rate=0.15,
     max_edge_length=None,
-    coarsen=1,
-    crs=4326,
+    coarsen=1.0,
+    crs="EPSG:4326",
 ):
     """Mesh sizes that vary linearly at `rate` from coordinates in `obj`:Shoreline
     Parameters
@@ -190,12 +270,11 @@ def distance_sizing_function(
     try:
         dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
     except ValueError:
-        logger.info("0-level set not found in domain")
+        logger.info("0-level set not found in domain or grid malformed")
         dis = np.zeros((grid.nx, grid.ny)) + 999
     tmp = shoreline.h0 + dis * rate
     if max_edge_length is not None:
         tmp[tmp > max_edge_length] = max_edge_length
-
     grid.values = np.ma.array(tmp, mask=mask)
     grid.build_interpolant()
     return grid
@@ -207,10 +286,10 @@ def bathymetric_gradient_sizing_function(
     filter_quotient=50,
     min_edge_length=None,
     max_edge_length=None,
-    min_elevation_cutoff=50,
-    type_of_filter="barotropic",
-    filter_cutoffs=None,
-    crs=4326,
+    min_elevation_cutoff=-50.0,
+    type_of_filter="lowpass",
+    filter_cutoffs=1000,
+    crs="EPSG:4326",
 ):
     """Mesh sizes that vary proportional to the bathymetryic gradient.
        Bathymetry is filtered by default using a fraction of the
@@ -226,9 +305,9 @@ def bathymetric_gradient_sizing_function(
     slope_parameter: integer, optional
         The number of nodes to resolve bathymetryic gradients
     min_edge_length: float, optional
-        The minimum allowable edge length in meters in the domain.
+        The minimum allowable edge length in CRS units in the domain.
     max_edge_length: float, optional
-        The maximum allowable edge length in meters in the domain.
+        The maximum allowable edge length in CRS units in the domain.
     min_elevation_cutoff: float, optional
         abs(elevation) < this value the sizing function is not calculated.
     type_of_filter: str, optional
@@ -250,40 +329,60 @@ def bathymetric_gradient_sizing_function(
 
     logger.info("Building a slope length sizing function...")
 
-    x, y = dem.create_grid()
-    tmpz = dem.eval((x, y))
+    xg, yg = dem.create_grid()
+    tmpz = dem.eval((xg, yg))
+
     grid = Grid(
         bbox=dem.bbox,
-        dx=dem.dx,
-        dy=dem.dy,
+        dx=min_edge_length / 2.0,
+        dy=min_edge_length / 2.0,
         extrapolate=True,
         values=0.0,
         crs=crs,
-        hmin=dem.dx,
+        hmin=min_edge_length,
     )
     logger.info(f"Enforcing a minimum elevation cutoff of {min_elevation_cutoff}")
-    tmpz[np.abs(tmpz) < min_elevation_cutoff] = min_elevation_cutoff
+    tmpz[tmpz >= min_elevation_cutoff] = min_elevation_cutoff
 
     dx, dy = dem.dx, dem.dy  # for gradient function
     nx, ny = dem.nx, dem.ny
-    grid_details = (nx, ny, dx, dy)
-    xg, yg = dem.create_grid()
     coords = (xg, yg)
 
+    if crs == "EPSG:4326":
+        mean_latitude = np.mean(dem.bbox[2:])
+        meters_per_degree = (
+            111132.92
+            - 559.82 * np.cos(2 * mean_latitude)
+            + 1.175 * np.cos(4 * mean_latitude)
+            - 0.0023 * np.cos(6 * mean_latitude)
+        )
+        dy *= meters_per_degree
+        dx *= meters_per_degree
+
+    grid_details = (nx, ny, dx, dy)
+
     if type_of_filter == "barotropic" and filter_quotient > 0:
+        # Temporary fix for barotropic filter not implemented correctly yet
+        assert ValueError("Barotropic filter not implemented yet")
+
         logger.info("Baroptropic Rossby radius calculation...")
         bs, time_taken = rossby_radius_filter(
             tmpz, dem.bbox, grid_details, coords, filter_quotient, True
         )
 
     elif type_of_filter == "baroclinic" and filter_quotient > 0:
+        # Temporary fix for barotropic filter not implemented correctly yet
+        assert ValueError("Baroclinic filter not implemented yet")
+
         logger.info("Baroclinic Rossby radius calculation...")
         bs, time_taken = rossby_radius_filter(
             tmpz, dem.bbox, grid_details, coords, filter_quotient, False
         )
     elif "pass" in type_of_filter:
-        logger.info("Using a {type_of_filter} filter...")
-        bs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
+        logger.info(f"Using a {type_of_filter} filter...")
+        tmpzs = filt2(tmpz, dy, filter_cutoffs, type_of_filter)
+        by, bx = _earth_gradient(tmpzs, dy, dx)
+        bs = np.sqrt(bx**2 + by**2)  # get overall slope
     else:
         msg = f"The type_of_filter {type_of_filter} is not known and remains off"
         logger.info(msg)
@@ -292,8 +391,12 @@ def bathymetric_gradient_sizing_function(
 
     # Calculating the slope function
     eps = 1e-10  # small number to approximate derivative
-    dp = np.maximum(1, tmpz)
-    grid.values = (2 * np.pi / slope_parameter) * dp / (bs + eps)
+    dp = np.clip(tmpz, None, -1)
+    grid.values = (2 * np.pi / slope_parameter) * np.abs(dp) / (bs + eps)
+
+    # Convert back to degrees from meters
+    if crs == "EPSG:4326":
+        grid.values /= meters_per_degree
 
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
@@ -339,8 +442,6 @@ def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
         the time taken to prform the filtering process.
 
     """
-    import math
-    import time
 
     x0, xN, y0, yN = bbox
 
@@ -462,7 +563,7 @@ def feature_sizing_function(
     min_edge_length=None,
     max_edge_length=None,
     plot=False,
-    crs=4326,
+    crs="EPSG:4326",
 ):
     """Mesh sizes vary proportional to the width or "thickness" of the shoreline
 
@@ -534,8 +635,6 @@ def feature_sizing_function(
     dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
 
     if plot:
-        import matplotlib.pyplot as plt
-
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))
         ax1.pcolor(lon, lat, skel, cmap=plt.cm.gray)
         ax1.axis("off")
@@ -579,7 +678,7 @@ def wavelength_sizing_function(
     max_edge_length=None,
     period=12.42 * 3600,  # M2 period in seconds
     gravity=9.81,  # m/s^2
-    crs=4326,
+    crs="EPSG:4326",
 ):
     """Mesh sizes that vary proportional to an estimate of the wavelength
        of a period (default M2-period)
@@ -712,7 +811,7 @@ def multiscale_sizing_function(
     return func, new_list_of_grids
 
 
-def _earth_gradient(F, dy, dx):
+def _earth_gradient(F, dx, dy):
     """
     earth_gradient(F,HX,HY), where F is 2-D, uses the spacing
     specified by HX and HY. HX and HY can either be scalars to specify

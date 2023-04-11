@@ -6,6 +6,7 @@ from pathlib import Path
 import fiona
 import geopandas as gpd
 import matplotlib.path as mpltPath
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg
 import rasterio
@@ -15,6 +16,7 @@ import shapely.geometry
 import shapely.validation
 from pyproj import CRS
 from rasterio.windows import from_bounds
+import matplotlib.pyplot as plt
 
 from .grid import Grid
 from .region import Region
@@ -24,7 +26,14 @@ fiona_version = fiona.__version__
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Shoreline", "DEM"]
+__all__ = ["Shoreline", "DEM", "get_polygon_coordinates"]
+
+
+def get_polygon_coordinates(vector_file):
+    """Get the coordinates of a polygon from a vector file"""
+    gdf = gpd.read_file(vector_file)
+    polygon = np.array(gdf.iloc[0].geometry.exterior.coords.xy).T
+    return polygon
 
 
 def _convert_to_array(lst):
@@ -452,7 +461,6 @@ class Shoreline(Region):
         minimum_area_mult=4.0,
         smooth_shoreline=True,
     ):
-
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:
@@ -600,8 +608,6 @@ class Shoreline(Region):
         ylim=None,
     ):
         """Visualize the content in the shp field of Shoreline"""
-        import matplotlib.pyplot as plt
-
         flg1, flg2 = False, False
 
         if ax is None:
@@ -659,47 +665,56 @@ class Shoreline(Region):
 class DEM(Grid):
     """
     Digitial elevation model read in from a tif or NetCDF file
-    parent class is a :class:`Grid` if dem input is a string. If dem is an array,
-    it assumes a uniform grid-spacing, while if a function is given, the grid will consist of
-    1001 points in both horizontal directions.
     """
 
-    def __init__(self, dem, crs=None, bbox=None, nnodes=1000):
-
+    def __init__(self, dem, crs=None, bbox=None):
         if isinstance(dem, str):
             dem = Path(dem)
 
         if dem.exists():
-            topobathy, reso, bbox = self._read(self, dem, bbox=bbox, crs=crs)
+            msg = f"Reading in {dem}"
+            logger.info(msg)
+            # Open the raster file using rasterio
+            with rasterio.open(dem) as src:
+                self.meta = src.meta
+                # entire DEM is read in
+                if bbox is None:
+                    bbox = src.bounds
+                    topobathy = src.read(1)
+                # then clip the DEM to the box
+                else:
+                    #
+                    _bbox = (bbox[0], bbox[2], bbox[1], bbox[3])
+                    window = from_bounds(*_bbox, transform=src.transform)
+                    topobathy = src.read(1, window=window, masked=True)
+                    topobathy = np.transpose(topobathy, (1, 0))
+
         elif not dem.exists():
             raise FileNotFoundError(f"File {dem} could not be located.")
-
         super().__init__(
             bbox=bbox,
             crs=crs,
-            dx=abs(reso[0]),
-            dy=abs(reso[1]),
+            dx=self.meta["transform"][0],
+            dy=abs(
+                self.meta["transform"][4]
+            ),  # Note: grid spacing in y-direction is negative.
             values=topobathy,
         )
         super().build_interpolant()
 
-    def _read(self, filename, bbox=None, crs=None):
-        """Read in a digital elevation model from a NetCDF or GeoTiff file"""
-        logger.debug("Entering: DEM._read")
-
-        msg = f"Reading in {filename}"
-        logger.info(msg)
-
-        # Open the raster file using rasterio
-        with rasterio.open(filename) as src:
-            # entire DEM is read in
-            if bbox is None:
-                bbox = src.bounds
-                topobathy = src.read(1)
-            else:
-                # then we clip the DEM to the box
-                window = from_bounds(*bbox, transform=src.transform)
-                topobathy = src.read(1, window=window, masked=True)
-            topobathy = src.read(1, masked=True)
-            logger.debug("Exiting: DEM._read")
-            return topobathy, src.res, bbox
+    def plot(self, coarsen=1, holding=False, **kwargs):
+        """Visualize the DEM"""
+        fig, ax, pc = super().plot(
+            coarsen=coarsen,
+            holding=True,
+            cmap="terrain",
+            **kwargs,
+        )
+        ax.set_xlabel("X-coordinate")
+        ax.set_ylabel("Y-coordinate")
+        ax.set_aspect("equal")
+        cbar = fig.colorbar(pc)
+        cbar.set_label("Topobathymetric depth (m)")
+        if not holding:
+            plt.show()
+        return fig, ax

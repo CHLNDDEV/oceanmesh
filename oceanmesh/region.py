@@ -30,8 +30,7 @@ class Region:
         if isinstance(self.bbox, tuple):
             return self.bbox
         else:
-            # min x, min y, max x, max y
-            return (self.bbox[:, 0].min(), self.bbox[:, 1].min(), self.bbox[:, 0].max(), self.bbox[:, 1].max())
+            return (self.bbox[:, 0].min(), self.bbox[:, 0].max(), self.bbox[:, 1].min(), self.bbox[:, 1].max())
 
     @bbox.setter
     def bbox(self, value):
