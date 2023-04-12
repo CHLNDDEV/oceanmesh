@@ -159,7 +159,7 @@ class Grid(Region):
 
         """
         x = self.x0y0[0] + np.arange(0, self.nx) * self.dx  # ascending monotonically
-        y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy) 
+        y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)             
         y  = y[::-1] # descending monotonically
         return x, y
 

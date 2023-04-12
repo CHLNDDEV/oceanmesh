@@ -601,6 +601,9 @@ class Shoreline(Region):
 
         # transform if necessary
         s = self.transform_to(gpd.read_file(self.shp), self.crs)
+        
+        # Explode to remove multipolygons or multi-linestrings (if present)
+        s = s.explode(index_parts=True)
 
         polys = []  # store polygons
 
@@ -614,8 +617,13 @@ class Shoreline(Region):
             if _is_overlapping(_bbox, bbox2):
                 if g.type == "LineString":
                     poly = np.asarray(g.coords)
-                else:  # a polygon
+                elif g.type=='Polygon':  # a polygon
                     poly = np.asarray(g.exterior.coords.xy).T
+                #elif g.type=='MultiPolygon': #a multiPolygon 
+                #    poly = [list(x.exterior.coords) for x in g.geoms]
+                else: 
+                    raise ValueError(f"Unsupported geometry type: {g.type}")
+
                 poly = remove_dup(poly)
                 polys.append(np.row_stack((poly, delimiter)))
 
