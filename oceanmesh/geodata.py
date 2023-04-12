@@ -26,7 +26,33 @@ fiona_version = fiona.__version__
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Shoreline", "DEM", "get_polygon_coordinates"]
+__all__ = ["Shoreline", "DEM", "get_polygon_coordinates", "create_circle_coords"]
+
+
+def create_circle_coords(radius, center, arc_res):
+    """
+    Given a radius and a center point, creates a numpy array of coordinates
+    defining a circle in a CCW direction with a given arc resolution.
+    
+    Parameters:
+    radius (float): the radius of the circle
+    center (tuple): the (x,y) coordinates of the center point
+    arc_res (float): the arc resolution of the circle in degrees
+    
+    Returns:
+    numpy.ndarray: an array of (x,y) coordinates defining the circle
+    """
+    # Define the angle array with the given arc resolution
+    angles = np.arange(0, 360 + arc_res, arc_res) * np.pi / 180
+
+    # Calculate the (x,y) coordinates of the circle points
+    x_coords = center[0] + radius * np.cos(angles)
+    y_coords = center[1] + radius * np.sin(angles)
+
+    # Combine the (x,y) coordinates into a single array
+    coords = np.column_stack((x_coords, y_coords))
+
+    return coords
 
 
 def get_polygon_coordinates(vector_file):

@@ -11,6 +11,7 @@ import math
 import time
 from oceanmesh.filterfx import filt2
 import geopandas as gpd
+from shapely.geometry import LineString, Point 
 
 from . import edges
 from .grid import Grid
@@ -22,6 +23,7 @@ __all__ = [
     "enforce_mesh_size_bounds_elevation",
     "distance_sizing_function",
     "distance_sizing_from_point_function",
+    "distance_sizing_from_line_function",
     "wavelength_sizing_function",
     "multiscale_sizing_function",
     "feature_sizing_function",
@@ -130,6 +132,100 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
     grid_limited.build_interpolant()
     return grid_limited
 
+def _line_to_points_array(line):
+    '''Convert a shapely LineString to a numpy array of points'''
+    return np.array(line.coords)
+
+def _resample_line(row,min_edge_length):
+    '''Resample a line to a minimum edge length'''
+    line = row['geometry']
+    resampled_points = []
+    distance = 0
+    while distance < line.length:
+        resampled_points.append(line.interpolate(distance))
+        distance += min_edge_length / 2
+    resampled_line = LineString(resampled_points)
+    row['geometry'] = resampled_line
+    return row
+
+
+def distance_sizing_from_line_function(line_file, 
+                                       bbox, 
+                                       min_edge_length,
+                                       rate=0.15,
+                                       max_edge_length=None,
+                                       coarsen=1,
+                                       crs="EPSG:4326",
+                                       ):
+    '''Mesh sizes that vary linearly at `rate` from a line or lines
+    
+    Parameters
+    ----------
+    line_file: str
+        Path to a vector file containing LineString(s)
+    bbox: list or tuple
+        A list or tuple of the form [xmin, xmax, ymin, ymax] denoting the bounding box of the 
+        domain
+    min_edge_length: float
+        The minimum edge length of the mesh
+    rate: float
+        The decimal percent mesh expansion rate from the line(s)
+    coarsen: int
+        The coarsening factor of the mesh
+    crs: A Python int, dict, or str, optional
+        The coordinate reference system
+    max_edge_length: float, optional
+        The maximum edge length of the mesh
+
+    Returns
+    -------
+    grid: class:`Grid`
+        A grid ojbect with its values field populated with distance sizing
+    '''
+    logger.info("Building a distance sizing from point function...")
+    line_geodataframe=gpd.read_file(line_file)
+    assert (
+        line_geodataframe.crs == crs
+    ), "The crs of the point geodataframe must match the crs of the grid"
+    # check all the geometries are points
+    assert all(
+        line_geodataframe.geometry.geom_type == "LineString"
+    ), "All geometries must be linestrings"
+
+    # Resample the spacing along the lines so that the minimum edge length is met
+    line_geodataframe = line_geodataframe.apply(_resample_line, axis=1,min_edge_length=min_edge_length)
+
+    # Get the coordinates of the linestrings from the geodataframe
+    # Convert all the LineStrings in the dataframe to arrays of points
+    points_list = [_line_to_points_array(line) for line in line_geodataframe['geometry']]
+    points = np.concatenate(points_list)
+
+    # Create a mesh size function grid
+    grid = Grid(
+        bbox=bbox,
+        dx=min_edge_length * coarsen,
+        hmin=min_edge_length,
+        extrapolate=True,
+        values=0.0,
+        crs=crs,
+    )
+    # create phi (-1 where point(s) intersect grid points -1 elsewhere 0)
+    phi = np.ones(shape=(grid.nx, grid.ny))
+    lon, lat = grid.create_grid()
+    # find location of points on grid
+    indices = grid.find_indices(points, lon, lat)
+    phi[indices] = -1.0
+    try:
+        dis = np.abs(skfmm.distance(phi, [grid.dx, grid.dy]))
+    except ValueError:
+        logger.info("0-level set not found in domain or grid malformed")
+        dis = np.zeros((grid.nx, grid.ny)) + 999
+    tmp = min_edge_length + dis * rate
+    if max_edge_length is not None:
+        tmp[tmp > max_edge_length] = max_edge_length
+    grid.values = np.ma.array(tmp)
+    grid.build_interpolant()
+    return grid
 
 def distance_sizing_from_point_function(
     point_file,
@@ -146,7 +242,7 @@ def distance_sizing_from_point_function(
      Parameters
     ----------
     point_geodataframe: str
-        A vector file containing Points
+        Path to a vector file containing Points
     bbox: list or tuple
         A list or tuple of the form [xmin, xmax, ymin, ymax] denoting the bounding box of the 
         domain
