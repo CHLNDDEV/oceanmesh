@@ -7,7 +7,7 @@ if os.name == "nt":
         "CGAL_BIN", None
     ), "The environment variable CGAL_BIN must be set."
     os.add_dll_directory(os.environ["CGAL_BIN"])
-
+from oceanmesh.boundary import identify_ocean_boundary_sections
 from oceanmesh.clean import (
     delete_boundary_faces,
     delete_exterior_faces,
@@ -75,7 +75,8 @@ __all__ = [
     "laplacian2",
     "delete_interior_faces",
     "delete_exterior_faces",
-    "mesh_clean" "SizeFunction",
+    "mesh_clean",
+    "SizeFunction",
     "Grid",
     "DEM",
     "Domain",
@@ -84,6 +85,7 @@ __all__ = [
     "Union",
     "Difference",
     "Intersection",
+    "identify_ocean_boundary_sections",
     "Shoreline",
     "generate_multiscale_mesh",
     "get_polygon_coordinates",

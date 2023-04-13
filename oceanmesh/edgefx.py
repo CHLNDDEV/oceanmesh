@@ -490,7 +490,7 @@ def bathymetric_gradient_sizing_function(
     dp = np.clip(tmpz, None, -1)
     grid.values = (2 * np.pi / slope_parameter) * np.abs(dp) / (bs + eps)
 
-    # Convert back to degrees from meters
+    # Convert back to degrees from meters (if geographic)
     if crs == "EPSG:4326":
         grid.values /= meters_per_degree
 
