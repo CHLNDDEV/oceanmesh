@@ -36,7 +36,9 @@ def identify_ocean_boundary_sections(
     --------
     boundary_sections : list
         List of tuples of the nodes that define the ocean boundary sections
-
+    boundary_nodes_unmasked : numpy.ndarray
+        Array of the nodes that define the ocean boundary the boundary sections index
+        into this array.
     """
     # Identify the nodes on the boundary of the mesh
     boundary_edges = get_winded_boundary_edges(cells)
@@ -97,4 +99,4 @@ def identify_ocean_boundary_sections(
             ax.set_title("Identified ocean boundary sections")
         plt.show()
 
-    return boundary_sections
+    return boundary_sections, boundary_nodes_unmasked
