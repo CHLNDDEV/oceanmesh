@@ -478,7 +478,29 @@ class Shoreline(Region):
     """
     The shoreline class extends :class:`Region` to store data
     that is later used to create signed distance functions to
-    represent irregular shoreline geometries.
+    represent irregular shoreline geometries. This data
+    is also involved in developing mesh sizing functions.
+    
+    Parameters
+    ----------
+    shp : str or pathlib.Path
+        Path to shapefile containing shoreline data.
+    bbox : tuple
+        Bounding box of the region of interest. The format is
+        (xmin, xmax, ymin, ymax).
+    h0 : float
+        Minimum grid spacing.
+    crs : str, optional
+        Coordinate reference system of the shapefile. Default is
+        'EPSG:4326'.
+    refinements : int, optional
+        Number of refinements to apply to the shoreline. Default is 1.
+    minimum_area_mult : float, optional
+        Minimum area multiplier. Default is 4.0. 
+        Note that features with area less than h0*minimum_area_mult 
+        are removed.
+    smooth_shoreline : bool, optional
+        Smooth the shoreline. Default is True.
     """
 
     def __init__(
@@ -486,11 +508,13 @@ class Shoreline(Region):
         shp,
         bbox,
         h0,
-        crs=4326,
+        crs='EPSG:4326',
         refinements=1,
         minimum_area_mult=4.0,
         smooth_shoreline=True,
     ):
+        if isinstance(shp, str):
+            shp = Path(shp)
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:
@@ -615,14 +639,12 @@ class Shoreline(Region):
             # extent of geometry
             bbox2 = [g.bounds[r] for r in re]
             if _is_overlapping(_bbox, bbox2):
-                if g.type == "LineString":
+                if g.geom_type == "LineString":
                     poly = np.asarray(g.coords)
-                elif g.type=='Polygon':  # a polygon
+                elif g.geom_type=='Polygon':  # a polygon
                     poly = np.asarray(g.exterior.coords.xy).T
-                #elif g.type=='MultiPolygon': #a multiPolygon 
-                #    poly = [list(x.exterior.coords) for x in g.geoms]
                 else: 
-                    raise ValueError(f"Unsupported geometry type: {g.type}")
+                    raise ValueError(f"Unsupported geometry type: {g.geom_type}")
 
                 poly = remove_dup(poly)
                 polys.append(np.row_stack((poly, delimiter)))
@@ -705,15 +727,37 @@ class DEM(Grid):
     Digitial elevation model read in from a tif or NetCDF file
     """
 
-    def __init__(self, dem, crs=None, bbox=None):
+    def __init__(self, dem, crs='EPSG:4326', bbox=None, extrapolate=False):
+        ''' Read in a DEM from a tif or NetCDF file for later use
+        in developing mesh sizing functions.
+        
+        Parameters
+        ----------
+        dem : str or pathlib.Path
+            Path to the DEM file
+        crs : str, optional
+            Coordinate reference system of the DEM, by default 'EPSG:4326'
+        bbox : oceanmesh.Region class 
+            Bounding box of the DEM, by default None. 
+            Note that if none, it will read in the entire DEM.
+        extrapolate : bool, optional
+            Extrapolate the DEM outside the bounding box, by default False
+        '''
+
         if isinstance(dem, str):
             dem = Path(dem)
+
+        if bbox is not None:
+            assert isinstance(bbox,Region), "bbox must be a Region class object"
+            # Extract the total bounds from the extent
+            bbox = bbox.total_bounds
 
         if dem.exists():
             msg = f"Reading in {dem}"
             logger.info(msg)
             # Open the raster file using rasterio
             with rasterio.open(dem) as src:
+                nodata_value = src.nodata
                 self.meta = src.meta
                 # entire DEM is read in
                 if bbox is None:
@@ -726,9 +770,12 @@ class DEM(Grid):
                     window = from_bounds(*_bbox, transform=src.transform)
                     topobathy = src.read(1, window=window, masked=True)
                     topobathy = np.transpose(topobathy, (1, 0))
-
+            # Ensure its a floating point array
+            topobathy = topobathy.astype(np.float64)
+            topobathy[topobathy==nodata_value] = np.nan # set the no-data value to nan
         elif not dem.exists():
             raise FileNotFoundError(f"File {dem} could not be located.")
+        
         super().__init__(
             bbox=bbox,
             crs=crs,
@@ -737,6 +784,7 @@ class DEM(Grid):
                 self.meta["transform"][4]
             ),  # Note: grid spacing in y-direction is negative.
             values=topobathy,
+            extrapolate=extrapolate, # user-specified potentially "dangerous" option
         )
         super().build_interpolant()
 

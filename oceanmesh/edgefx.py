@@ -681,7 +681,6 @@ def feature_sizing_function(
     crs: A Python int, dict, or str, optional
         The coordinate reference system
 
-
     Returns
     -------
     :class:`Grid` object

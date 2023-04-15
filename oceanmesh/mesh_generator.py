@@ -28,17 +28,23 @@ __all__ = [
 ]
 
 
-def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="Created with pyoceanmesh"):
+def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="Created with oceanmesh", flip_bathymetry=False):
     """
     Write mesh data to a fort.14 file.
 
     Parameters:
+    -----------
     points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
     cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
     filepath (str): The file path to write the fort.14 file to.
+    topobathymetry (numpy.ndarray): An array of shape (np, 1) containing the topobathymetry values at each node.
+    project_name (str): The name of the project to be written to the fort.14 file.
+    flip_bathymetry (bool): If True, the bathymetry values will be multiplied by -1.
 
     Returns:
+    --------
     Message indicating file written.
+
     """
     logger.info("Exporting mesh to fort.14 file...")
 
@@ -50,13 +56,20 @@ def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="
         assert len(topobathymetry) == npoints, "topobathymetry must be the same length as points"
     else:
         topobathymetry = np.zeros((npoints,1))
+    
+    if flip_bathymetry:
+        topobathymetry *= -1
+
     # Shift cell indices by 1 (fort.14 uses 1-based indexing)
     cells += 1
 
     # Open file for writing
     with open(filepath, "w") as f_id:
         # Write mesh name
-        f_id.write(f"{project_name} \n")
+        if flip_bathymetry:
+            f_id.write(f"{project_name} (bathymetry flipped) \n")
+        else:
+            f_id.write(f"{project_name} \n")
 
         # Write number of nodes and elements
         np.savetxt(
@@ -321,6 +334,8 @@ def generate_mesh(domain, edge_length, **kwargs):
             The minimum element size in the domain. REQUIRED IF NOT USING :class:`edge_length`
         * *plot* (``int``) --
             The mesh is visualized every `plot` meshing iterations.
+        * *pseudo_dt* (``float``) --
+            The pseudo time step for the meshing algorithm. (default==0.2)
 
     Returns
     -------
@@ -339,6 +354,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "min_edge_length": None,
         "plot": 999999,
         "lock_boundary": False,
+        "psuedo_dt":0.2, 
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -357,7 +373,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
-    delta_t = 0.20
+    delta_t = opts['psuedo_dt']
     geps = 1e-3 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
