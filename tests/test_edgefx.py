@@ -8,7 +8,6 @@ fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
 
 
 def test_edgefx():
-
     region1 = om.Region(extent=(-75.0, -70.0, 38.0, 42.0), crs=4326)
     shore1 = Shoreline(fname, region1.bbox, 0.01)
     shore1.plot()
@@ -46,7 +45,6 @@ def test_edgefx_elevation_bounds():
 
 
 def test_edgefx_medial_axis():
-
     region, min_edge_length = (
         om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=4326),
         0.01,

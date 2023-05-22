@@ -448,7 +448,6 @@ class Shoreline(Region):
         minimum_area_mult=4.0,
         smooth_shoreline=True,
     ):
-
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:

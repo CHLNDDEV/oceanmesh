@@ -1,11 +1,12 @@
+import datetime
 import logging
+import os
 import time
 
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import numpy as np
 import scipy.sparse as spsparse
-
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
@@ -13,11 +14,158 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["generate_mesh", "generate_multiscale_mesh", "plot_mesh"]
+__all__ = [
+    "generate_mesh",
+    "generate_multiscale_mesh",
+    "plot_mesh",
+    "write_to_fort14",
+    "write_to_t3s",
+]
+
+
+def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanmesh"):
+    """
+    Write mesh data to a fort.14 file.
+
+    Parameters:
+    points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
+    cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
+    filepath (str): The file path to write the fort.14 file to.
+
+    Returns:
+    Message indicating file written.
+    """
+    logger.info("Exporting mesh to fort.14 file...")
+
+    # Calculate number of nodes and elements
+    npoints = np.size(points, 0)
+    nelements = np.size(cells, 0)
+
+    # Shift cell indices by 1 (fort.14 uses 1-based indexing)
+    cells += 1
+
+    # Open file for writing
+    with open(filepath, "w") as f_id:
+        # Write mesh name
+        f_id.write(f"{project_name} \n")
+
+        # Write number of nodes and elements
+        np.savetxt(
+            f_id,
+            np.column_stack((nelements, npoints)),
+            delimiter=" ",
+            fmt="%i",
+            newline="\n",
+        )
+
+        # Write node coordinates
+        for k in range(npoints):
+            np.savetxt(
+                f_id,
+                np.column_stack((k + 1, points[k][0], points[k][1], 0.0)),
+                delimiter=" ",
+                fmt="%i %f %f %f",
+                newline="\n",
+            )
+
+        # Write element connectivity
+        for k in range(nelements):
+            np.savetxt(
+                f_id,
+                np.column_stack((k + 1, 3, cells[k][0], cells[k][1], cells[k][2])),
+                delimiter=" ",
+                fmt="%i %i %i %i %i ",
+                newline="\n",
+            )
+
+        # Write zero for each boundary condition (4 total)
+        for k in range(4):
+            f_id.write("%d \n" % 0)
+
+    return f"Wrote the mesh to {filepath}..."
+
+def write_to_t3s(points, cells, filepath):
+    """
+    Write mesh data to a t3s file.
+
+    Parameters:
+    points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
+    cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
+    filepath (str): The file path to write the t3s file to.
+
+    Returns:
+    None
+    """
+    logger.info("Exporting mesh to t3s file...")
+
+    # Calculate number of nodes and elements
+    npoints = np.size(points, 0)
+    nelements = np.size(cells, 0)
+
+    # Open file for writing
+    with open(filepath, "w") as f_id:
+        # Write header
+        today = datetime.datetime.now()
+        date_time = today.strftime("%m/%d/%Y, %H:%M:%S")
+        t3head = (
+            """#########################################################################\n
+        :FileType t3s ASCII EnSim 1.0\n
+        # Canadian Hydraulics Centre/National Research Council (c) 1998-2004\n
+        # DataType 2D T3 Scalar Mesh\n
+        #
+        :Application BlueKenue\n
+        :Version 3.0.44\n
+        :WrittenBy pyoceanmesh\n
+        :CreationDate """
+            + date_time
+            + """\n
+        #
+        #------------------------------------------------------------------------\n
+        #
+        :Projection Cartesian\n
+        :Ellipsoid Unknown\n
+        #
+        :NodeCount """
+            + str(npoints)
+            + """\n
+        :ElementCount """
+            + str(nelements)
+            + """\n
+        :ElementType T3\n
+        #
+        :EndHeader"""
+        )  # END HEADER
+        t3head = os.linesep.join([s for s in t3head.splitlines() if s])
+        f_id.write(t3head)
+        f_id.write("\n")
+
+        # Write node coordinates
+        for k in range(npoints):
+            np.savetxt(
+                f_id,
+                np.column_stack((points[k][0], points[k][1], 0.0)),
+                delimiter=" ",
+                fmt="%f %f %f",
+                newline="\n",
+            )
+
+        # Write element connectivity
+        for k in range(nelements):
+            np.savetxt(
+                f_id,
+                np.column_stack((cells[k][0], cells[k][1], cells[k][2])),
+                delimiter=" ",
+                fmt="%i %i %i ",
+                newline="\n",
+            )
+
+    return f"Wrote the mesh to {filepath}..."
+
 
 
 def plot_mesh(points, cells, count=0, show=True, pause=999):
