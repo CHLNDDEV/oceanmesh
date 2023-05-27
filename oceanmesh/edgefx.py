@@ -809,15 +809,32 @@ def wavelength_sizing_function(
     lon, lat = dem.create_grid()
     tmpz = dem.eval((lon, lat))
 
-    grav = 9.807
+    if crs == "EPSG:4326":
+        mean_latitude = np.mean(dem.bbox[2:])
+        meters_per_degree = (
+            111132.92
+            - 559.82 * np.cos(2 * mean_latitude)
+            + 1.175 * np.cos(4 * mean_latitude)
+            - 0.0023 * np.cos(6 * mean_latitude)
+        )
+
     grid = Grid(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
     tmpz[np.abs(tmpz) < 1] = 1
-    grid.values = period * np.sqrt(grav * np.abs(tmpz)) / wl
+    grid.values = period * np.sqrt(gravity * np.abs(tmpz)) / wl
+
+    # Convert back to degrees from meters (if geographic)
+    if crs == "EPSG:4326":
+        grid.values /= meters_per_degree
+
     if min_edgelength is None:
         min_edgelength = np.amin(grid.values)
+    else: 
+        grid.values[grid.values < min_edgelength] = min_edgelength
+
     grid.hmin = min_edgelength
+
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
 

@@ -53,7 +53,8 @@ from .fix_mesh import fix_mesh, simp_vol
 from .mesh_generator import (
     generate_mesh,
     generate_multiscale_mesh,
-    plot_mesh,
+    plot_mesh_connectivity,
+    plot_mesh_bathy,
     write_to_fort14,
     write_to_t3s,
 )
@@ -69,7 +70,8 @@ __all__ = [
     "delete_faces_connected_to_one_face",
     "distance_sizing_from_point_function",
     "distance_sizing_from_line_function",
-    "plot_mesh",
+    "plot_mesh_connectivity",
+    "plot_mesh_bathy",
     "make_mesh_boundaries_traversable",
     "enforce_mesh_size_bounds_elevation",
     "laplacian2",

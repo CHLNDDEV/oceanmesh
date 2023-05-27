@@ -788,6 +788,12 @@ class DEM(Grid):
         )
         super().build_interpolant()
 
+    def flip(self):
+        """Flip the DEM upside down"""
+        self.values = -self.values
+        super().build_interpolant()
+        return self
+
     def plot(self, coarsen=1, holding=False, **kwargs):
         """Visualize the DEM"""
         fig, ax, pc = super().plot(
