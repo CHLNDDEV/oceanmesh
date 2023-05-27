@@ -16,7 +16,59 @@ __all__ = [
     "delete_faces_connected_to_one_face",
     "delete_boundary_faces",
     "laplacian2",
+    "mesh_clean",
 ]
+
+
+def mesh_clean(
+    points,
+    cells,
+    min_element_qual=0.01,
+    min_percent_disconnected_area=0.05,
+    max_iter=20,
+    tol=0.01,
+    pfix=None,
+):
+    """Clean a mesh by removing bad quality elements and boundary faces.
+
+    Parameters
+    ----------
+    points : array-like
+        Mesh vertices.
+    cells : array-like
+        Mesh connectivity table.
+    min_element_qual : float, optional
+        Enforce Mmnimum quality of elements through deletion. The default is 0.01.
+    min_percent_disconnected_area : float, optional
+        Delete disconnected areas smaller than this threshold. The default is 0.05 x
+        the total area of the mesh.
+    max_iter : int, optional
+        Maximum number of iterations for the Laplacian smoothing. The default is 20.
+    tol : float, optional
+        Tolerance for the Laplacian smoothing. The default is 0.01. Laplacian terminates
+        after max_iter or when the maximum change in any vertex is less than tol.
+    pfix : array-like, optional
+        Indices of points to fix during the Laplacian smoothing. The default is None.
+
+    Returns
+    -------
+    points : array-like
+        Mesh vertices cleaned.
+    cells : array-like
+        Mesh connectivity table cleaned.
+
+    """
+    points, cells = make_mesh_boundaries_traversable(
+        points, cells, min_disconnected_area=min_percent_disconnected_area
+    )
+    points, cells = delete_boundary_faces(points, cells, min_qual=min_element_qual)
+    points, cells = delete_faces_connected_to_one_face(points, cells)
+    points, cells = laplacian2(points, cells, max_iter=max_iter, tol=tol, pfix=pfix)
+    points, cells = make_mesh_boundaries_traversable(
+        points, cells, min_disconnected_area=min_percent_disconnected_area
+    )
+    points, cells, _ = fix_mesh(points, cells, delete_unused=True)
+    return points, cells
 
 
 def _arg_sortrows(arr):
@@ -293,7 +345,7 @@ def _depth_first_search(faces):
     return nflag
 
 
-def delete_faces_connected_to_one_face(vertices, faces, max_iter=5):
+def delete_faces_connected_to_one_face(vertices, faces, max_iter=np.inf):
     """Iteratively deletes faces connected to one face.
 
     Parameters
@@ -304,7 +356,8 @@ def delete_faces_connected_to_one_face(vertices, faces, max_iter=5):
         The "uncleaned" mesh connectivity.
     max_iter: float, optional
         The number of iterations to repeatedly delete faces connected to one face
-
+        If the mesh is well-formed, this will converge in a finite
+        number of iterations. Default is np.inf.
 
     Returns
     -------

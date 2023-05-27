@@ -1,16 +1,21 @@
 import errno
 import logging
 import os
+from pathlib import Path
 
 import fiona
 import geopandas as gpd
 import matplotlib.path as mpltPath
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg
-import rioxarray as rxr
+import rasterio
+import rasterio.crs
+import rasterio.warp
 import shapely.geometry
 import shapely.validation
 from pyproj import CRS
+from rasterio.windows import from_bounds
 
 from .grid import Grid
 from .region import Region
@@ -20,7 +25,48 @@ fiona_version = fiona.__version__
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Shoreline", "DEM"]
+__all__ = ["Shoreline", "DEM", "get_polygon_coordinates", "create_circle_coords"]
+
+
+def create_circle_coords(radius, center, arc_res):
+    """
+    Given a radius and a center point, creates a numpy array of coordinates
+    defining a circle in a CCW direction with a given arc resolution.
+
+    Parameters:
+    radius (float): the radius of the circle
+    center (tuple): the (x,y) coordinates of the center point
+    arc_res (float): the arc resolution of the circle in degrees
+
+    Returns:
+    numpy.ndarray: an array of (x,y) coordinates defining the circle
+    """
+    # Define the angle array with the given arc resolution
+    angles = np.arange(0, 360 + arc_res, arc_res) * np.pi / 180
+
+    # Calculate the (x,y) coordinates of the circle points
+    x_coords = center[0] + radius * np.cos(angles)
+    y_coords = center[1] + radius * np.sin(angles)
+
+    # Combine the (x,y) coordinates into a single array
+    coords = np.column_stack((x_coords, y_coords))
+
+    return coords
+
+
+def get_polygon_coordinates(vector_file):
+    """Get the coordinates of a polygon from a vector file or plain csv file"""
+    # detect if file is a shapefile or a geojson or geopackage
+    if (
+        vector_file.endswith(".shp")
+        or vector_file.endswith(".geojson")
+        or vector_file.endswith(".gpkg")
+    ):
+        gdf = gpd.read_file(vector_file)
+        polygon = np.array(gdf.iloc[0].geometry.exterior.coords.xy).T
+    elif vector_file.endswith(".csv"):
+        polygon = np.loadtxt(vector_file, delimiter=",")
+    return polygon
 
 
 def _convert_to_array(lst):
@@ -435,7 +481,29 @@ class Shoreline(Region):
     """
     The shoreline class extends :class:`Region` to store data
     that is later used to create signed distance functions to
-    represent irregular shoreline geometries.
+    represent irregular shoreline geometries. This data
+    is also involved in developing mesh sizing functions.
+
+    Parameters
+    ----------
+    shp : str or pathlib.Path
+        Path to shapefile containing shoreline data.
+    bbox : tuple
+        Bounding box of the region of interest. The format is
+        (xmin, xmax, ymin, ymax).
+    h0 : float
+        Minimum grid spacing.
+    crs : str, optional
+        Coordinate reference system of the shapefile. Default is
+        'EPSG:4326'.
+    refinements : int, optional
+        Number of refinements to apply to the shoreline. Default is 1.
+    minimum_area_mult : float, optional
+        Minimum area multiplier. Default is 4.0.
+        Note that features with area less than h0*minimum_area_mult
+        are removed.
+    smooth_shoreline : bool, optional
+        Smooth the shoreline. Default is True.
     """
 
     def __init__(
@@ -443,11 +511,14 @@ class Shoreline(Region):
         shp,
         bbox,
         h0,
-        crs=4326,
+        crs="EPSG:4326",
         refinements=1,
         minimum_area_mult=4.0,
         smooth_shoreline=True,
     ):
+        if isinstance(shp, str):
+            shp = Path(shp)
+
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:
@@ -559,6 +630,9 @@ class Shoreline(Region):
         # transform if necessary
         s = self.transform_to(gpd.read_file(self.shp), self.crs)
 
+        # Explode to remove multipolygons or multi-linestrings (if present)
+        s = s.explode(index_parts=True)
+
         polys = []  # store polygons
 
         delimiter = np.empty((1, 2))
@@ -569,10 +643,13 @@ class Shoreline(Region):
             # extent of geometry
             bbox2 = [g.bounds[r] for r in re]
             if _is_overlapping(_bbox, bbox2):
-                if g.type == "LineString":
+                if g.geom_type == "LineString":
                     poly = np.asarray(g.coords)
-                else:  # a polygon
+                elif g.geom_type == "Polygon":  # a polygon
                     poly = np.asarray(g.exterior.coords.xy).T
+                else:
+                    raise ValueError(f"Unsupported geometry type: {g.geom_type}")
+
                 poly = remove_dup(poly)
                 polys.append(np.row_stack((poly, delimiter)))
 
@@ -595,8 +672,6 @@ class Shoreline(Region):
         ylim=None,
     ):
         """Visualize the content in the shp field of Shoreline"""
-        import matplotlib.pyplot as plt
-
         flg1, flg2 = False, False
 
         if ax is None:
@@ -654,84 +729,90 @@ class Shoreline(Region):
 class DEM(Grid):
     """
     Digitial elevation model read in from a tif or NetCDF file
-    parent class is a :class:`Grid` if dem input is a string. If dem is an array,
-    it assumes a uniform grid-spacing, while if a function is given, the grid will consist of
-    1001 points in both horizontal directions.
     """
 
-    def __init__(self, dem, crs=4326, bbox=None, nnodes=1000):
-        if type(dem) == str:
-            basename, ext = os.path.splitext(dem)
-            if ext.lower() in [".nc"] or [".tif"]:
-                topobathy, reso, bbox = self._read(dem, bbox, crs)
-                topobathy = topobathy.astype(float)
+    def __init__(self, dem, crs="EPSG:4326", bbox=None, extrapolate=False):
+        """Read in a DEM from a tif or NetCDF file for later use
+        in developing mesh sizing functions.
 
-            else:
-                raise ValueError(f"DEM file {dem} has unknown format {ext[1:]}.")
+        Parameters
+        ----------
+        dem : str or pathlib.Path
+            Path to the DEM file
+        crs : str, optional
+            Coordinate reference system of the DEM, by default 'EPSG:4326'
+        bbox : oceanmesh.Region class
+            Bounding box of the DEM, by default None.
+            Note that if none, it will read in the entire DEM.
+        extrapolate : bool, optional
+            Extrapolate the DEM outside the bounding box, by default False
+        """
 
-            self.dem = dem
+        if isinstance(dem, str):
+            dem = Path(dem)
 
-        elif type(dem) == numpy.ndarray:
-            topobathy = dem.astype(float)
-            reso = (
-                (bbox[1] - bbox[0]) / topobathy.shape[0],
-                (bbox[3] - bbox[2]) / topobathy.shape[1],
-            )
-            self.dem = "input"
+        if bbox is not None:
+            assert isinstance(bbox, Region), "bbox must be a Region class object"
+            # Extract the total bounds from the extent
+            bbox = bbox.total_bounds
 
-        elif callable(dem):  # if input is a function
-            dx = (bbox[1] - bbox[0]) / nnodes
-            lon, lat = (
-                np.arange(bbox[0], bbox[1] + dx, dx),
-                np.arange(bbox[2], bbox[3] + dx, dx),
-            )
-            reso = (dx, dx)
-            lon, lat = np.meshgrid(lon, lat)
-            topobathy = np.rot90(dem(lon, lat), 2)
-            self.dem = "function"
+        if dem.exists():
+            msg = f"Reading in {dem}"
+            logger.info(msg)
+            # Open the raster file using rasterio
+            with rasterio.open(dem) as src:
+                nodata_value = src.nodata
+                self.meta = src.meta
+                # entire DEM is read in
+                if bbox is None:
+                    bbox = src.bounds
+                    topobathy = src.read(1)
+                # then clip the DEM to the box
+                else:
+                    #
+                    _bbox = (bbox[0], bbox[2], bbox[1], bbox[3])
+                    window = from_bounds(*_bbox, transform=src.transform)
+                    topobathy = src.read(1, window=window, masked=True)
+                    topobathy = np.transpose(topobathy, (1, 0))
+            # Ensure its a floating point array
+            topobathy = topobathy.astype(np.float64)
+            topobathy[
+                topobathy == nodata_value
+            ] = np.nan  # set the no-data value to nan
+        elif not dem.exists():
+            raise FileNotFoundError(f"File {dem} could not be located.")
 
-        topobathy[abs(topobathy) > 1e5] = np.NaN
         super().__init__(
             bbox=bbox,
             crs=crs,
-            dx=abs(reso[0]),
-            dy=abs(reso[1]),
-            values=np.rot90(topobathy, 3),
+            dx=self.meta["transform"][0],
+            dy=abs(
+                self.meta["transform"][4]
+            ),  # Note: grid spacing in y-direction is negative.
+            values=topobathy,
+            extrapolate=extrapolate,  # user-specified potentially "dangerous" option
         )
         super().build_interpolant()
 
-    @staticmethod
-    def transform_to(xry, dst_crs):
-        """Transform xarray ``xry`` representing
-        a raster to dst_crs
-        """
-        dst_crs = CRS.from_user_input(dst_crs)
-        if not xry.crs.equals(dst_crs):
-            msg = f"Reprojecting raster from {xry.crs} to {dst_crs}"
-            logger.debug(msg)
-            xry = xry.rio.reproject(dst_crs)
-        return xry
+    def flip(self):
+        """Flip the DEM upside down"""
+        self.values = -self.values
+        super().build_interpolant()
+        return self
 
-    def _read(self, filename, bbox, crs):
-        """Read in a digitial elevation model from a NetCDF or GeoTif file"""
-        logger.debug("Entering: DEM._read")
-
-        msg = f"Reading in {filename}"
-        logger.info(msg)
-
-        with rxr.open_rasterio(filename) as r:
-            # warp/reproject it if necessary
-            r = self.transform_to(r, crs)
-            # entire DEM is read in
-            if bbox is None:
-                bnds = r.rio.bounds()
-                bbox = (bnds[0], bnds[2], bnds[1], bnds[3])
-            else:
-                # then we clip the DEM to the box
-                r = r.rio.clip_box(
-                    minx=bbox[0], miny=bbox[2], maxx=bbox[1], maxy=bbox[3]
-                )
-            topobathy = r.data[0]
-
-            logger.debug("Exiting: DEM._read")
-            return topobathy, r.rio.resolution(), bbox
+    def plot(self, coarsen=1, holding=False, **kwargs):
+        """Visualize the DEM"""
+        fig, ax, pc = super().plot(
+            coarsen=coarsen,
+            holding=True,
+            cmap="terrain",
+            **kwargs,
+        )
+        ax.set_xlabel("X-coordinate")
+        ax.set_ylabel("Y-coordinate")
+        ax.set_aspect("equal")
+        cbar = fig.colorbar(pc)
+        cbar.set_label("Topobathymetric depth (m)")
+        if not holding:
+            plt.show()
+        return fig, ax
