@@ -30,10 +30,7 @@ __all__ = [
 
 
 def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="Created with oceanmesh", flip_bathymetry=False):
-    """
-    Write mesh data to a fort.14 file.
-
-    Parameters:
+    Parameters
     -----------
     points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
     cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
@@ -44,8 +41,9 @@ def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="
 
     Returns:
     --------
-    Message indicating file written.
-
+    points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
+    cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
+    filepath (str): The file path to write the fort.14 file to.
     """
     logger.info("Exporting mesh to fort.14 file...")
 
@@ -86,6 +84,7 @@ def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="
             np.savetxt(
                 f_id,
                 np.column_stack((k + 1, points[k][0], points[k][1], topobathymetry[k])),
+
                 delimiter=" ",
                 fmt="%i %f %f %f",
                 newline="\n",

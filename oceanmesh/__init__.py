@@ -7,6 +7,7 @@ if os.name == "nt":
         "CGAL_BIN", None
     ), "The environment variable CGAL_BIN must be set."
     os.add_dll_directory(os.environ["CGAL_BIN"])
+
 from oceanmesh.boundary import identify_ocean_boundary_sections
 from oceanmesh.clean import (
     delete_boundary_faces,
@@ -28,6 +29,10 @@ from oceanmesh.edgefx import (
     multiscale_sizing_function,
     wavelength_sizing_function,
 )
+from oceanmesh.clean import (delete_boundary_faces, delete_exterior_faces,
+                             delete_faces_connected_to_one_face,
+                             delete_interior_faces, laplacian2,
+                             make_mesh_boundaries_traversable)
 from oceanmesh.edges import draw_edges, get_poly_edges
 from oceanmesh.filterfx import filt2
 from oceanmesh.geodata import (
@@ -39,17 +44,11 @@ from oceanmesh.geodata import (
 from oceanmesh.grid import Grid, compute_minimum
 from oceanmesh.region import Region, warp_coordinates
 from oceanmesh.signed_distance_function import (
-    Difference,
-    Domain,
-    Intersection,
-    Union,
-    create_bbox,
-    create_circle,
-    multiscale_signed_distance_function,
-    signed_distance_function,
-)
+    Difference, Domain, Intersection, Union, create_bbox, create_circle,
+    multiscale_signed_distance_function, signed_distance_function)
 
 from .fix_mesh import fix_mesh, simp_vol
+
 from .mesh_generator import (
     generate_mesh,
     generate_multiscale_mesh,

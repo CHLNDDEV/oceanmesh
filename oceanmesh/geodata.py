@@ -515,6 +515,7 @@ class Shoreline(Region):
     ):
         if isinstance(shp, str):
             shp = Path(shp)
+
         if isinstance(bbox, tuple):
             _boubox = np.asarray(_create_boubox(bbox))
         else:

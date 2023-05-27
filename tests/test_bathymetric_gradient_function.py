@@ -49,7 +49,6 @@ def mesh_plot(points, cells, plot_title=""):
 
 
 def test_bathymetric_gradient_function():
-
     EPSG = 4326  # EPSG:4326 or WGS84
     bbox = (-74.4, -73.4, 40.2, 41.2)
     extent = om.Region(extent=bbox, crs=EPSG)
