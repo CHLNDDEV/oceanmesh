@@ -14,8 +14,7 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import (Domain,
-                                       multiscale_signed_distance_function)
+from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 logger = logging.getLogger(__name__)
 
