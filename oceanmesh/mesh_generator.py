@@ -14,8 +14,7 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import (Domain,
-                                       multiscale_signed_distance_function)
+from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,15 @@ __all__ = [
 ]
 
 
-def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="Created with oceanmesh", flip_bathymetry=False):
+def write_to_fort14(
+    points,
+    cells,
+    filepath,
+    topobathymetry=None,
+    project_name="Created with oceanmesh",
+    flip_bathymetry=False,
+):
+    """
     Parameters
     -----------
     points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
@@ -51,11 +58,13 @@ def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="
     npoints = np.size(points, 0)
     nelements = np.size(cells, 0)
 
-    if topobathymetry is not None: 
-        assert len(topobathymetry) == npoints, "topobathymetry must be the same length as points"
+    if topobathymetry is not None:
+        assert (
+            len(topobathymetry) == npoints
+        ), "topobathymetry must be the same length as points"
     else:
-        topobathymetry = np.zeros((npoints,1))
-    
+        topobathymetry = np.zeros((npoints, 1))
+
     if flip_bathymetry:
         topobathymetry *= -1
 
@@ -84,7 +93,6 @@ def write_to_fort14(points, cells, filepath, topobathymetry=None, project_name="
             np.savetxt(
                 f_id,
                 np.column_stack((k + 1, points[k][0], points[k][1], topobathymetry[k])),
-
                 delimiter=" ",
                 fmt="%i %f %f %f",
                 newline="\n",
@@ -203,14 +211,13 @@ def plot_mesh_connectivity(points, cells, show_plot=True):
         The axes object containing the plot.
     """
     triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    fig, ax = plt.subplots(figsize=(10,10))
+    fig, ax = plt.subplots(figsize=(10, 10))
     ax.triplot(triang)
     ax.set_aspect("equal", adjustable="box")
     ax.set_title("Mesh connectivity")
     if show_plot:
         plt.show(block=False)
     return ax
-
 
 
 def plot_mesh_bathy(points, bathymetry, connectivity, show_plot=True):
@@ -236,30 +243,29 @@ def plot_mesh_bathy(points, bathymetry, connectivity, show_plot=True):
 
     """
     # Create a Triangulation object using the points and connectivity table
-    triangulation = tri.Triangulation(points[:,0], points[:,1], connectivity)
+    triangulation = tri.Triangulation(points[:, 0], points[:, 1], connectivity)
 
     # Create a figure and axis object
-    fig, ax = plt.subplots(figsize=(10,10))
+    fig, ax = plt.subplots(figsize=(10, 10))
 
     # Plot the tricontourf
-    tricontourf = ax.tricontourf(triangulation, bathymetry, cmap='jet')
+    tricontourf = ax.tricontourf(triangulation, bathymetry, cmap="jet")
 
     # Add colorbar
     cbar = plt.colorbar(tricontourf)
 
     # Set axis labels
-    ax.set_xlabel('Longitude')
-    ax.set_ylabel('Latitude')
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
 
     # Set title
-    ax.set_title('Mesh Topobathymetry')
+    ax.set_title("Mesh Topobathymetry")
 
     # Show the plot if requested
     if show_plot:
         plt.show()
 
     return ax
-
 
 
 def _parse_kwargs(kwargs):
@@ -421,7 +427,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "min_edge_length": None,
         "plot": 999999,
         "lock_boundary": False,
-        "pseudo_dt":0.2, 
+        "pseudo_dt": 0.2,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -440,7 +446,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
-    delta_t = opts['pseudo_dt']
+    delta_t = opts["pseudo_dt"]
     geps = 1e-3 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
