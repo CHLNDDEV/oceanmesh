@@ -24,13 +24,18 @@ class Region:
     @property
     def bbox(self):
         return self.__bbox
-    
+
     @property
-    def total_bounds(self): 
+    def total_bounds(self):
         if isinstance(self.bbox, tuple):
             return self.bbox
         else:
-            return (self.bbox[:, 0].min(), self.bbox[:, 0].max(), self.bbox[:, 1].min(), self.bbox[:, 1].max())
+            return (
+                self.bbox[:, 0].min(),
+                self.bbox[:, 0].max(),
+                self.bbox[:, 1].min(),
+                self.bbox[:, 1].max(),
+            )
 
     @bbox.setter
     def bbox(self, value):

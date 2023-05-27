@@ -91,7 +91,7 @@ class Grid(Region):
     ):
         super().__init__(bbox, crs)
         if dy is None:
-            dy = dx # equidistant grid in both x and y dirs if not passed
+            dy = dx  # equidistant grid in both x and y dirs if not passed
         self.bbox = bbox
         self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates (x,y)
         self.dx = dx
@@ -159,8 +159,8 @@ class Grid(Region):
 
         """
         x = self.x0y0[0] + np.arange(0, self.nx) * self.dx  # ascending monotonically
-        y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)             
-        y  = y[::-1] # descending monotonically
+        y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)
+        y = y[::-1]  # descending monotonically
         return x, y
 
     def create_grid(self):
@@ -208,12 +208,12 @@ class Grid(Region):
         """
         points = points[~np.isnan(points[:, 0]), :]
         if tree is None:
-           lonlat = np.column_stack((lon.ravel(), lat.ravel()))
-           tree = scipy.spatial.cKDTree(lonlat)
+            lonlat = np.column_stack((lon.ravel(), lat.ravel()))
+            tree = scipy.spatial.cKDTree(lonlat)
         try:
-           dist, idx = tree.query(points, k=k, workers=-1)
+            dist, idx = tree.query(points, k=k, workers=-1)
         except (Exception,):
-           dist, idx = tree.query(points, k=k, n_jobs=-1)
+            dist, idx = tree.query(points, k=k, n_jobs=-1)
         return np.unravel_index(idx, lon.shape)
 
     def interpolate_to(self, grid2, method="nearest"):
@@ -362,12 +362,12 @@ class Grid(Region):
             handle to axis of plot.
 
         """
-        _xg,_yg=self.create_grid()
+        _xg, _yg = self.create_grid()
         fig, ax = plt.subplots()
         ax.axis("equal")
         pc = ax.pcolor(
-            _xg[::coarsen,::coarsen],
-            _yg[::coarsen,::coarsen],
+            _xg[::coarsen, ::coarsen],
+            _yg[::coarsen, ::coarsen],
             self.values[::coarsen, ::coarsen],
             **kwargs,
         )

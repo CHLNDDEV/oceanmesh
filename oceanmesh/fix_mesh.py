@@ -1,5 +1,6 @@
 import numpy as np
-import warnings 
+import warnings
+
 
 def simp_qual(p, t):
     """Simplex quality radius-to-edge ratio
@@ -18,7 +19,7 @@ def simp_qual(p, t):
     a = length(p[t[:, 1]] - p[t[:, 0]])
     b = length(p[t[:, 2]] - p[t[:, 0]])
     c = length(p[t[:, 2]] - p[t[:, 1]])
-    # Suppress Runtime warnings here because we know that mult1/denom1 can be negative 
+    # Suppress Runtime warnings here because we know that mult1/denom1 can be negative
     # as the mesh is being cleaned
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
