@@ -14,7 +14,8 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import Domain, multiscale_signed_distance_function
+from .signed_distance_function import (Domain,
+                                       multiscale_signed_distance_function)
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ def plot_mesh_bathy(points, bathymetry, connectivity, show_plot=True):
     tricontourf = ax.tricontourf(triangulation, bathymetry, cmap="jet")
 
     # Add colorbar
-    cbar = plt.colorbar(tricontourf)
+    plt.colorbar(tricontourf)
 
     # Set axis labels
     ax.set_xlabel("Longitude")

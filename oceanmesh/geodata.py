@@ -16,7 +16,6 @@ import shapely.geometry
 import shapely.validation
 from pyproj import CRS
 from rasterio.windows import from_bounds
-import matplotlib.pyplot as plt
 
 from .grid import Grid
 from .region import Region
