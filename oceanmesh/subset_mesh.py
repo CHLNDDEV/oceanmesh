@@ -10,7 +10,7 @@ from itertools import islice
 import geopandas as gpd
 from shapely.geometry import Polygon, LineString, Point
 
-def readNodes_fort14(f14):
+def readNodes(f14):
     ''' Fx to read the fort.14 nodes as a pandas dataframe
         Parameters
             f14: string
@@ -41,7 +41,7 @@ def pointsInsidePoly(points, polygon):
     cont = p.contains_points(points)
     return cont
     
-def fort14togdf(filein, epsgIn, epsgOut):
+def meshtogdf(filein, epsgIn, epsgOut):
     ''' Write adcirc mesh from fort.14 file as GeoDataFrame and extract centroid of each element. 
         Used in the downscaling process
         Parameters:
@@ -223,7 +223,7 @@ def subsetMeshGdf(gdf, nodes, mask):
 
     return newMeshTri, meshSub, dfNodesOutside
 
-def readBCfort14(f14, nodes, epsg = 4326):
+def readOrgBC(f14, nodes, epsg = 4326):
     ''' Reads boundary condition information from a fort.14 file and returns a GeoDataFrame and a dictionary
         Parameters
             f14: string
@@ -544,7 +544,7 @@ def writeFort14(f14in, f14out, gdfNew, dfNodesNew, dfOpen, dctClosed, mainlandBC
             for n in dctClosed[k]:
                 fout.write(f'{n + 1}\n')
 
-def fort14Subset(f14in, subDomain, f14out, epsg=4326, sortBy=1, rev=False):
+def subsetMesh(f14in, subDomain, f14out, epsg=4326, sortBy=1, rev=False):
     ''' Create a subset of a fort.14 using a shapefile as mask to remove the elements. 
         The code has some limitations since it has been tested only with meshes of the entire North Atlantic.
             - It is assumed that the ocean BC goes first in the fort.14
@@ -578,14 +578,14 @@ def fort14Subset(f14in, subDomain, f14out, epsg=4326, sortBy=1, rev=False):
     '''
     time00 = time.time()
     ## read nodes
-    print('fort.14 subset process started')
-    dfNodes = readNodes_fort14(f14in)
+    print('Mesh subset process started')
+    dfNodes = readNodes(f14in)
     time01 = time.time()
-    print(f'  fort.14 nodes as DataFrame: {(time01 - time00)/60:0.2f} min')
+    print(f'  Mesh nodes as DataFrame: {(time01 - time00)/60:0.2f} min')
     ## convert fort.14 to gdf
-    gdfMesh = fort14togdf(f14in, epsg, epsg)
+    gdfMesh = meshtogdf(f14in, epsg, epsg)
     time02 = time.time()
-    print(f'  fort.14 to GeoDataFrame: {(time02 - time01)/60:0.2f} min')
+    print(f'  Mesh to GeoDataFrame: {(time02 - time01)/60:0.2f} min')
     ## read sub domain
     subDom = readSubDomain(subDomain, epsg)
     time03 = time.time()
@@ -595,7 +595,7 @@ def fort14Subset(f14in, subDomain, f14out, epsg=4326, sortBy=1, rev=False):
     time04 = time.time()
     print(f'  Subset mesh: {(time04 - time03)/60:0.2f} min')
     ## read fort.14 boundary conditions
-    gdfbc, _ = readBCfort14(f14in, dfNodes)
+    gdfbc, _ = readOrgBC(f14in, dfNodes)
     time05 = time.time()
     print(f'  Read fort.14 boundary conditions: {(time05 - time04)/60:0.2f} min')
     ## update the ocean boundary condition to match numbering of the subset mesh
