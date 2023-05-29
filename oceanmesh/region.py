@@ -17,6 +17,10 @@ class Region:
         self.bbox = extent
         self._crs = CRS.from_user_input(crs)
 
+    @staticmethod
+    def from_geodataframe(gdf):
+        return Region(np.array(gdf.geometry[0].exterior.xy).T, gdf.crs)
+
     @property
     def crs(self):
         return self._crs

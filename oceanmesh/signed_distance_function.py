@@ -172,7 +172,8 @@ class Difference(Domain):
 
 
 def signed_distance_function(shoreline, invert=False):
-    """Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
+    """
+    Takes a :class:`Shoreline` object containing linear segments representing meshing boundaries
     and calculates a signed distance function with it under the assumption that all polygons are closed.
     The returned function `func` becomes a bound method of the :class:`Domain` and is queried during
     mesh generation several times per iteration.

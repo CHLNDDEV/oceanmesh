@@ -519,18 +519,24 @@ class Shoreline(Region):
         if isinstance(shp, str):
             shp = Path(shp)
 
-        if isinstance(bbox, tuple):
-            _boubox = np.asarray(_create_boubox(bbox))
+        if isinstance(bbox, (tuple, Region)):
+            _bbox = bbox.bbox.copy()
+            _boubox = np.asarray(_create_boubox(_bbox))
         else:
+            # Assume passed an array.
+            # raise value error 
             _boubox = np.asarray(bbox)
-            if not _is_path_ccw(_boubox):
-                _boubox = np.flipud(_boubox)
-            bbox = (
-                np.nanmin(_boubox[:, 0]),
-                np.nanmax(_boubox[:, 0]),
-                np.nanmin(_boubox[:, 1]),
-                np.nanmax(_boubox[:, 1]),
-            )
+
+        if not _is_path_ccw(_boubox):
+            _boubox = np.flipud(_boubox)
+
+        # ensure that this is a tuple with extents and 4 elements
+        bbox = (
+            np.nanmin(_boubox[:, 0]),
+            np.nanmax(_boubox[:, 0]),
+            np.nanmin(_boubox[:, 1]),
+            np.nanmax(_boubox[:, 1]),
+        )
 
         super().__init__(bbox, crs)
 
@@ -677,6 +683,19 @@ class Shoreline(Region):
         if ax is None:
             fig, ax = plt.subplots()
             ax.axis("equal")
+
+        # check if no mainland, inner or outer polygons
+        # draw 
+        if len(self.mainland) == 0 and len(self.inner) == 0 and len(self.outer) == 0:
+            # annotate a message on the axis 
+            ax.annotate(
+                "No data to plot",
+                xy=(0.5, 0.5),
+                xycoords="axes fraction",
+                fontsize=20,
+                ha="center",
+                va="center",
+            )
 
         if len(self.mainland) != 0:
             (line1,) = ax.plot(self.mainland[:, 0], self.mainland[:, 1], "k-")
