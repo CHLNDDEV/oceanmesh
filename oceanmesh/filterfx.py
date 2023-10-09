@@ -26,7 +26,7 @@ def filt2(Z, res, wl, filtertype, truncate=2.6):
 highpass, bandpass or bandstop"
         )
 
-    if hasattr(wl, "__len__") and type(wl) != np.ndarray:
+    if hasattr(wl, "__len__") and ~isinstance(type(wl), np.ndarray):
         wl = np.array(wl)
 
     if np.any(wl <= 2 * res):
@@ -37,12 +37,12 @@ highpass, bandpass or bandstop"
 
     if filtertype in ["bandpass", "bandstop"]:
         if hasattr(wl, "__len__"):
-            if len(wl) != 2 or type(wl) == str:
+            if len(wl) != 2 or isinstance(wl, str):
                 raise TypeError(
                     "Wavelength lambda must be a two-element array for a bandpass filter."
                 )
 
-            if type(wl) != np.array:
+            if ~isinstance(wl, np.ndarray):
                 wl = np.array(list(wl))
 
         else:

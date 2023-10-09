@@ -38,7 +38,14 @@ from oceanmesh.geodata import (
     get_polygon_coordinates,
 )
 from oceanmesh.grid import Grid, compute_minimum
-from oceanmesh.region import Region, warp_coordinates
+from oceanmesh.region import (
+    Region,
+    stereo_to_3d,
+    to_3d,
+    to_lat_lon,
+    to_stereo,
+    warp_coordinates,
+)
 from oceanmesh.signed_distance_function import (
     Difference,
     Domain,
@@ -63,6 +70,10 @@ from .mesh_generator import (
 __all__ = [
     "create_bbox",
     "Region",
+    "stereo_to_3d",
+    "to_lat_lon",
+    "to_3d",
+    "to_stereo",
     "compute_minimum",
     "create_circle_coords",
     "bathymetric_gradient_sizing_function",

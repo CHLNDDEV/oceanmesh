@@ -18,7 +18,7 @@ from pyproj import CRS
 from rasterio.windows import from_bounds
 
 from .grid import Grid
-from .region import Region
+from .region import Region, to_lat_lon
 
 nan = np.nan
 fiona_version = fiona.__version__
@@ -174,7 +174,7 @@ def _poly_length(coords):
     return np.sum(np.sqrt(np.sum(np.diff(c, axis=0) ** 2, axis=1)))
 
 
-def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
+def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult, stereo=False):
     """Classify segments in numpy.array `polys` as either `inner` or `mainland`.
     (1) The `mainland` category contains segments that are not totally enclosed inside the `bbox`.
     (2) The `inner` (i.e., islands) category contains segments totally enclosed inside the `bbox`.
@@ -210,13 +210,21 @@ def _classify_shoreline(bbox, boubox, polys, h0, minimum_area_mult):
     for poly in polyL:
         pSGP = shapely.geometry.Polygon(poly[:-2, :])
         if bSGP.contains(pSGP):
-            if pSGP.area >= _AREAMIN:
+            if stereo:
+                # convert back to Lat/Lon coordinates for the area testing
+                area = _poly_area(*to_lat_lon(*np.asarray(pSGP.exterior.xy)))
+            else:
+                area = pSGP.area
+            if area >= _AREAMIN:
                 inner = np.append(inner, poly, axis=0)
         elif pSGP.overlaps(bSGP):
-            # Append polygon segment to mainland
-            mainland = np.vstack((mainland, poly))
-            # Clip polygon segment from boubox and regenerate path
-            bSGP = bSGP.difference(pSGP)
+            if stereo:
+                bSGP = pSGP
+            else:
+                bSGP = bSGP.difference(pSGP)
+                # Append polygon segment to mainland
+                mainland = np.vstack((mainland, poly))
+                # Clip polygon segment from boubox and regenerate path
 
     out = np.empty(shape=(0, 2))
 
@@ -515,6 +523,7 @@ class Shoreline(Region):
         refinements=1,
         minimum_area_mult=4.0,
         smooth_shoreline=True,
+        stereo=False,
     ):
         if isinstance(shp, str):
             shp = Path(shp)
@@ -545,6 +554,15 @@ class Shoreline(Region):
 
         polys = self._read()
 
+        if stereo:
+            self.bbox = (
+                np.nanmin(polys[:, 0] * 0.99),
+                np.nanmax(polys[:, 0] * 0.99),
+                np.nanmin(polys[:, 1] * 0.99),
+                np.nanmax(polys[:, 1] * 0.99),
+            )  # so that bbox overlaps with antarctica > and becomes the outer boundary
+            self.boubox = np.asarray(_create_boubox(self.bbox))
+
         if smooth_shoreline:
             polys = _smooth_shoreline(polys, self.refinements)
 
@@ -553,7 +571,7 @@ class Shoreline(Region):
         polys = _clip_polys(polys, self.bbox)
 
         self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult
+            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, stereo
         )
 
     @property
@@ -789,7 +807,7 @@ class DEM(Grid):
             dy=abs(
                 self.meta["transform"][4]
             ),  # Note: grid spacing in y-direction is negative.
-            values=topobathy,
+            values=np.fliplr(topobathy),  # we need to flip the array
             extrapolate=extrapolate,  # user-specified potentially "dangerous" option
         )
         super().build_interpolant()
