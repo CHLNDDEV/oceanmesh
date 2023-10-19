@@ -14,31 +14,43 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .signed_distance_function import (Domain,
-                                       multiscale_signed_distance_function)
+from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "generate_mesh",
     "generate_multiscale_mesh",
-    "plot_mesh",
+    "plot_mesh_connectivity",
+    "plot_mesh_bathy",
     "write_to_fort14",
     "write_to_t3s",
 ]
 
 
-def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanmesh"):
+def write_to_fort14(
+    points,
+    cells,
+    filepath,
+    topobathymetry=None,
+    project_name="Created with oceanmesh",
+    flip_bathymetry=False,
+):
     """
-    Write mesh data to a fort.14 file.
-
-    Parameters:
+    Parameters
+    -----------
     points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
     cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
     filepath (str): The file path to write the fort.14 file to.
+    topobathymetry (numpy.ndarray): An array of shape (np, 1) containing the topobathymetry values at each node.
+    project_name (str): The name of the project to be written to the fort.14 file.
+    flip_bathymetry (bool): If True, the bathymetry values will be multiplied by -1.
 
     Returns:
-    Message indicating file written.
+    --------
+    points (numpy.ndarray): An array of shape (np, 2) containing the x, y coordinates of the mesh nodes.
+    cells (numpy.ndarray): An array of shape (ne, 3) containing the indices of the nodes that form each mesh element.
+    filepath (str): The file path to write the fort.14 file to.
     """
     logger.info("Exporting mesh to fort.14 file...")
 
@@ -46,13 +58,26 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
     npoints = np.size(points, 0)
     nelements = np.size(cells, 0)
 
+    if topobathymetry is not None:
+        assert (
+            len(topobathymetry) == npoints
+        ), "topobathymetry must be the same length as points"
+    else:
+        topobathymetry = np.zeros((npoints, 1))
+
+    if flip_bathymetry:
+        topobathymetry *= -1
+
     # Shift cell indices by 1 (fort.14 uses 1-based indexing)
     cells += 1
 
     # Open file for writing
     with open(filepath, "w") as f_id:
         # Write mesh name
-        f_id.write(f"{project_name} \n")
+        if flip_bathymetry:
+            f_id.write(f"{project_name} (bathymetry flipped) \n")
+        else:
+            f_id.write(f"{project_name} \n")
 
         # Write number of nodes and elements
         np.savetxt(
@@ -67,7 +92,7 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
         for k in range(npoints):
             np.savetxt(
                 f_id,
-                np.column_stack((k + 1, points[k][0], points[k][1], 0.0)),
+                np.column_stack((k + 1, points[k][0], points[k][1], topobathymetry[k])),
                 delimiter=" ",
                 fmt="%i %f %f %f",
                 newline="\n",
@@ -88,6 +113,7 @@ def write_to_fort14(points, cells, filepath, project_name="Created with pyoceanm
             f_id.write("%d \n" % 0)
 
     return f"Wrote the mesh to {filepath}..."
+
 
 def write_to_t3s(points, cells, filepath):
     """
@@ -167,16 +193,79 @@ def write_to_t3s(points, cells, filepath):
     return f"Wrote the mesh to {filepath}..."
 
 
+def plot_mesh_connectivity(points, cells, show_plot=True):
+    """Plot the mesh connectivity using matplotlib's triplot function.
+    Parameters
+    ----------
 
-def plot_mesh(points, cells, count=0, show=True, pause=999):
+    points : numpy.ndarray
+        A 2D array containing the x and y coordinates of the points.
+    cells : numpy.ndarray
+        A 2D array containing the connectivity information for the triangles.
+    show_plot : bool, optional
+        Whether to show the plot or not. The default is True.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object containing the plot.
+    """
     triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    plt.triplot(triang)
-    plt.gca().set_aspect("equal", adjustable="box")
-    plt.title(f"Iteration {count}")
-    if show:
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.triplot(triang)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_title("Mesh connectivity")
+    if show_plot:
         plt.show(block=False)
-        plt.pause(pause)
-        plt.close()
+    return ax
+
+
+def plot_mesh_bathy(points, bathymetry, connectivity, show_plot=True):
+    """
+    Create a tricontourf plot of the bathymetry data associated with the points,
+    using the triangle connectivity information to plot the contours.
+
+    Parameters
+    ----------
+    points : numpy.ndarray
+        A 2D array containing the x and y coordinates of the points.
+    bathymetry : numpy.ndarray
+        A 1D array containing the bathymetry values associated with each point.
+    connectivity : numpy.ndarray
+        A 2D array containing the connectivity information for the triangles.
+    show_plot : bool, optional
+        Whether or not to display the plot. Default is True.
+
+    Returns
+    -------
+    matplotlib.axes._subplots.AxesSubplot
+        The axis handle of the plot.
+
+    """
+    # Create a Triangulation object using the points and connectivity table
+    triangulation = tri.Triangulation(points[:, 0], points[:, 1], connectivity)
+
+    # Create a figure and axis object
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Plot the tricontourf
+    tricontourf = ax.tricontourf(triangulation, bathymetry, cmap="jet")
+
+    # Add colorbar
+    plt.colorbar(tricontourf)
+
+    # Set axis labels
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Set title
+    ax.set_title("Mesh Topobathymetry")
+
+    # Show the plot if requested
+    if show_plot:
+        plt.show()
+
+    return ax
 
 
 def _parse_kwargs(kwargs):
@@ -197,6 +286,7 @@ def _parse_kwargs(kwargs):
             "blend_max_iter",
             "blend_nnear",
             "lock_boundary",
+            "pseudo_dt",
         }:
             pass
         else:
@@ -317,6 +407,8 @@ def generate_mesh(domain, edge_length, **kwargs):
             The minimum element size in the domain. REQUIRED IF NOT USING :class:`edge_length`
         * *plot* (``int``) --
             The mesh is visualized every `plot` meshing iterations.
+        * *pseudo_dt* (``float``) --
+            The pseudo time step for the meshing algorithm. (default==0.2)
 
     Returns
     -------
@@ -335,6 +427,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "min_edge_length": None,
         "plot": 999999,
         "lock_boundary": False,
+        "pseudo_dt": 0.2,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -353,7 +446,7 @@ def generate_mesh(domain, edge_length, **kwargs):
     np.random.seed(opts["seed"])
 
     L0mult = 1 + 0.4 / 2 ** (_DIM - 1)
-    delta_t = 0.20
+    delta_t = opts["pseudo_dt"]
     geps = 1e-3 * np.amin(min_edge_length)
     deps = np.sqrt(np.finfo(np.double).eps)  # * np.amin(min_edge_length)
 
@@ -395,6 +488,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             _, bpts = _external_topology(p, t)
             for fix in bpts:
                 ifix.append(_closest_node(fix, p))
+                nfix = len(ifix)
 
         # Find where pfix went
         if nfix > 0:
@@ -405,10 +499,6 @@ def generate_mesh(domain, edge_length, **kwargs):
 
         # Remove points outside the domain
         t = _remove_triangles_outside(p, t, fd, geps)
-
-        # plot the mesh every count iterations
-        if count % opts["plot"] == 0 and count != 0:
-            plot_mesh(p, t, count=count, pause=5.0)
 
         # Number of iterations reached, stop.
         if count == (max_iter - 1):

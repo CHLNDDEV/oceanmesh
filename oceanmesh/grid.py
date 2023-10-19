@@ -80,13 +80,20 @@ class Grid(Region):
     """
 
     def __init__(
-        self, bbox, dx, dy=None, crs=4326, hmin=None, values=None, extrapolate=False
+        self,
+        bbox,
+        dx,
+        dy=None,
+        crs="EPSG:4326",
+        hmin=None,
+        values=None,
+        extrapolate=False,
     ):
         super().__init__(bbox, crs)
         if dy is None:
-            dy = dx
+            dy = dx  # equidistant grid in both x and y dirs if not passed
         self.bbox = bbox
-        self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates
+        self.x0y0 = (bbox[0], bbox[2])  # bottom left corner coordinates (x,y)
         self.dx = dx
         self.dy = dy
         self.nx = None  # int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
@@ -102,8 +109,8 @@ class Grid(Region):
 
     @dx.setter
     def dx(self, value):
-        if value < 0:
-            raise ValueError("Grid spacing (dx) must be > 0.0")
+        if value <= 0:
+            raise ValueError("Grid spacing (dx) must be >= 0.0")
         self.__dx = value
 
     @property
@@ -112,8 +119,8 @@ class Grid(Region):
 
     @dy.setter
     def dy(self, value):
-        if value < 0:
-            raise ValueError("Grid spacing (dy) must be > 0.0")
+        if value <= 0:
+            raise ValueError("Grid spacing (dy) must be >= 0.0")
         self.__dy = value
 
     @property
@@ -124,7 +131,7 @@ class Grid(Region):
     def values(self, data):
         if np.isscalar(data):
             self.nx = int((self.bbox[1] - self.bbox[0]) // self.dx) + 1
-            self.ny = int((self.bbox[3] - self.bbox[2]) // self.dy) + 1
+            self.ny = abs(int((self.bbox[3] - self.bbox[2]) // self.dy) + 1)
             data = np.tile(data, (self.nx, self.ny))
         self.__values = data
         self.nx, self.ny = data.shape
@@ -151,8 +158,9 @@ class Grid(Region):
             1D array contain data with `float` type of y-coordinates.
 
         """
-        x = self.x0y0[0] + np.arange(0, self.nx) * self.dx
-        y = self.x0y0[1] + np.arange(0, self.ny) * self.dy
+        x = self.x0y0[0] + np.arange(0, self.nx) * self.dx  # ascending monotonically
+        y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)
+        y = y[::-1]  # descending monotonically
         return x, y
 
     def create_grid(self):
@@ -171,7 +179,8 @@ class Grid(Region):
 
         """
         x, y = self.create_vectors()
-        return np.meshgrid(x, y, sparse=False, indexing="ij")
+        xg, yg = np.meshgrid(x, y, indexing="ij")
+        return xg, yg
 
     def find_indices(self, points, lon, lat, tree=None, k=1):
         """Find linear indices `indices` into a 2D array such that they
@@ -334,63 +343,39 @@ class Grid(Region):
 
     def plot(
         self,
-        hold=False,
-        show=True,
-        vmin=None,
-        vmax=None,
+        holding=False,
         coarsen=1,
-        xlabel=None,
-        ylabel=None,
-        title=None,
-        cbarlabel=None,
-        filename=None,
-        xlim=None,
-        ylim=None,
+        plot_colorbar=False,
+        **kwargs,
     ):
         """Visualize the values in :obj:`Grid`
 
         Parameters
         ----------
-        hold: boolean, optional
+        holding: boolean, optional
             Whether to create a new plot axis.
 
         Returns
         -------
+        fig:
         ax: handle to axis of plot
             handle to axis of plot.
 
         """
-
-        x, y = self.create_grid()
-
+        _xg, _yg = self.create_grid()
         fig, ax = plt.subplots()
         ax.axis("equal")
-        c = ax.pcolormesh(
-            x[:-1:coarsen, :-1:coarsen],
-            y[:-1:coarsen, :-1:coarsen],
-            self.values[:-1:coarsen, :-1:coarsen],
-            vmin=vmin,
-            vmax=vmax,
-            shading="auto",
+        pc = ax.pcolor(
+            _xg[::coarsen, ::coarsen],
+            _yg[::coarsen, ::coarsen],
+            self.values[::coarsen, ::coarsen],
+            **kwargs,
         )
-        cbar = plt.colorbar(c)
-        if cbarlabel is not None:
-            cbar.set_label(cbarlabel)
-        if xlabel is not None:
-            ax.set_xlabel(xlabel)
-        if ylabel is not None:
-            ax.set_ylabel(ylabel)
-        if title is not None:
-            ax.set_title(title)
-        if xlim is not None:
-            ax.set_xlim(xlim)
-        if ylim is not None:
-            ax.set_ylim(ylim)
-        if hold is False and show:
+        if plot_colorbar:
+            fig.colorbar(pc)
+        if holding is False:
             plt.show()
-        if filename is not None:
-            plt.savefig(filename)
-        return ax
+        return fig, ax, pc
 
     def build_interpolant(self):
         """Construct a RegularGriddedInterpolant sizing function stores it as
