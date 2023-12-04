@@ -256,7 +256,7 @@ def delete_exterior_faces(vertices, faces, min_disconnected_area):
         # Delete where nflag == 1 from tmp t1 mesh
         t1 = np.delete(t1, nflag == 1, axis=0)
         logger.info(
-            f"ACCEPTED: Deleting {int(np.sum(nflag==0))} faces outside the main mesh"
+            f"ACCEPTED: Deleting {int(np.sum(nflag == 0))} faces outside the main mesh"
         )
 
         # Calculate the remaining area

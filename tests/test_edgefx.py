@@ -22,17 +22,17 @@ def test_edgefx():
 
     dis3 = dis2.interpolate_to(dis1)
 
-    ax = dis3.plot(hold=True)
+    fig, ax, pc = dis3.plot(holding=True)
     shore1.plot(ax)
 
     dis4 = dis1.interpolate_to(dis2)
-    ax = dis4.plot(hold=False)
+    _, ax, _ = dis4.plot(holding=False)
 
 
 def test_edgefx_elevation_bounds():
     region = om.Region(extent=(-95.24, -95.21, 28.95, 29.00), crs=4326)
 
-    dem = om.DEM(dfname, bbox=region.bbox, crs=4326)
+    dem = om.DEM(dfname, bbox=region, crs=4326)
 
     sho = om.Shoreline(fname, region.bbox, 0.005)
     sho.plot()
@@ -57,12 +57,12 @@ def test_edgefx_medial_axis():
     edge_length = om.feature_sizing_function(
         shoreline, sdf, max_edge_length=5e3, plot=True
     )
-    ax = edge_length.plot(
+    fig, ax, pc = edge_length.plot(
         xlabel="longitude (WGS84 degrees)",
         ylabel="latitude (WGS84 degrees)",
         title="Feature sizing function",
         cbarlabel="mesh size (degrees)",
-        hold=True,
+        holding=True,
         xlim=[-74.3, -73.8],
         ylim=[40.3, 40.8],
     )

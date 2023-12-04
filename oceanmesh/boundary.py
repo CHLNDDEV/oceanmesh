@@ -1,7 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
 from .edges import get_winded_boundary_edges
-import matplotlib.pyplot as plt
 
 __all__ = ["identify_ocean_boundary_sections"]
 

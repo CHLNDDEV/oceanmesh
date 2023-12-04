@@ -43,5 +43,5 @@ def test_geodata(files_bboxes):
 
     f, bbox = files_bboxes
     region = Region(bbox, 4326)
-    dem = DEM(f, bbox=region.bbox, crs=region.crs)
+    dem = DEM(f, bbox=region, crs=region.crs)
     assert isinstance(dem, DEM), "DEM class did not form"

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 import numpy as np
 import scipy.sparse as spsparse
+
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
 
@@ -14,6 +15,7 @@ from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
+from .region import to_lat_lon, to_stereo
 from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 logger = logging.getLogger(__name__)
@@ -287,6 +289,7 @@ def _parse_kwargs(kwargs):
             "blend_nnear",
             "lock_boundary",
             "pseudo_dt",
+            "stereo",
         }:
             pass
         else:
@@ -400,7 +403,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         * *max_iter* (``float``) --
             Maximum number of meshing iterations. (default==50)
         * *seed* (``float`` or ``int``) --
-            Psuedo-random seed to initialize meshing points. (default==0)
+            Pseudo-random seed to initialize meshing points. (default==0)
         * *pfix* (`array-like`) --
             An array of points to constrain in the mesh. (default==None)
         * *min_edge_length* (``float``) --
@@ -409,6 +412,8 @@ def generate_mesh(domain, edge_length, **kwargs):
             The mesh is visualized every `plot` meshing iterations.
         * *pseudo_dt* (``float``) --
             The pseudo time step for the meshing algorithm. (default==0.2)
+        * *stereo* (``bool``) --
+            To mesh the whole world (default==False)
 
     Returns
     -------
@@ -428,6 +433,7 @@ def generate_mesh(domain, edge_length, **kwargs):
         "plot": 999999,
         "lock_boundary": False,
         "pseudo_dt": 0.2,
+        "stereo": False,
     }
     opts.update(kwargs)
     _parse_kwargs(kwargs)
@@ -461,6 +467,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             fh,
             fd,
             pfix,
+            opts["stereo"],
         )
     else:
         p = opts["points"]
@@ -472,7 +479,6 @@ def generate_mesh(domain, edge_length, **kwargs):
     logger.info(
         f"Commencing mesh generation with {N} vertices will perform {max_iter} iterations."
     )
-
     for count in range(max_iter):
         start = time.time()
 
@@ -507,7 +513,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             return p, t
 
         # Compute the forces on the bars
-        Ftot = _compute_forces(p, t, fh, min_edge_length, L0mult)
+        Ftot = _compute_forces(p, t, fh, min_edge_length, L0mult, opts)
 
         # Force = 0 at fixed points
         Ftot[:nfix] = 0
@@ -522,11 +528,11 @@ def generate_mesh(domain, edge_length, **kwargs):
         maxdp = delta_t * np.sqrt((Ftot**2).sum(1)).max()
 
         logger.info(
-            f"Iteration #{count+1}, max movement is {maxdp}, there are {len(p)} vertices and {len(t)}"
+            f"Iteration #{count + 1}, max movement is {maxdp}, there are {len(p)} vertices and {len(t)}"
         )
 
         end = time.time()
-        logger.info(f"Elapsed wall-clock time {end-start} seconds")
+        logger.info(f"Elapsed wall-clock time {end - start} seconds")
 
 
 def _unpack_sizing(edge_length, opts):
@@ -564,15 +570,21 @@ def _get_bars(t):
 
 
 # Persson-Strang
-def _compute_forces(p, t, fh, min_edge_length, L0mult):
+def _compute_forces(p, t, fh, min_edge_length, L0mult, opts):
     """Compute the forces on each edge based on the sizing function"""
     N = p.shape[0]
     bars = _get_bars(t)
     barvec = p[bars[:, 0]] - p[bars[:, 1]]  # List of bar vectors
     L = np.sqrt((barvec**2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
-    hbars = fh(p[bars].sum(1) / 2)
-    L0 = hbars * L0mult * ((L**2).sum() / (hbars**2).sum()) ** (1.0 / 2)
+    if opts["stereo"]:
+        p1 = p[bars].sum(1) / 2
+        x, y = to_lat_lon(p1[:, 0], p1[:, 1])
+        p2 = np.asarray([x, y]).T
+        hbars = fh(p2) * _stereo_distortion_dist(y)
+    else:
+        hbars = fh(p[bars].sum(1) / 2)
+    L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
     F = L0 - L
     F[F < 0] = 0  # Bar forces (scalars)
     Fvec = (
@@ -666,13 +678,42 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix):
+def _stereo_distortion(lat):
+    # we use here Stereographic projection of the sphere
+    # from the north pole onto the plane
+    # https://en.wikipedia.org/wiki/Stereographic_projection
+    lat0 = 90
+    ll = lat + lat0
+    lrad = ll / 180 * np.pi
+    res = 2 / (1 + np.sin(lrad))
+    return res
+
+
+def _stereo_distortion_dist(lat):
+    lrad = np.radians(lat)
+    # Calculate the scale factor for the stereographic projection
+    res = 2 / (1 + np.sin(lrad)) / 180 * np.pi
+    return res
+
+
+def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, stereo=False):
     """Create initial distribution in bounding box (equilateral triangles)"""
+    if stereo:
+        bbox = np.array([[-180, 180], [-89, 89]])
     p = np.mgrid[
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
-    p = p.reshape(2, -1).T
-    r0 = fh(p)
+    if stereo:
+        # for global meshes in stereographic projections,
+        # we need to reproject the points from lon/lat to stereo projection
+        # then, we need to rectify their coordinates to lat/lon for the sizing function
+        p0 = p.reshape(2, -1).T
+        x, y = to_stereo(p0[:, 0], p0[:, 1])
+        p = np.asarray([x, y]).T
+        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(p0[:, 1])
+    else:
+        p = p.reshape(2, -1).T
+        r0 = fh(p)
     r0m = np.min(r0[r0 >= min_edge_length])
     p = p[np.random.rand(p.shape[0]) < r0m**2 / r0**2]
     p = p[fd(p) < geps]  # Keep only d<0 points
