@@ -275,12 +275,12 @@ extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length = 0.01  # minimum mesh size in domain in projection
 shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
-ax = edge_length.plot(
+fig, ax, pc = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Distance sizing function",
     cbarlabel="mesh size (degrees)",
-    hold=True,
+    holding=True,
 )
 shoreline.plot(ax=ax)
 ```
@@ -303,12 +303,12 @@ sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(
     shoreline, sdf, max_edge_length=0.05, plot=True
 )
-ax = edge_length.plot(
+fig, ax, pc = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function",
     cbarlabel="mesh size (degrees)",
-    hold=True,
+    holding=True,
     xlim=[-74.3, -73.8],
     ylim=[40.3, 40.8],
 )
@@ -332,12 +332,12 @@ shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
-ax = edge_length.plot(
+fig, ax, pc = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function with gradation bound",
     cbarlabel="mesh size (degrees)",
-    hold=True,
+    holding=True,
     xlim=[-74.3, -73.8],
     ylim=[40.3, 40.8],
 )
@@ -358,7 +358,8 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 
 min_edge_length = 0.01
 
-dem = om.DEM(fdem, crs=4326)
+extent = om.Region(extent=(-74.3, -73.8, 40.3,40.8), crs=4326)
+dem = om.DEM(fdem, bbox=extent,crs=4326)
 shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
@@ -368,12 +369,12 @@ edge_length2 = om.wavelength_sizing_function(
 # Compute the minimum of the sizing functions
 edge_length = om.compute_minimum([edge_length1, edge_length2])
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
-ax = edge_length.plot(
+fig, ax, pc = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
     title="Feature sizing function + wavelength + gradation bound",
     cbarlabel="mesh size (degrees)",
-    hold=True,
+    holding=True,
     xlim=[-74.3, -73.8],
     ylim=[40.3, 40.8],
 )
@@ -385,6 +386,7 @@ shoreline.plot(ax=ax)
 
 The distance, feature size, and/or wavelength mesh size functions can lead to coarse mesh resolution in deeper waters that under-resolve and smooth over the sharp topographic gradients that characterize the continental shelf break. These slope features can be important for coastal ocean models in order to capture dissipative effects driven by the internal tides, transmissional reflection at the shelf break that controls the astronomical tides, and trapped shelf waves. The bathymetry field contains often excessive details that are not relevant for most flows, thus the bathymetry can be smoothed by a variety of filters (e.g., lowpass, bandpass, and highpass filters) before calculating the mesh sizes.
 
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -394,7 +396,7 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 EPSG = 4326  # EPSG:4326 or WGS84
 bbox = (-74.4, -73.4, 40.2, 41.2)
 extent = om.Region(extent=bbox, crs=EPSG)
-dem = om.DEM(fdem, crs=4326)
+dem = om.DEM(fdem, crs=EPSG)
 
 min_edge_length = 0.0025  # minimum mesh size in domain in projection
 max_edge_length = 0.10  # maximum mesh size in domain in projection
@@ -414,7 +416,7 @@ edge_length2 = om.bathymetric_gradient_sizing_function(
     min_edge_length=min_edge_length,
     max_edge_length=max_edge_length,
     crs=EPSG,
-)
+)  # will be reactivated
 edge_length3 = om.compute_minimum([edge_length1, edge_length2])
 edge_length3 = om.enforce_mesh_gradation(edge_length3, gradation=0.15)
 ```
@@ -591,6 +593,69 @@ plt.show()
 ```
 ![Multiscale](https://user-images.githubusercontent.com/18619644/136119785-8746552d-4ff6-44c3-9aa1-3e4981ba3518.png)
 
+Global mesh generation
+----------------------
+Using oceanmesh is now possible for global meshes.
+The process is done in two steps:
+ * first the definition of the sizing functions in WGS84 coordinates,
+ * then the mesh generation is done in the stereographic projection
+
+```python
+import os
+import numpy as np
+import oceanmesh as om
+from oceanmesh.region import to_lat_lon
+import matplotlib.pyplot as plt
+# utilities functions for plotting
+def crosses_dateline(lon1, lon2):
+    return abs(lon1 - lon2) > 180
+
+def filter_triangles(points, cells):
+    filtered_cells = []
+    for cell in cells:
+        p1, p2, p3 = points[cell[0]], points[cell[1]], points[cell[2]]
+        if not (crosses_dateline(p1[0], p2[0]) or crosses_dateline(p2[0], p3[0]) or crosses_dateline(p3[0], p1[0])):
+            filtered_cells.append(cell)
+    return filtered_cells
+
+# Note: global_stereo.shp has been generated using global_tag() function in pyposeidon
+# https://github.com/ec-jrc/pyPoseidon/blob/9cfd3bbf5598c810004def83b1f43dc5149addd0/pyposeidon/boundary.py#L452
+fname = "tests/global/global_latlon.shp"
+fname2 = "tests/global/global_stereo.shp"
+
+EPSG = 4326  # EPSG:4326 or WGS84
+bbox = (-180.00, 180.00, -89.00, 90.00)
+extent = om.Region(extent=bbox, crs=4326)
+
+min_edge_length = 0.5  # minimum mesh size in domain in meters
+max_edge_length = 2  # maximum mesh size in domain in meters
+shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+sdf = om.signed_distance_function(shoreline)
+edge_length = om.distance_sizing_function(shoreline, rate=0.11)
+
+# once the size functions have been defined, wed need to mesh inside domain in
+# stereographic projections. This is way we use another coastline which is
+# already translated in a sterographic projection
+shoreline_stereo = om.Shoreline(fname2, extent.bbox, min_edge_length, stereo=True)
+domain = om.signed_distance_function(shoreline_stereo)
+
+points, cells = om.generate_mesh(domain, edge_length, stereo=True, max_iter=100)
+
+# remove degenerate mesh faces and other common problems in the mesh
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+
+# apply a Laplacian smoother
+points, cells = om.laplacian2(points, cells, max_iter=100)
+lon, lat = to_lat_lon(points[:, 0], points[:, 1])
+trin = filter_triangles(np.array([lon,lat]).T, cells)
+
+fig, ax, pc = edge_length.plot(holding = True, plot_colorbar=True, cbarlabel = "Resolution in °", cmap='magma')
+ax.triplot(lon, lat, trin, color="w", linewidth=0.25)
+plt.tight_layout()
+plt.show()
+```
+![Global](https://github.com/tomsail/oceanmesh/assets/18373442/a9c45416-78d5-4f3b-a0a3-1afd061d8dbd)
 
 See the tests inside the `testing/` folder for more inspiration. Work is ongoing on this package.
 

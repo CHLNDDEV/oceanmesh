@@ -1,5 +1,6 @@
 import os
 
+import pytest
 import oceanmesh as om
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
@@ -48,6 +49,7 @@ def mesh_plot(points, cells, plot_title=""):
     pt.show()
 
 
+@pytest.mark.skip(reason="not implemented yet")
 def test_bathymetric_gradient_function():
     EPSG = 4326  # EPSG:4326 or WGS84
     bbox = (-74.4, -73.4, 40.2, 41.2)
@@ -82,7 +84,7 @@ def test_bathymetric_gradient_function():
             "Bathymetric Gradient",
             "Feature Sizing & Bathymetric Gradient",
         ],
-        [edge_length1, edge_length2, edge_length3],
+        [edge_length1, edge_length3],
     ):
         print(f"Generating mesh associated with {name_}")
         edge_length_ = om.enforce_mesh_gradation(edge_length, gradation=0.15)

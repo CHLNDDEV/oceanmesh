@@ -6,7 +6,7 @@ import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
 
 from .idw import Invdisttree
-from .region import Region
+from .region import Region, to_stereo
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ class Grid(Region):
         """
         x = self.x0y0[0] + np.arange(0, self.nx) * self.dx  # ascending monotonically
         y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)
-        y = y[::-1]  # descending monotonically
+        # y = y[::-1]  # descending monotonically
         return x, y
 
     def create_grid(self):
@@ -343,9 +343,18 @@ class Grid(Region):
 
     def plot(
         self,
+        ax=None,
+        xlabel=None,
+        ylabel=None,
+        title=None,
         holding=False,
         coarsen=1,
         plot_colorbar=False,
+        cbarlabel=None,
+        stereo=False,
+        xlim=None,
+        ylim=None,
+        filename=None,
         **kwargs,
     ):
         """Visualize the values in :obj:`Grid`
@@ -363,16 +372,37 @@ class Grid(Region):
 
         """
         _xg, _yg = self.create_grid()
-        fig, ax = plt.subplots()
-        ax.axis("equal")
+        if stereo:
+            _xg, _yg = to_stereo(_xg, _yg)
+        if ax is None:
+            fig, ax = plt.subplots()
+            ax.axis("equal")
         pc = ax.pcolor(
             _xg[::coarsen, ::coarsen],
             _yg[::coarsen, ::coarsen],
             self.values[::coarsen, ::coarsen],
             **kwargs,
         )
-        if plot_colorbar:
-            fig.colorbar(pc)
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+        if title is not None:
+            ax.set_title(title)
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        if cbarlabel is not None:
+            plot_colorbar = True
+        if plot_colorbar or cbarlabel:
+            cbar = fig.colorbar(pc)
+            cbar.set_label(cbarlabel)
+
+        if filename is not None:
+            plt.savefig(filename)
         if holding is False:
             plt.show()
         return fig, ax, pc
@@ -392,6 +422,10 @@ class Grid(Region):
             _FILL = None
         else:
             _FILL = 999999
+
+        # for global mesh make it cyclical (from MatLab)
+        if (abs(self.bbox[0]) == 180) & (abs(self.bbox[1]) == 180):
+            self.values[[0, -1], :] = self.values[[-1, 0], :]
 
         fp = RegularGridInterpolator(
             (lon1, lat1),

@@ -7,15 +7,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
 import skfmm
-from _HamiltonJacobi import gradient_limit
 from inpoly import inpoly2
 from shapely.geometry import LineString
 from skimage.morphology import medial_axis
 
+from _HamiltonJacobi import gradient_limit
 from oceanmesh.filterfx import filt2
 
 from . import edges
 from .grid import Grid
+from .region import to_lat_lon, to_stereo
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
+def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -122,6 +123,46 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326"):
     cell_size = cell_size.flatten("F")
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
+    if stereo:
+        logger.info("Global mesh: fixing gradient on the north pole...")
+        # max distortion at the pole: 2 / 180 * PI / (1 - cos(lat))**2
+        dx_stereo = grid.dx * 1 / 180 * np.pi / 2
+        # in stereo projection, all north hemisphere is contained in the unit sphere
+        # we want to fix the gradient close to the north pole,
+        # so we extract all the coordinates between -1 and 1 in stereographic projection
+
+        us, vs = np.meshgrid(
+            np.arange(-1, 1, dx_stereo), np.arange(-1, 1, dx_stereo), indexing="ij"
+        )
+        ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
+        utmp = grid.eval((ulon, vlat))
+        utmp = np.reshape(utmp, us.shape)
+        szs = utmp.shape
+        szs = (szs[0], szs[1], 1)
+        #  we choose an excessively large number for the gradiation = 10
+        # this is merely to fix the north pole gradient
+        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp.flatten("F"))
+        vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
+        # construct stereo interpolating function
+        grid_stereo = Grid(
+            bbox=(-1, 1, -1, 1),
+            dx=dx_stereo,
+            values=vtmp,
+            hmin=grid.hmin,
+            extrapolate=grid.extrapolate,
+            crs=crs,
+        )
+        grid_stereo.build_interpolant()
+        # reinject back into the original grid and redo the gradient computation
+        xg, yg = grid.create_grid()
+        tmp[yg > 0] = grid_stereo.eval(to_stereo(xg[yg > 0], yg[yg > 0]))
+        logger.info(
+            "Global mesh: reinject back stereographic gradient and recomputing gradient..."
+        )
+        cell_size = tmp.flatten("F")
+        tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
+        tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
+
     grid_limited = Grid(
         bbox=grid.bbox,
         dx=grid.dx,
@@ -453,7 +494,7 @@ def bathymetric_gradient_sizing_function(
     nx, ny = dem.nx, dem.ny
     coords = (xg, yg)
 
-    if crs == "EPSG:4326":
+    if crs == "EPSG:4326" or crs == 4326:
         mean_latitude = np.mean(dem.bbox[2:])
         meters_per_degree = (
             111132.92
@@ -463,7 +504,6 @@ def bathymetric_gradient_sizing_function(
         )
         dy *= meters_per_degree
         dx *= meters_per_degree
-
     grid_details = (nx, ny, dx, dy)
 
     if type_of_filter == "barotropic" and filter_quotient > 0:
@@ -500,7 +540,7 @@ def bathymetric_gradient_sizing_function(
     grid.values = (2 * np.pi / slope_parameter) * np.abs(dp) / (bs + eps)
 
     # Convert back to degrees from meters (if geographic)
-    if crs == "EPSG:4326":
+    if crs == "EPSG:4326" or crs == 4326:
         grid.values /= meters_per_degree
 
     if max_edge_length is not None:
@@ -818,7 +858,9 @@ def wavelength_sizing_function(
     lon, lat = dem.create_grid()
     tmpz = dem.eval((lon, lat))
 
-    if crs == "EPSG:4326":
+    dx, dy = dem.dx, dem.dy  # for gradient function
+
+    if crs == "EPSG:4326" or crs == 4326:
         mean_latitude = np.mean(dem.bbox[2:])
         meters_per_degree = (
             111132.92
@@ -826,7 +868,8 @@ def wavelength_sizing_function(
             + 1.175 * np.cos(4 * mean_latitude)
             - 0.0023 * np.cos(6 * mean_latitude)
         )
-
+        dy *= meters_per_degree
+        dx *= meters_per_degree
     grid = Grid(
         bbox=dem.bbox, dx=dem.dx, dy=dem.dy, extrapolate=True, values=0.0, crs=crs
     )
@@ -834,7 +877,7 @@ def wavelength_sizing_function(
     grid.values = period * np.sqrt(gravity * np.abs(tmpz)) / wl
 
     # Convert back to degrees from meters (if geographic)
-    if crs == "EPSG:4326":
+    if crs == "EPSG:4326" or crs == 4326:
         grid.values /= meters_per_degree
 
     if min_edgelength is None:
@@ -892,7 +935,7 @@ def multiscale_sizing_function(
         # interpolate all finer nests onto coarse func and enforce gradation rate
         for k, finer in enumerate(list_of_grids[idx1 + 1 :]):
             logger.info(
-                f"  Interpolating sizing function #{idx1+1 + k} onto sizing function #{idx1}"
+                f"  Interpolating sizing function #{idx1 + 1 + k} onto sizing function #{idx1}"
             )
             _wkt = finer.crs.to_dict()
             if "units" in _wkt:
