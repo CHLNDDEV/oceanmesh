@@ -542,6 +542,8 @@ def bathymetric_gradient_sizing_function(
     # Convert back to degrees from meters (if geographic)
     if crs == "EPSG:4326" or crs == 4326:
         grid.values /= meters_per_degree
+        grid.dx = dem.dx
+        grid.dy = dem.dy
 
     if max_edge_length is not None:
         grid.values[grid.values > max_edge_length] = max_edge_length
@@ -550,7 +552,6 @@ def bathymetric_gradient_sizing_function(
         min_edge_length = grid.dx
 
     grid.values[grid.values < min_edge_length] = min_edge_length
-
     grid.build_interpolant()
 
     return grid
@@ -879,6 +880,8 @@ def wavelength_sizing_function(
     # Convert back to degrees from meters (if geographic)
     if crs == "EPSG:4326" or crs == 4326:
         grid.values /= meters_per_degree
+        grid.dx = dem.dx
+        grid.dy = dem.dy
 
     if min_edgelength is None:
         min_edgelength = np.amin(grid.values)
