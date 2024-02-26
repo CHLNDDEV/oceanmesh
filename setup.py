@@ -30,14 +30,13 @@ if os.name == "nt":
             [fi],
             include_dirs=[f"{vcpkg}/include"],
             extra_link_args=[f"/LIBPATH:{vcpkg}/lib"],
-            libraries=["gmp", "mpfr"],
         )
         for fi, loc in zip(files, is_called)
     ]
 else:
     # no CGAL libraries necessary from CGAL 5.0 onwards
     ext_modules = [
-        Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
+        Pybind11Extension(loc, [fi])
         for fi, loc in zip(files, is_called)
     ]
 

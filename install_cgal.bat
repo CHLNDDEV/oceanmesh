@@ -48,6 +48,8 @@ REM
 set INSTALL_DIR=%USERPROFILE%\OceanMesh
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
+set CGAL_PORT="%CD%\ports"
+
 pushd "%INSTALL_DIR%"
 
   set LOG=%INSTALL_DIR%\build.log
@@ -70,17 +72,12 @@ pushd "%INSTALL_DIR%"
       vcpkg upgrade --no-dry-run
     )
     echo building cgal... this generally takes several minutes.
-    vcpkg install cgal:x64-windows > "%LOG%"
+    vcpkg install cgal:x64-windows --overlay-ports=%CGAL_PORT%
   popd
   
 popd
-
+ 
 set BIN_DIR=%INSTALL_DIR%\vcpkg\installed\x64-windows\bin
-
-if not exist "%BIN_DIR%\gmp.dll" (
-  echo build has failed or is incomplete... see "%LOG%".
-  goto FAIL
-)
 
 REM permanently set environment variable to location of DLLs
 REM

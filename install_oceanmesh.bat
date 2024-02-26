@@ -27,7 +27,7 @@ call conda create --name %ENV%
 call conda activate %ENV%
 
 echo installing OceanMesh conda packages
-call conda install -c conda-forge geopandas rasterio scikit-fmm pybind11
+call conda install -c conda-forge geopandas rasterio scikit-fmm pybind11 cython
 
 echo Installing OceanMesh package
 python setup.py install
