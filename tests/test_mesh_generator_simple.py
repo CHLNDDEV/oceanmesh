@@ -23,7 +23,5 @@ def test_mesh_generator_rectangle():
         min_edge_length=min_edge_length,
         bbox=bbox,
     )
-    breakp = "oint"
-    assert np.isclose(np.sum(simp_vol(points, cells)), 1.0, 0.01)
 
-test_mesh_generator_rectangle()
+    assert np.isclose(np.sum(simp_vol(points, cells)), 1.0, 0.01)
