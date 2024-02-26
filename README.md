@@ -123,7 +123,7 @@ If you have a different Python distribution, or if you do not want to use packag
 1. Obtain binary wheels for your python distribution for the latest GDAL, Fiona, and Rasterio (https://www.lfd.uci.edu/~gohlke/pythonlibs).
 2. Create a new virtual environment and activate it.
 3. Execute: cmd.exe /C "for %f in (GDAL\*.whl Fiona\*.whl rasterio\*.whl) do pip install %f"
-4. Execute: pip install geopandas rasterio scikit-fmm pybind11
+4. Execute: pip install geopandas rasterio scikit-fmm pybind11 cython
 5. Execute: python setup.py install
 
 :warning:

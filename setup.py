@@ -36,7 +36,7 @@ if os.name == "nt":
 else:
     # no CGAL libraries necessary from CGAL 5.0 onwards
     ext_modules = [
-        Pybind11Extension(loc, [fi])
+        Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
         for fi, loc in zip(files, is_called)
     ]
 
