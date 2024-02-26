@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 2.8.12)
-
 project(oceanmesh)
 
 ##############################################################################
@@ -7,13 +6,17 @@ project(oceanmesh)
 # Add custom CMake modules
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
+
 # Some screen output
 message(STATUS "OS detected: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "CXX Compiler detected: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMake additional search path for libraries: ${CMAKE_LIBRARY_PATH}")
 
 # CGAL and its components
+set(CGAL_DISABLE_GMP ON)
 find_package(CGAL)
+
+# target_link_libraries(main PRIVATE CGAL::CGAL)
 message(STATUS "CGAL version: ${CGAL_VERSION}")
 
 if( CGAL_VERSION  VERSION_LESS 5.0)

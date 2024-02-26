@@ -89,3 +89,5 @@ def test_bathymetric_gradient_function():
         print(f"Generating mesh associated with {name_}")
         edge_length_ = om.enforce_mesh_gradation(edge_length, gradation=0.15)
         generate_mesh(name_, sdf, edge_length_)
+
+test_bathymetric_gradient_function()
