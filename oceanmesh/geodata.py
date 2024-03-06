@@ -785,13 +785,14 @@ class DEM(Grid):
                 if bbox is None:
                     bbox = src.bounds
                     topobathy = src.read(1)
+                    bbox = (bbox[0], bbox[2], bbox[1], bbox[3])
                 # then clip the DEM to the box
                 else:
                     #
                     _bbox = (bbox[0], bbox[2], bbox[1], bbox[3])
                     window = from_bounds(*_bbox, transform=src.transform)
                     topobathy = src.read(1, window=window, masked=True)
-                    topobathy = np.transpose(topobathy, (1, 0))
+                topobathy = np.transpose(topobathy, (1, 0))
             # Ensure its a floating point array
             topobathy = topobathy.astype(np.float64)
             topobathy[
