@@ -678,17 +678,6 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _stereo_distortion(lat):
-    # we use here Stereographic projection of the sphere
-    # from the north pole onto the plane
-    # https://en.wikipedia.org/wiki/Stereographic_projection
-    lat0 = 90
-    ll = lat + lat0
-    lrad = ll / 180 * np.pi
-    res = 2 / (1 + np.sin(lrad))
-    return res
-
-
 def _stereo_distortion_dist(lat):
     lrad = np.radians(lat)
     # Calculate the scale factor for the stereographic projection
@@ -696,21 +685,29 @@ def _stereo_distortion_dist(lat):
     return res
 
 
+def _edge_length_wgs84(lat):
+    lrad = np.radians(lat)
+    return 1 / np.cos(lrad) ** (1 / 2)
+
+
 def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, stereo=False):
     """Create initial distribution in bounding box (equilateral triangles)"""
     if stereo:
-        bbox = np.array([[-180, 180], [-89, 89]])
-    p = np.mgrid[
-        tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
-    ].astype(float)
+        bbox = np.array([[-180, 180], [-90, 90]])
+    p = np.mgrid[tuple(slice(min, max, min_edge_length) for min, max in bbox)].astype(
+        float
+    )
     if stereo:
         # for global meshes in stereographic projections,
         # we need to reproject the points from lon/lat to stereo projection
         # then, we need to rectify their coordinates to lat/lon for the sizing function
+        p += (
+            np.random.rand(*p.shape) * min_edge_length / 2
+        )  # randomise the distribution
         p0 = p.reshape(2, -1).T
         x, y = to_stereo(p0[:, 0], p0[:, 1])
         p = np.asarray([x, y]).T
-        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(p0[:, 1])
+        r0 = fh(to_lat_lon(x, y)) * _edge_length_wgs84(p0[:, 1])
     else:
         p = p.reshape(2, -1).T
         r0 = fh(p)

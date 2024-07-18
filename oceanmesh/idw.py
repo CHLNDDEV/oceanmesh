@@ -1,6 +1,7 @@
 """ invdisttree.py: inverse-distance-weighted interpolation using KDTree
     fast, solid, local
 """
+
 from __future__ import division
 
 import numpy as np

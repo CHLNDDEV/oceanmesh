@@ -794,9 +794,7 @@ class DEM(Grid):
                     topobathy = np.transpose(topobathy, (1, 0))
             # Ensure its a floating point array
             topobathy = topobathy.astype(np.float64)
-            topobathy[
-                topobathy == nodata_value
-            ] = np.nan  # set the no-data value to nan
+            topobathy[topobathy == nodata_value] = np.nan
         elif not dem.exists():
             raise FileNotFoundError(f"File {dem} could not be located.")
 
