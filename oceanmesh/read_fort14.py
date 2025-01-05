@@ -1,11 +1,12 @@
 import numpy as np
+import os
 
-def read_fort14(finame="fort.14", read_bou=False):
+def read_fort14(filename, read_bou=False):
     """
     Reads an ADCIRC fort.14 mesh file.
 
     Args:
-        finame (str): Name of the input file. Default is 'fort.14'.
+        filename (str): Name of the input file. Default is 'fort.14'.
         read_bou (bool): If True, also reads the boundary data.
 
     Returns:
@@ -13,10 +14,13 @@ def read_fort14(finame="fort.14", read_bou=False):
     """
     print("Reading fort.14 file")
 
-    with open(finame, 'r') as fid:
+    # Assert to check if the file exists
+    assert os.path.exists(filename), f"Error: File '{filename}' does not exist at the specified path."
+
+    with open(filename, 'r') as fid:
         # Leer la primera línea con el título
-        title = fid.readline().strip()
-        print(title)
+        mesh_title = fid.readline().strip()
+        print(mesh_title)
 
         # Leer el número de nodos y elementos
         msgline = fid.readline().strip()
@@ -29,13 +33,13 @@ def read_fort14(finame="fort.14", read_bou=False):
         idx = np.loadtxt(fid, max_rows=N[0], dtype=int)
 
         # Ordenar los datos leídos
-        EToV = idx[:, 2:5]
-        num_nodes = np.max(EToV)
-        VX = np.full((num_nodes, 2), np.nan)
-        B = np.full(num_nodes, np.nan)
+        elements = idx[:, 2:5]
+        num_nodes = np.max(elements)
+        nodes = np.full((num_nodes, 2), np.nan)
+        bathymetry = np.full(num_nodes, np.nan)
 
-        VX[Val[:, 0].astype(int) - 1, :] = Val[:, 1:3]
-        B[Val[:, 0].astype(int) - 1] = Val[:, 3]
+        nodes[Val[:, 0].astype(int) - 1, :] = Val[:, 1:3]
+        bathymetry[Val[:, 0].astype(int) - 1] = Val[:, 3]
 
         opedat = None
         boudat = None
@@ -43,54 +47,52 @@ def read_fort14(finame="fort.14", read_bou=False):
         if read_bou:
             # Leer frontera abierta
             line_nope = fid.readline().strip()
-            nope = int(line_nope.split('=')[0].strip())  # Extraer el número antes del signo '='
-            print(nope)
+            num_open_boundaries = int(line_nope.split('=')[0].strip())  # Extraer el número antes del signo '='
             line_neta = fid.readline().strip()
-            neta = int(line_neta.split('=')[0].strip())  # Extraer el número antes del signo '='
-            print(neta)
+            num_open_bound_nodes = int(line_neta.split('=')[0].strip())  # Extraer el número antes del signo '='
 
-            nvdll = np.zeros(nope, dtype=int)
-            ibtypee = np.zeros(nope, dtype=int)
-            nbdv = np.zeros((neta, nope), dtype=int)
+            num_nodes_each_open_bound = np.zeros(num_open_boundaries, dtype=int)
+            bound_type = np.zeros(num_open_boundaries, dtype=int)
+            nbdv = np.zeros((num_open_bound_nodes, num_open_boundaries), dtype=int)
 
-            for i in range(nope):
+            for i in range(num_open_boundaries):
                 line = fid.readline().strip()
                 varg = int(line.split()[0])
-                nvdll[i] = varg
-                nbdv[:nvdll[i], i] = np.loadtxt(fid, max_rows=nvdll[i], dtype=int)
+                num_nodes_each_open_bound[i] = varg
+                nbdv[:num_nodes_each_open_bound[i], i] = np.loadtxt(fid, max_rows=num_nodes_each_open_bound[i], dtype=int)
 
             opedat = {
-                "nope": nope,
-                "neta": neta,
-                "nvdll": nvdll,
-                "ibtypee": ibtypee,
-                "nbdv": nbdv[:np.max(nvdll), :],
+                "num_open_boundaries": num_open_boundaries,
+                "num_open_bound_nodes": num_open_bound_nodes,
+                "num_nodes_each_open_bound": num_nodes_each_open_bound,
+                "bound_type": bound_type,
+                "open_boundary_nodes": nbdv[:np.max(num_nodes_each_open_bound), :],
             }
 
             # Leer frontera terrestre
             line_nbou = fid.readline().strip()
-            nbou = int(line_nbou.split('=')[0].strip())  # Extraer el número antes del signo '='
+            num_land_boundaries = int(line_nbou.split('=')[0].strip())  # Extraer el número antes del signo '='
             line_nvel = fid.readline().strip()
-            nvel = int(line_nvel.split('=')[0].strip())  # Extraer el número antes del signo '='
+            total_land_bound_nodes = int(line_nvel.split('=')[0].strip())  # Extraer el número antes del signo '='
 
-            nvell = np.zeros(nbou, dtype=int)
-            ibtype = np.zeros(nbou, dtype=int)
-            nbvv = np.zeros((nvel, nbou), dtype=int)
+            num_nodes_each_land_bound = np.zeros(num_land_boundaries, dtype=int)
+            land_boundary_types = np.zeros(num_land_boundaries, dtype=int)
+            nbvv = np.zeros((total_land_bound_nodes, num_land_boundaries), dtype=int)
 
-            for i in range(nbou):
+            for i in range(num_land_boundaries):
                 line = fid.readline().strip()
                 varg = list(map(int, line.split()[:2]))
-                nvell[i], ibtype[i] = varg
+                num_nodes_each_land_bound[i], land_boundary_types[i] = varg
 
-                if ibtype[i] in [0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 60, 61, 101, 52]:
-                    nbvv[:nvell[i], i] = np.loadtxt(fid, max_rows=nvell[i], dtype=int)
+                if land_boundary_types[i] in [0, 1, 2, 10, 11, 12, 20, 21, 22, 30, 60, 61, 101, 52]:
+                    nbvv[:num_nodes_each_land_bound[i], i] = np.loadtxt(fid, max_rows=num_nodes_each_land_bound[i], dtype=int)
 
             boudat = {
-                "nbou": nbou,
-                "nvel": nvel,
-                "nvell": nvell,
-                "ibtype": ibtype,
-                "nbvv": nbvv[:np.max(nvell), :],
+                "num_land_boundaries": num_land_boundaries,
+                "total_land_bound_nodes": total_land_bound_nodes,
+                "num_nodes_each_land_bound": num_nodes_each_land_bound,
+                "land_boundary_types": land_boundary_types,
+                "nbvv": nbvv[:np.max(num_nodes_each_land_bound), :],
             }
 
-    return EToV, VX, B, opedat, boudat, title
+    return elements, nodes, bathymetry, opedat, boudat, mesh_title
