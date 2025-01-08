@@ -669,7 +669,7 @@ class Shoreline(Region):
                     raise ValueError(f"Unsupported geometry type: {g.geom_type}")
 
                 poly = remove_dup(poly)
-                polys.append(np.row_stack((poly, delimiter)))
+                polys.append(np.vstack((poly, delimiter)))
 
         if len(polys) == 0:
             raise ValueError("Shoreline data does not intersect with bbox")
