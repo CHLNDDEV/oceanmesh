@@ -62,6 +62,7 @@ def get_requirements():
 
 if __name__ == "__main__":
     setup(
+        install_requires=get_requirements(),
         cmdclass=cmdclass,
         version=versioneer.get_version(),
         ext_modules=ext_modules,
