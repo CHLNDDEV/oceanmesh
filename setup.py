@@ -1,5 +1,6 @@
 import os
 import sys
+import configparser
 
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup  # , find_packages
@@ -43,6 +44,19 @@ else:
 
 cmdclass = versioneer.get_cmdclass()
 cmdclass.update({"build_ext": build_ext})
+
+def get_requirements():
+    """
+    Fix
+    """
+
+    config = configparser.ConfigParser()
+    config.read("setup.cfg")
+    requirements = config["options"]["install_requires"].split()
+
+    if sys.version_info <= (3,8):
+        requirements.append("fiona<=1.9")
+    return requirements
 
 if __name__ == "__main__":
     setup(
