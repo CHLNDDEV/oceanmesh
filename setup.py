@@ -55,8 +55,10 @@ def get_requirements():
     config.read("setup.cfg")
     requirements = config["options"]["install_requires"].split()
 
-    if sys.version_info <= (3, 8):
-        requirements.append("fiona<=1.9")
+    if sys.version_info < (3, 9):
+        requirements.remove("fiona")
+        requirements.append("fiona<1.10")
+
     return requirements
 
 
