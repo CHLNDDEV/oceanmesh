@@ -669,7 +669,7 @@ class Shoreline(Region):
                     raise ValueError(f"Unsupported geometry type: {g.geom_type}")
 
                 poly = remove_dup(poly)
-                polys.append(np.row_stack((poly, delimiter)))
+                polys.append(np.vstack((poly, delimiter)))
 
         if len(polys) == 0:
             raise ValueError("Shoreline data does not intersect with bbox")
@@ -794,9 +794,9 @@ class DEM(Grid):
                     topobathy = np.transpose(topobathy, (1, 0))
             # Ensure its a floating point array
             topobathy = topobathy.astype(np.float64)
-            topobathy[
-                topobathy == nodata_value
-            ] = np.nan  # set the no-data value to nan
+            topobathy[topobathy == nodata_value] = (
+                np.nan
+            )  # set the no-data value to nan
         elif not dem.exists():
             raise FileNotFoundError(f"File {dem} could not be located.")
 
