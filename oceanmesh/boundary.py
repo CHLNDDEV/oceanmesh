@@ -1,9 +1,11 @@
-"""Functions to automatically label boundary segments as either
+"""
+Functions to automatically label boundary segments as either
 elevation-specified (i.e., ocean) or no-flux (i.e., land)
 based on geometric and topobathymetric aspects.
 
 Author: Dr. Alexandra Maskell
 Date: 2024-01-17
+Edits by: Keith Roberts, 2025-01-28
 """
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
@@ -11,7 +13,9 @@ from sklearn.neighbors import NearestNeighbors
 from oceanmesh.edges import get_winded_boundary_edges, get_boundary_edges
 import matplotlib.pyplot as plt
 
-__all__ = ["identify_ocean_boundary_sections"]
+__all__ = ["identify_ocean_boundary_sections", 
+           "identify_land_boundary_sections", 
+           "identify_island_boundary_sections"]
 
 
 def identify_ocean_boundary_sections(
@@ -198,8 +202,8 @@ def identify_land_boundary_sections(
     return mainland_boundary_cw
 
 
-def identify_island_boundary_sections(points, cells, plot=False, ccw=False):
-    """Identify the contiguous sections on the land boundary based on ocean boundary
+def identify_island_boundary_sections(points, cells, plot=False):
+    """Identify the contiguous sections on the island boundary 
 
     Parameters
     ----------
@@ -460,11 +464,11 @@ def identify_boundary_sections_knn(
 def boundary_node_list(
     cells,
     boundary_sections,
-    land=False,
     ccw=True,
     node_limit=999,
 ):
-    """output list of boundary nodes in c
+    """
+    Output list of boundary nodes in ccw order
 
     Parameters
     ----------
