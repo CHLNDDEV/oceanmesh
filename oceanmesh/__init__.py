@@ -8,7 +8,11 @@ if os.name == "nt":
     ), "The environment variable CGAL_BIN must be set."
     os.add_dll_directory(os.environ["CGAL_BIN"])
 
-from oceanmesh.boundary import identify_ocean_boundary_sections, identify_land_boundary_sections, identify_island_boundary_sections
+from oceanmesh.boundary import (
+    identify_ocean_boundary_sections,
+    identify_land_boundary_sections,
+    identify_island_boundary_sections,
+)
 from oceanmesh.clean import (
     delete_boundary_faces,
     delete_exterior_faces,

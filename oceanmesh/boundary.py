@@ -13,9 +13,11 @@ from sklearn.neighbors import NearestNeighbors
 from oceanmesh.edges import get_winded_boundary_edges, get_boundary_edges
 import matplotlib.pyplot as plt
 
-__all__ = ["identify_ocean_boundary_sections", 
-           "identify_land_boundary_sections", 
-           "identify_island_boundary_sections"]
+__all__ = [
+    "identify_ocean_boundary_sections",
+    "identify_land_boundary_sections",
+    "identify_island_boundary_sections",
+]
 
 
 def identify_ocean_boundary_sections(
@@ -203,7 +205,7 @@ def identify_land_boundary_sections(
 
 
 def identify_island_boundary_sections(points, cells, plot=False):
-    """Identify the contiguous sections on the island boundary 
+    """Identify the contiguous sections on the island boundary
 
     Parameters
     ----------
