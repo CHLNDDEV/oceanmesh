@@ -471,7 +471,7 @@ def laplacian2(vertices, entities, max_iter=20, tol=0.01, pfix=None):
     L[L < eps] = eps
     L = L[:, None]
     for it in range(max_iter):
-        pnew = np.divide(S * np.matrix(vertices), np.hstack((W, W)))
+        pnew = np.divide(S @ np.array(vertices), np.hstack((W, W)))
         pnew[bnd, :] = vertices[bnd, :]
         vertices = pnew
         Lnew = np.sqrt(

@@ -1,6 +1,7 @@
 import os
 
 import pytest
+
 import oceanmesh as om
 
 fname = os.path.join(os.path.dirname(__file__), "GSHHS_i_L1.shp")
