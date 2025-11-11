@@ -216,21 +216,31 @@ def signed_distance_function(shoreline, invert=False):
     e_box = edges.get_poly_edges(shoreline.boubox)
 
     def func(x):
-        # Initialize d with some positive number larger than geps
-        dist = np.zeros(len(x)) + 1.0
-        # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, boubox, e_box)
-        # are points inside the shoreline?
-        in_shoreline, _ = inpoly2(x, np.nan_to_num(poly), e)
-        # compute dist to shoreline
-        try:
-            d, _ = tree.query(x, k=1, workers=-1)
-        except (Exception,):
-            d, _ = tree.query(x, k=1, n_jobs=-1)
-        # d is signed negative if inside the
-        # intersection of two areas and vice versa.
+        # Sanitize inputs: handle non-finite query points gracefully
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        finite_mask = np.isfinite(x).all(axis=1)
+
+        # Default: very large positive distance (outside domain)
+        d = np.full(n, 1.0e12, dtype=float)
+        in_boubox = np.zeros(n, dtype=bool)
+        in_shoreline = np.zeros(n, dtype=bool)
+
+        if np.any(finite_mask):
+            x_f = x[finite_mask]
+            # are points inside the boubox?
+            ib, _ = inpoly2(x_f, boubox, e_box)
+            in_boubox[finite_mask] = ib
+            # are points inside the shoreline?
+            ish, _ = inpoly2(x_f, np.nan_to_num(poly), e)
+            in_shoreline[finite_mask] = ish
+            # compute distance to shoreline for finite points
+            d_f, _ = tree.query(x_f, k=1)
+            d[finite_mask] = d_f
+
+        # Signed distance: negative inside intersection of boubox and shoreline
         cond = np.logical_and(in_shoreline, in_boubox)
-        dist = (-1) ** (cond) * d
+        dist = ((-1) ** cond) * d
         if invert:
             dist *= -1
         return dist
@@ -241,18 +251,22 @@ def signed_distance_function(shoreline, invert=False):
     )
 
     def func_covering(x):
-        # Initialize d with some positive number larger than geps
-        dist = np.zeros(len(x)) + 1.0
-        # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, boubox, e_box)
-        # compute dist to shoreline
-        try:
-            d, _ = tree2.query(x, k=1, workers=-1)
-        except (Exception,):
-            d, _ = tree2.query(x, k=1, n_jobs=-1)
-        # d is signed negative if inside the
-        # intersection of two areas and vice versa.
-        dist = (-1) ** (in_boubox) * d
+        # Sanitize inputs: handle non-finite query points gracefully
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        finite_mask = np.isfinite(x).all(axis=1)
+
+        d = np.full(n, 1.0e12, dtype=float)
+        in_boubox = np.zeros(n, dtype=bool)
+
+        if np.any(finite_mask):
+            x_f = x[finite_mask]
+            ib, _ = inpoly2(x_f, boubox, e_box)
+            in_boubox[finite_mask] = ib
+            d_f, _ = tree2.query(x_f, k=1)
+            d[finite_mask] = d_f
+
+        dist = ((-1) ** (in_boubox)) * d
         return dist
 
     # Attach CRS and stereo metadata from the shoreline for downstream validation

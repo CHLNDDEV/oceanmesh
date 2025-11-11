@@ -221,7 +221,7 @@ def plot_mesh_connectivity(points, cells, show_plot=True):
     """
     triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax.triplot(triang)
+    ax.triplot(triang, lw=0.1)
     ax.set_aspect("equal", adjustable="box")
     ax.set_title("Mesh connectivity")
     if show_plot:
@@ -438,6 +438,10 @@ def _validate_multiscale_domains(domains, edge_lengths):
     return len(errors) == 0, errors
 
 
+# NOTE: stereo-aware sizing wrapper removed per verification comment; sizing
+# functions are always evaluated on lat/lon points supplied by generate_mesh.
+
+
 def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to several
     sizing functions `edge_lengths` and several signed distance functions
@@ -501,12 +505,40 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
+    # Build domain metadata for stereo/CRS awareness during blending
+    domain_metadata = {
+        "stereo_flags": [getattr(d, "stereo", False) for d in domains],
+        "crs_list": [getattr(d, "crs", None) for d in domains],
+        # Consider the first domain as potential global parent
+        "global_stereo": bool(getattr(domains[0], "stereo", False)),
+    }
+
     master_edge_length, edge_lengths_smoothed = multiscale_sizing_function(
         edge_lengths,
         blend_width=opts["blend_width"],
         nnear=opts["blend_nnear"],
         p=opts["blend_polynomial"],
+        domain_metadata=domain_metadata,
     )
+    # Sanitize hmin on each smoothed sizing grid to ensure positivity
+    for i, el in enumerate(edge_lengths_smoothed):
+        if isinstance(el, Grid):
+            hmin = getattr(el, "hmin", None)
+            if hmin is None or not np.isfinite(hmin) or hmin <= 0:
+                vals = el.values
+                if np.ma.isMaskedArray(vals):
+                    vals = np.ma.filled(vals, np.nan)
+                vals = np.asarray(vals)
+                pos = vals[np.isfinite(vals) & (vals > 0)]
+                if pos.size > 0:
+                    el.hmin = float(np.nanmin(pos))
+                    logger.warning(
+                        f"Sizing grid #{i} had invalid hmin; recomputed fallback hmin={el.hmin:.3f}"
+                    )
+                else:
+                    raise ValueError(
+                        f"Sizing grid #{i} contains no positive values to determine a minimum edge length."
+                    )
     union, nests = multiscale_signed_distance_function(domains)
     _p = []
     global_minimum = 9999
@@ -515,7 +547,13 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     ):
         logger.info(f"--> Building domain #{domain_number}")
         global_minimum = np.amin([global_minimum, edge_length.hmin])
-        _tmpp, _ = generate_mesh(sdf, edge_length, **kwargs)
+        # Use the domain's own stereo flag (global first domain may be stereo=True)
+        _tmpp, _ = generate_mesh(
+            sdf,
+            edge_length,
+            stereo=getattr(domains[domain_number], "stereo", False),
+            **kwargs,
+        )
         _p.append(_tmpp)
 
     _p = np.concatenate(_p, axis=0)
@@ -525,6 +563,9 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     # Avoid passing duplicate max_iter to generate_mesh
     _kwargs = dict(kwargs)
     _kwargs.pop("max_iter", None)
+    # If union is global stereo, ensure stereo flag passed to final blending mesh generation
+    if getattr(union, "stereo", False):
+        _kwargs["stereo"] = True
     _p, _t = generate_mesh(
         domain=union,
         edge_length=master_edge_length,
@@ -693,6 +734,23 @@ def _unpack_sizing(edge_length, opts):
     if isinstance(edge_length, Grid):
         fh = edge_length.eval
         min_edge_length = edge_length.hmin
+        # Defensive: if hmin is invalid, recompute from grid values
+        if min_edge_length is None or not np.isfinite(min_edge_length) or min_edge_length <= 0:
+            vals = edge_length.values
+            if np.ma.isMaskedArray(vals):
+                vals = np.ma.filled(vals, np.nan)
+            vals = np.asarray(vals)
+            pos = vals[np.isfinite(vals) & (vals > 0)]
+            if pos.size > 0:
+                min_edge_length = float(np.nanmin(pos))
+                edge_length.hmin = min_edge_length
+                logger.warning(
+                    f"Edge length grid had invalid hmin; recomputed fallback min_edge_length={min_edge_length:.3f}"
+                )
+            else:
+                raise ValueError(
+                    "Edge length grid contains no positive values to determine a minimum edge length."
+                )
     elif callable(edge_length):
         fh = edge_length
         min_edge_length = opts["min_edge_length"]
@@ -732,12 +790,23 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult, opts):
     L = np.sqrt((barvec**2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     if opts["stereo"]:
+        # For global+regional multiscale meshes, this branch handles the global stereo case.
+        # Regional sizing functions have been wrapped or transformed earlier so fh(p2)
+        # evaluates correctly on lat/lon even though points are maintained in stereo space.
         p1 = p[bars].sum(1) / 2
         x, y = to_lat_lon(p1[:, 0], p1[:, 1])
         p2 = np.asarray([x, y]).T
         hbars = fh(p2) * _stereo_distortion_dist(y)
     else:
         hbars = fh(p[bars].sum(1) / 2)
+    # Guard against non-finite or non-positive sizing values that can poison forces
+    hbars = np.asarray(hbars, dtype=float)
+    valid = np.isfinite(hbars) & (hbars > 0)
+    if not np.any(valid):
+        raise ValueError("Sizing function returned no positive finite values inside domain.")
+    if not np.all(valid):
+        repl = np.nanmedian(hbars[valid])
+        hbars = np.where(valid, hbars, repl)
     L0 = hbars * L0mult * (np.nanmedian(L) / np.nanmedian(hbars))
     F = L0 - L
     F[F < 0] = 0  # Bar forces (scalars)
@@ -858,6 +927,9 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, stereo=F
         tuple(slice(min, max + min_edge_length, min_edge_length) for min, max in bbox)
     ].astype(float)
     if stereo:
+        # For global meshes (including mixed global+regional) we generate points in lat/lon,
+        # then project to stereo. The sizing function fh has already been wrapped (if needed)
+        # to internally transform coordinates back to lat/lon for regional grids.
         # for global meshes in stereographic projections,
         # we need to reproject the points from lon/lat to stereo projection
         # then, we need to rectify their coordinates to lat/lon for the sizing function

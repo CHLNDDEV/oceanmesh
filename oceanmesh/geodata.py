@@ -811,6 +811,10 @@ class DEM(Grid):
                     bbox_ds = src.bounds  # left, bottom, right, top
                     bbox = (bbox_ds.left, bbox_ds.right, bbox_ds.bottom, bbox_ds.top)
                     topobathy = src.read(1)
+                    # Align orientation with windowed-read branch: make array index order (x, y)
+                    # Rasterio returns (rows, cols) = (ny, nx). Transpose to (nx, ny) then flip
+                    # along y-axis later for bottom-left origin grids.
+                    topobathy = np.transpose(topobathy, (1, 0))
                 else:
                     # Region bbox currently (xmin,xmax,ymin,ymax) in bbox.crs
                     region_crs = bbox.crs if hasattr(bbox, "crs") else desired_crs

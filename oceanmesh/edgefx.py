@@ -435,7 +435,8 @@ def bathymetric_gradient_sizing_function(
     min_elevation_cutoff=-50.0,
     type_of_filter="lowpass",
     filter_cutoffs=1000,
-    crs="EPSG:4326",
+    coarsen=1,
+    crs=None,
 ):
     """Mesh sizes that vary proportional to the bathymetryic gradient.
        Bathymetry is filtered by default using a fraction of the
@@ -476,34 +477,30 @@ def bathymetric_gradient_sizing_function(
     logger.info("Building a slope length sizing function...")
 
     xg, yg = dem.create_grid()
-    tmpz = dem.eval((xg, yg))
+    tmpz = dem.eval((xg, yg)).astype(float)
 
-    grid = Grid(
-        bbox=dem.bbox,
-        dx=min_edge_length / 2.0,
-        dy=min_edge_length / 2.0,
-        extrapolate=True,
-        values=0.0,
-        crs=crs,
-        hmin=min_edge_length,
-    )
+    # Output lattice defaults to DEM resolution; optional integer coarsening
+    if coarsen < 1 or int(coarsen) != coarsen:
+        raise ValueError("coarsen must be a positive integer")
     logger.info(f"Enforcing a minimum elevation cutoff of {min_elevation_cutoff}")
     tmpz[tmpz >= min_elevation_cutoff] = min_elevation_cutoff
 
-    dx, dy = dem.dx, dem.dy  # for gradient function
+    dx, dy = dem.dx, dem.dy  # for gradient function (grid spacing units)
     nx, ny = dem.nx, dem.ny
     coords = (xg, yg)
-
-    if crs == "EPSG:4326" or crs == 4326:
-        mean_latitude = np.mean(dem.bbox[2:])
-        meters_per_degree = (
+    # Work in physical units: if geographic CRS, convert degrees to meters for gradient
+    if getattr(dem.crs, "is_geographic", False):
+        # Use mean latitude for scale; longitude metres/deg depends on cos(lat)
+        lat0 = float(np.mean([dem.bbox[2], dem.bbox[3]]))
+        meters_per_deg_lat = (
             111132.92
-            - 559.82 * np.cos(2 * mean_latitude)
-            + 1.175 * np.cos(4 * mean_latitude)
-            - 0.0023 * np.cos(6 * mean_latitude)
+            - 559.82 * np.cos(2 * np.radians(lat0))
+            + 1.175 * np.cos(4 * np.radians(lat0))
+            - 0.0023 * np.cos(6 * np.radians(lat0))
         )
-        dy *= meters_per_degree
-        dx *= meters_per_degree
+        meters_per_deg_lon = 111320.0 * np.cos(np.radians(lat0))
+        dx *= meters_per_deg_lon
+        dy *= meters_per_deg_lat
     grid_details = (nx, ny, dx, dy)
 
     if type_of_filter == "barotropic" and filter_quotient > 0:
@@ -536,25 +533,75 @@ def bathymetric_gradient_sizing_function(
 
     # Calculating the slope function
     eps = 1e-10  # small number to approximate derivative
-    dp = np.clip(tmpz, None, -1)
-    grid.values = (2 * np.pi / slope_parameter) * np.abs(dp) / (bs + eps)
+    # Use depth magnitude (treat land/shallows after cutoff) to scale size
+    dp = np.clip(tmpz, None, -1.0)
+    values_m = (2 * np.pi / slope_parameter) * np.abs(dp) / (bs + eps)
 
-    # Convert back to degrees from meters (if geographic)
-    if crs == "EPSG:4326" or crs == 4326:
-        grid.values /= meters_per_degree
-        grid.dx = dem.dx
-        grid.dy = dem.dy
+    # Convert back to degrees if geographic
+    if getattr(dem.crs, "is_geographic", False):
+        # Use latitude scaling for an isotropic approximation
+        lat0 = float(np.mean([dem.bbox[2], dem.bbox[3]]))
+        meters_per_deg_lat = (
+            111132.92
+            - 559.82 * np.cos(2 * np.radians(lat0))
+            + 1.175 * np.cos(4 * np.radians(lat0))
+            - 0.0023 * np.cos(6 * np.radians(lat0))
+        )
+        values = values_m / meters_per_deg_lat
+    else:
+        values = values_m
 
-    if max_edge_length is not None:
-        grid.values[grid.values > max_edge_length] = max_edge_length
-
+    # Enforce bounds
     if min_edge_length is None:
-        min_edge_length = grid.dx
+        min_edge_length = max(dem.dx, dem.dy)
+    values = np.asarray(values, dtype=float)
+    values[values < min_edge_length] = min_edge_length
+    if max_edge_length is not None:
+        values[values > max_edge_length] = max_edge_length
 
-    grid.values[grid.values < min_edge_length] = min_edge_length
-    grid.build_interpolant()
-
-    return grid
+    # Build output grid on DEM lattice (or coarsened lattice)
+    if coarsen == 1:
+        grid_out = Grid(
+            bbox=dem.bbox,
+            dx=dem.dx,
+            dy=dem.dy,
+            extrapolate=True,
+            hmin=min_edge_length,
+            crs=dem.crs,
+            values=values,
+        )
+        grid_out.build_interpolant()
+        return grid_out
+    else:
+        # Create coarsened target grid and resample
+        target = Grid(
+            bbox=dem.bbox,
+            dx=dem.dx * coarsen,
+            dy=dem.dy * coarsen,
+            extrapolate=True,
+            hmin=min_edge_length,
+            crs=dem.crs,
+            values=0.0,
+        )
+        # Wrap values on DEM lattice to use existing interpolate_to
+        dem_grid = Grid(
+            bbox=dem.bbox,
+            dx=dem.dx,
+            dy=dem.dy,
+            extrapolate=True,
+            hmin=min_edge_length,
+            crs=dem.crs,
+            values=values,
+        )
+        dem_grid.build_interpolant()
+        grid_out = dem_grid.interpolate_to(target)
+        # Ensure bounds preserved after interpolation
+        grid_out.values[grid_out.values < min_edge_length] = min_edge_length
+        if max_edge_length is not None:
+            grid_out.values[grid_out.values > max_edge_length] = max_edge_length
+        grid_out.hmin = min_edge_length
+        grid_out.build_interpolant()
+        return grid_out
 
 
 def rossby_radius_filter(tmpz, bbox, grid_details, coords, rbfilt, barot):
@@ -902,6 +949,7 @@ def multiscale_sizing_function(
     p=3,
     nnear=28,
     blend_width=1000,
+    domain_metadata=None,
 ):
     """Given a list of mesh size functions in a hierarchy
     w.r.t. to minimum mesh size (largest -> smallest),
@@ -965,13 +1013,16 @@ def multiscale_sizing_function(
     # NB: only keep the minimum value over all grids
     def func(qpts):
         hmin = np.array([999999] * len(qpts))
+
         for i, grid in enumerate(new_list_of_grids):
             if i == 0:
                 grid.extrapolate = True
             else:
                 grid.extrapolate = False
             grid.build_interpolant()
+
             _hmin = grid.eval(qpts)
+
             hmin = np.min(np.column_stack([_hmin, hmin]), axis=1)
         return hmin
 
