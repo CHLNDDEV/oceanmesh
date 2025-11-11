@@ -239,7 +239,7 @@ class Grid(Region):
         assert isinstance(grid2, Grid), "Object must be Grid."
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
-        x2min, x2max, y2min, y2max = self.bbox
+        x2min, x2max, y2min, y2max = grid2.bbox
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         assert overlap, "Grid objects do not overlap."
         lon1, lat1 = self.create_vectors()
@@ -288,7 +288,7 @@ class Grid(Region):
         _coarse_w_fine: :class:`Grid`
             The coarse grid with the finer grid interpolated and blended.
         """
-        _FILL = -99999  # uncommon value
+        _FILL = -99999  # uncommon value used to mark padding region
         if not isinstance(coarse, Grid):
             raise ValueError("Object must be Grid.")
         # check if they overlap
@@ -331,10 +331,13 @@ class Grid(Region):
         ask_index = _vals == _FILL
         known_index = _vals != _FILL
 
-        _tree = Invdisttree(_pts[known_index], _vals[known_index])
-        _vals[ask_index] = _tree(_pts[ask_index], nnear=nnear, eps=eps, p=p)
-
-        _hmin = np.amin(_vals[ask_index])
+        # If no padding cells projected onto coarse grid, skip IDW and just compute hmin
+        if np.any(ask_index):
+            _tree = Invdisttree(_pts[known_index], _vals[known_index])
+            _vals[ask_index] = _tree(_pts[ask_index], nnear=nnear, eps=eps, p=p)
+            _hmin = np.amin(_vals[ask_index])
+        else:
+            _hmin = np.amin(_vals)
         _coarse_w_fine.hmin = _hmin
         # put it back
         _coarse_w_fine.values = _vals.reshape(*_coarse_w_fine.values.shape)

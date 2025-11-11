@@ -370,6 +370,9 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
 
     # merge the two domains together
     logger.info("--> Blending the domains together...")
+    # Avoid passing duplicate max_iter to generate_mesh
+    _kwargs = dict(kwargs)
+    _kwargs.pop("max_iter", None)
     _p, _t = generate_mesh(
         domain=union,
         edge_length=master_edge_length,
@@ -377,7 +380,7 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         points=_p,
         max_iter=opts["blend_max_iter"],
         lock_boundary=True,
-        **kwargs,
+        **_kwargs,
     )
 
     return _p, _t
