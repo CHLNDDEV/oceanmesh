@@ -513,6 +513,11 @@ class Shoreline(Region):
         are removed.
     smooth_shoreline : bool, optional
         Smooth the shoreline. Default is True.
+    stereo : bool, optional
+        Use stereographic projection handling intended for global meshes. Set True for
+        global world meshes (with EPSG:4326 inputs), and False for regional meshes. This
+        flag is retained on the Shoreline instance and propagated to downstream Domain
+        objects for validation in generate_multiscale_mesh.
     """
 
     def __init__(
@@ -546,6 +551,8 @@ class Shoreline(Region):
 
         self.shp = shp
         self.h0 = h0
+        # Retain stereo flag for downstream validation (e.g., multiscale mixing)
+        self.stereo = bool(stereo)
         self.inner = []
         self.outer = []
         self.mainland = []

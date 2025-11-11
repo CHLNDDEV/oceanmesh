@@ -9,12 +9,20 @@ import numpy as np
 import scipy.sparse as spsparse
 from _delaunay_class import DelaunayTriangulation as DT
 from _fast_geometry import unique_edges
+from pyproj import CRS
 
 from .clean import _external_topology
 from .edgefx import multiscale_sizing_function
 from .fix_mesh import fix_mesh
 from .grid import Grid
-from .region import to_lat_lon, to_stereo
+from .region import (
+    to_lat_lon,
+    to_stereo,
+    bbox_contains,
+    validate_crs_compatible,
+    get_crs_string,
+    is_global_bbox,
+)
 from .signed_distance_function import Domain, multiscale_signed_distance_function
 
 logger = logging.getLogger(__name__)
@@ -302,6 +310,134 @@ def _check_bbox(bbox):
     assert int(len(bbox) / 2), "`dim` must be 2"
 
 
+def _validate_multiscale_domains(domains, edge_lengths):
+    """Validate domain & sizing function compatibility for multiscale meshing.
+
+    Checks performed:
+      1. Presence of CRS on all domains.
+      2. Global domain (stereo=True) ordering: must be first if present.
+      3. Bbox containment for regional domains within global domain when mixing.
+      4. CRS compatibility (global EPSG:4326, regional geographic or projected).
+      5. Edge length Grid CRS matches corresponding domain CRS.
+      6. Stereo flag usage: only global domain should have stereo=True.
+
+    Returns
+    -------
+    (ok: bool, errors: list[str])
+    """
+    errors = []
+
+    if len(domains) != len(edge_lengths):
+        errors.append("Number of domains and edge_lengths differ.")
+        return False, errors
+
+    # Determine global domain (stereo=True)
+    stereo_flags = [getattr(d, "stereo", False) for d in domains]
+    global_indices = [i for i, s in enumerate(stereo_flags) if s]
+    global_domain = None
+    if len(global_indices) > 1:
+        errors.append("Only one global (stereo=True) domain permitted.")
+    elif len(global_indices) == 1:
+        if global_indices[0] != 0:
+            errors.append("Global domain must be the first (coarsest) domain in list.")
+        global_domain = domains[global_indices[0]]
+
+    # Helper flags for conditional CRS requirements
+    domain_crs_list = [getattr(d, "crs", None) for d in domains]
+    edge_crs_list = [getattr(el, "crs", None) if hasattr(el, "crs") else None for el in edge_lengths]
+    has_any_crs = any(c is not None for c in domain_crs_list) or any(c is not None for c in edge_crs_list)
+
+    # Detect implicit global domain: EPSG:4326 + global-like bbox but stereo=False
+    implicit_global_idx = None
+    for i, d in enumerate(domains):
+        dcrs = getattr(d, "crs", None)
+        try:
+            if dcrs is not None and CRS.from_user_input(dcrs).to_epsg() == 4326 and is_global_bbox(d.bbox):
+                implicit_global_idx = i
+                break
+        except Exception:
+            # If CRS can't be parsed, skip implicit detection for this domain
+            pass
+
+    # If no CRS anywhere and no implicit global detected, allow bbox-only flows without error
+    if has_any_crs or implicit_global_idx is not None:
+        # Now missing CRS becomes an error because compatibility checks are required
+        for i, d in enumerate(domains):
+            if getattr(d, "crs", None) is None:
+                errors.append(
+                    f"Domain #{i} missing CRS metadata. Provide CRS via Shoreline(crs=...) to enable compatibility checks."
+                )
+
+    # If we have a global domain, validate CRS and containment
+    if global_domain is not None:
+        gcrs = getattr(global_domain, "crs", None)
+        if gcrs is not None:
+            try:
+                gcrs_str = get_crs_string(gcrs)
+            except Exception:
+                gcrs_str = str(gcrs)
+            # Check global CRS must be EPSG:4326
+            ok_global, msg_global = validate_crs_compatible(gcrs, gcrs)
+            if not ok_global:
+                errors.append(msg_global)
+        # Containment checks for regional domains
+        for i, d in enumerate(domains[1:], start=1):
+            if not bbox_contains(global_domain.bbox, d.bbox):
+                errors.append(
+                    f"Regional domain #{i} bbox {d.bbox} not contained within global bbox {global_domain.bbox}."
+                )
+            # Stereo flag must be False for regional domains
+            if getattr(d, "stereo", False):
+                errors.append(f"Regional domain #{i} has stereo=True; only the global domain may set stereo=True.")
+            # CRS compatibility between global and regional
+            ok_crs, msg_crs = validate_crs_compatible(getattr(global_domain, "crs", None), getattr(d, "crs", None))
+            if not ok_crs:
+                errors.append(msg_crs)
+
+    # Implicit global-like domain with EPSG:4326 but stereo=False mixing with different CRS
+    if implicit_global_idx is not None:
+        ig = domains[implicit_global_idx]
+        if not getattr(ig, "stereo", False):
+            # If any other domain has a CRS that is not equal to EPSG:4326, require stereo=True and ordering
+            try:
+                ig_crs = CRS.from_user_input(ig.crs) if getattr(ig, "crs", None) is not None else None
+                for j, d in enumerate(domains):
+                    if j == implicit_global_idx:
+                        continue
+                    dcrs = getattr(d, "crs", None)
+                    if dcrs is None:
+                        continue
+                    if ig_crs is None:
+                        continue
+                    if not ig_crs.equals(CRS.from_user_input(dcrs)):
+                        errors.append(
+                            "Detected global-like EPSG:4326 domain without stereo=True mixed with other CRS. "
+                            "Set stereo=True on the global domain and place it first in the list."
+                        )
+                        break
+            except Exception:
+                # If CRS parsing fails, skip this implicit enforcement
+                pass
+
+    # Edge length CRS matching
+    for i, (d, el) in enumerate(zip(domains, edge_lengths)):
+        if hasattr(el, "crs"):
+            el_crs = getattr(el, "crs", None)
+            d_crs = getattr(d, "crs", None)
+            if el_crs is not None and d_crs is not None:
+                try:
+                    if not CRS.from_user_input(el_crs).equals(CRS.from_user_input(d_crs)):
+                        errors.append(
+                            f"Edge length #{i} CRS {get_crs_string(el_crs)} does not match domain CRS {get_crs_string(d_crs)}."
+                        )
+                except Exception:
+                    errors.append(
+                        f"Edge length #{i} CRS could not be compared to domain CRS (el={get_crs_string(el_crs)}, domain={get_crs_string(d_crs)})."
+                    )
+
+    return len(errors) == 0, errors
+
+
 def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     r"""Generate a 2D triangular mesh using callbacks to several
     sizing functions `edge_lengths` and several signed distance functions
@@ -315,6 +451,14 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
         A list of functions that can evalulate a point and return a mesh size.
     \**kwargs:
         See below for kwargs in addition to the ones available for `generate_mesh`
+
+    Requirements for mixing global and regional domains
+    ---------------------------------------------------
+    - Global domain must be first in the list and must use EPSG:4326 with stereo=True
+    - Regional domains must not set stereo=True
+    - Each regional domain bbox must be fully contained by the global domain bbox
+    - All domains and sizing Grid objects must supply CRS metadata; each Grid CRS must match its domain CRS
+    - Global+regional CRS mixing supported only when global=EPSG:4326 and regional is geographic or projected
 
     :Keyword Arguments:
         * *blend_width* (``float``) --
@@ -333,6 +477,14 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     assert len(domains) == len(
         edge_lengths
     ), "The same number of domains must be passed as sizing functions"
+
+    # Perform validation prior to any mesh generation steps
+    ok, verrors = _validate_multiscale_domains(domains, edge_lengths)
+    if not ok:
+        formatted = "\n - " + "\n - ".join(verrors)
+        raise ValueError(
+            "Multiscale domain validation failed with the following issues:" + formatted + "\nGuidance: Ensure a single global domain (stereo=True, EPSG:4326) precedes regional domains; supply CRS metadata via Shoreline; regional bboxes must lie within global bbox; sizing Grid CRS must match domain CRS."
+        )
     opts = {
         "max_iter": 100,
         "seed": 0,

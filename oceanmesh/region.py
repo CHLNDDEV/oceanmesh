@@ -4,6 +4,93 @@ from pyproj import CRS, Transformer
 __all__ = ["Region", "warp_coordinates"]
 
 
+# ---- Helpers for CRS and bbox validation in multiscale meshes ----
+def get_crs_string(crs):
+    """Return a compact string representation of a CRS-like object.
+
+    Parameters
+    ----------
+    crs : pyproj.CRS | str | None
+    """
+    if crs is None:
+        return "None"
+    try:
+        _crs = CRS.from_user_input(crs)
+        return _crs.to_string()
+    except Exception:
+        return str(crs)
+
+
+def is_global_bbox(bbox):
+    """Heuristic to determine if a bbox is 'global-like'.
+
+    Returns True when bbox covers most of the world extents.
+    Expected bbox format: (xmin, xmax, ymin, ymax) in degrees.
+    """
+    xmin, xmax, ymin, ymax = bbox
+    lon_span = xmax - xmin
+    lat_span = ymax - ymin
+    lon_global = lon_span >= 300 or (xmin <= -180 and xmax >= 180)
+    lat_global = lat_span >= 150 or (ymin <= -89 and ymax >= 89)
+    return bool(lon_global and lat_global)
+
+
+def bbox_contains(outer, inner):
+    """Return True if outer bbox fully contains inner bbox.
+
+    Both bboxes are (xmin, xmax, ymin, ymax). If the outer bbox is detected
+    as global using is_global_bbox, containment is assumed True. If the inner
+    bbox is global and outer is not, containment is False.
+    """
+    if is_global_bbox(outer):
+        return True
+    if is_global_bbox(inner) and not is_global_bbox(outer):
+        return False
+
+    oxmin, oxmax, oymin, oymax = outer
+    ixmin, ixmax, iymin, iymax = inner
+    return (oxmin <= ixmin) and (oxmax >= ixmax) and (oymin <= iymin) and (oymax >= iymax)
+
+
+def validate_crs_compatible(global_crs, regional_crs):
+    """Validate that a global and regional CRS are compatible for mixing.
+
+    Rules:
+      - Global domain must be WGS84 geographic (EPSG:4326)
+      - Regional may be EPSG:4326 or a projected CRS
+      - If either CRS is missing, report soft-pass with guidance
+
+    Returns
+    -------
+    (ok: bool, msg: str)
+    """
+    if global_crs is None or regional_crs is None:
+        return True, "CRS metadata missing; skipping strict compatibility check"
+
+    try:
+        g = CRS.from_user_input(global_crs)
+        r = CRS.from_user_input(regional_crs)
+    except Exception as e:
+        return False, f"Failed to parse CRS. global={get_crs_string(global_crs)}, regional={get_crs_string(regional_crs)}; error={e}"
+
+    # Global must be EPSG:4326 (WGS84 geographic)
+    try:
+        g_auth = g.to_epsg()
+    except Exception:
+        g_auth = None
+    if not g.is_geographic or g_auth != 4326:
+        return False, f"Global domain must be EPSG:4326, found {get_crs_string(g)}"
+
+    # Regional can be geographic or projected; both acceptable
+    if r.is_geographic:
+        return True, "Compatible CRS: global EPSG:4326 with regional geographic CRS"
+    if r.is_projected:
+        return True, "Compatible CRS: global EPSG:4326 with regional projected CRS"
+
+    # Fallback neutral
+    return True, "CRS types appear compatible"
+
+
 def warp_coordinates(points, src_crs, dst_crs):
     src_crs = CRS.from_epsg(src_crs)
     dst_crs = CRS.from_epsg(dst_crs)
