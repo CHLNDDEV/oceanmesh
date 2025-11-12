@@ -376,10 +376,17 @@ def _validate_multiscale_domains(domains, edge_lengths):
                 gcrs_str = get_crs_string(gcrs)
             except Exception:
                 gcrs_str = str(gcrs)
-            # Check global CRS must be EPSG:4326
-            ok_global, msg_global = validate_crs_compatible(gcrs, gcrs)
-            if not ok_global:
-                errors.append(msg_global)
+            # Explicitly require global CRS be EPSG:4326
+            try:
+                parsed = CRS.from_user_input(gcrs)
+                if parsed.to_epsg() != 4326:
+                    errors.append(
+                        f"Global domain CRS {gcrs_str} must be EPSG:4326 for global+regional multiscale meshing."
+                    )
+            except Exception:
+                errors.append(
+                    f"Global domain CRS '{gcrs_str}' could not be parsed; expected EPSG:4326."
+                )
         # Containment checks for regional domains
         for i, d in enumerate(domains[1:], start=1):
             if not bbox_contains(global_domain.bbox, d.bbox):
@@ -447,6 +454,16 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     sizing functions `edge_lengths` and several signed distance functions
     See the kwargs for `generate_mesh`.
 
+    This function supports both regional multiscale meshing (multiple nested
+    domains in the same projection) and global+regional multiscale meshing
+    (a global domain in stereographic projection with one or more regional
+    refinement zones defined in WGS84). For global+regional workflows,
+    coordinate transformations between WGS84 (EPSG:4326) and stereographic
+    space are handled automatically during mesh generation. Users define all
+    sizing functions on latitude/longitude grids; the mesher manages the
+    projection conversions transparently when the first (global) domain has
+    `stereo=True`.
+
     Parameters
     ----------
     domains: A list of function objects.
@@ -463,6 +480,24 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     - Each regional domain bbox must be fully contained by the global domain bbox
     - All domains and sizing Grid objects must supply CRS metadata; each Grid CRS must match its domain CRS
     - Global+regional CRS mixing supported only when global=EPSG:4326 and regional is geographic or projected
+        - Coordinate transformation workflow: sizing functions are defined in EPSG:4326; the global mesh is generated in stereographic space; automatic conversions applied during sizing evaluation
+        - The global domain requires two shoreline datasets: one in lat/lon (for sizing functions), one in stereographic (for the meshing boundary)
+
+        Automatic coordinate handling for global+regional meshing
+        -----------------------------------------------------------
+        When the first domain has `stereo=True`, this function automatically:
+            * Detects the global+regional mixing scenario during validation.
+            * Transforms query points between stereographic and lat/lon when evaluating regional sizing grids.
+            * Applies stereographic distortion corrections to sizing values where needed.
+            * Propagates the `stereo=True` flag to the final blending/union mesh generation step.
+
+        This ensures that regional sizing functions (defined in WGS84) interact correctly with a global mesh generated in stereographic space. Users do not need to manually handle coordinate conversions.
+
+        Example
+        -------
+        See the README section 'Global mesh generation with regional refinement' for
+        a complete example demonstrating how to merge a regional mesh (e.g., Australia)
+        into a global mesh.
 
     :Keyword Arguments:
         * *blend_width* (``float``) --
@@ -473,6 +508,17 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
                 The number of mesh generation iterations to blend the nest and parent.
         * *blend_nnear* (``int``) --
                 The number of nearest neighbors in the IDW interpolation.
+    * *stereo* (``bool``) --
+        Note: The stereo parameter for the final union/blending step is inferred from the domain
+        metadata (global domain first with stereo=True). Users typically should not set this
+        explicitly for multiscale workflows.
+
+    Notes
+    -----
+    * Regional-only multiscale meshing (no global domain) requires all domains share a compatible CRS.
+    * Global+regional meshing follows a two-step workflow: sizing in WGS84, global meshing in stereographic space.
+    * Validation errors provide detailed guidance (CRS mismatches, bbox containment, stereo flag misuse).
+    * Domain metadata (CRS, stereo flags) is collected internally to manage automatic coordinate transformations.
 
     """
     assert (

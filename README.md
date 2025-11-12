@@ -24,6 +24,7 @@ Table of contents
      * [Building mesh sizing functions](#building-mesh-sizing-functions)
      * [Mesh generation](#mesh-generation)
      * [Multiscale mesh generation](#multiscale-mesh-generation)
+        * [Global mesh generation with regional refinement](#global-mesh-generation-with-regional-refinement)
      * [Cleaning up the mesh](#cleaning-up-the-mesh)
    * [Testing](#testing)
    * [License](#license)
@@ -195,6 +196,142 @@ shoreline.plot(
 )
 # Using our shoreline, we create a signed distance function
 # which will be used for meshing later on.
+Global mesh generation with regional refinement
+---------------------------------------------------
+Oceanmesh also supports combining a global mesh with one or more regional refinement zones. This pattern is valuable for global ocean circulation models that require higher resolution in coastal or shelf regions (e.g., Australia) while keeping coarser resolution elsewhere. The workflow proceeds in two conceptual steps: (1) define all sizing functions in WGS84 (EPSG:4326) latitude/longitude coordinates; (2) generate the global mesh in a stereographic projection. All coordinate transformations between stereographic space and WGS84 are handled automatically during mesh generation—users only supply domains and sizing functions with the correct ordering and flags.
+
+```python
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+import matplotlib.gridspec as gridspec
+
+import oceanmesh as om
+from oceanmesh.region import to_lat_lon
+
+# ---------------------------------------------------------------------------
+# File paths (shapefiles included with tests)
+# global_latlon.shp: coastline in WGS84 for sizing functions
+# global_stereo.shp: same coastline already in stereographic projection for meshing
+fname_global_latlon = "tests/global/global_latlon.shp"
+fname_global_stereo = "tests/global/global_stereo.shp"
+
+EPSG = 4326  # WGS84
+
+# ---------------------------------------------------------------------------
+# Global (coarse) domain definition in WGS84
+global_bbox = (-180.0, 180.0, -89.0, 90.0)
+global_region = om.Region(extent=global_bbox, crs=EPSG)
+min_edge_length1 = 1.0   # degrees (approximate target minimum at shoreline; units follow EPSG:4326)
+max_edge_length1 = 3.0   # degrees (approximate coarse offshore size)
+shoreline_global_latlon = om.Shoreline(fname_global_latlon, global_region.bbox, min_edge_length1)
+sdf_global_latlon = om.signed_distance_function(shoreline_global_latlon)
+
+# Sizing functions (distance + feature) built in WGS84 (units: degrees). Internal routines convert to meters where needed.
+edge_length_global_dist = om.distance_sizing_function(shoreline_global_latlon, rate=0.11)
+edge_length_global_feat = om.feature_sizing_function(
+    shoreline_global_latlon,
+    sdf_global_latlon,
+    max_edge_length=max_edge_length1,
+)
+edge_length_global = om.compute_minimum([edge_length_global_dist, edge_length_global_feat])
+# Apply gradation with stereo awareness (global domain will later mesh in stereographic space)
+edge_length_global = om.enforce_mesh_gradation(edge_length_global, gradation=0.15, stereo=True)
+# Note: gradation uses stereo=True for global domain
+
+# ---------------------------------------------------------------------------
+# Regional (fine) domain: Australia example in WGS84
+aus_bbox = (110.0, 160.0, -45.0, -10.0)
+aus_region = om.Region(extent=aus_bbox, crs=EPSG)
+min_edge_length2 = 0.25  # degrees (refined shoreline resolution; could use projected CRS instead, e.g., UTM)
+max_edge_length2 = 1.5   # degrees (regional offshore resolution)
+shoreline_regional = om.Shoreline(fname_global_latlon, aus_region.bbox, min_edge_length2)
+sdf_regional = om.signed_distance_function(shoreline_regional)
+edge_length_regional_dist = om.distance_sizing_function(shoreline_regional, rate=0.13)
+edge_length_regional_feat = om.feature_sizing_function(
+    shoreline_regional,
+    sdf_regional,
+    max_edge_length=max_edge_length2,
+)
+edge_length_regional = om.compute_minimum([edge_length_regional_dist, edge_length_regional_feat])
+edge_length_regional = om.enforce_mesh_gradation(edge_length_regional, gradation=0.12)
+# Regional domain uses standard lat/lon coordinates
+
+# ---------------------------------------------------------------------------
+# Stereographic domain for global meshing (must set stereo=True)
+shoreline_global_stereo = om.Shoreline(
+    fname_global_stereo,
+    global_region.bbox,
+    min_edge_length1,
+    stereo=True,
+)
+sdf_global_stereo = om.signed_distance_function(shoreline_global_stereo)
+# Global domain must use stereographic projection for meshing
+
+# ---------------------------------------------------------------------------
+# Multiscale mesh generation (global + regional)
+# First domain (global) has stereo=True, second (regional) does not.
+# Coordinate transformations between projections handled automatically.
+points, cells = om.generate_multiscale_mesh(
+    [sdf_global_stereo, sdf_regional],
+    [edge_length_global, edge_length_regional],
+    blend_width=1.0e6,    # transition width (meters). For basin-scale transitions use ~1e5–1e6 m (≈1–9° assuming ~111e3 m per degree).
+    blend_max_iter=50,    # iterations for the blending step
+    max_iter=75,          # iterations for initial domain meshing
+)
+
+# ---------------------------------------------------------------------------
+# Standard cleanup operations to improve mesh quality
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
+points, cells = om.laplacian2(points, cells, max_iter=50)
+
+# ---------------------------------------------------------------------------
+# (Optional) Visualization
+# Convert stereographic mesh coordinates back to lat/lon for plotting
+lon, lat = to_lat_lon(points[:, 0], points[:, 1])
+triang = tri.Triangulation(lon, lat, cells)
+
+# Two-panel figure: global view + zoomed Australia refinement
+fig = plt.figure(figsize=(10, 6))
+gs = gridspec.GridSpec(1, 2, width_ratios=[1.3, 1])
+
+ax0 = fig.add_subplot(gs[0])
+ax0.set_title("Global mesh with Australia refinement")
+ax0.set_aspect("equal")
+ax0.triplot(triang, lw=0.2, color="gray")
+ax0.plot([aus_bbox[0], aus_bbox[1], aus_bbox[1], aus_bbox[0], aus_bbox[0]],
+         [aus_bbox[2], aus_bbox[2], aus_bbox[3], aus_bbox[3], aus_bbox[2]],
+         "r--", lw=1.0, label="Australia bbox")
+ax0.set_xlim(-180, 180)
+ax0.set_ylim(-90, 90)
+ax0.legend(loc="lower left")
+
+ax1 = fig.add_subplot(gs[1])
+ax1.set_title("Refined Australia region")
+ax1.set_aspect("equal")
+ax1.triplot(triang, lw=0.25, color="black")
+ax1.set_xlim(aus_bbox[0], aus_bbox[1])
+ax1.set_ylim(aus_bbox[2], aus_bbox[3])
+
+plt.tight_layout()
+# plt.show()  # Uncomment to display interactively
+```
+
+Key points:
+
+* Ordering: the global domain (stereo=True) must be first in the `generate_multiscale_mesh` domain list.
+* Projection split: sizing functions are defined in WGS84; meshing of the global extent runs in stereographic space.
+* Regional domains: remain in standard EPSG:4326 coordinates and must be contained within the global bbox.
+* Regional domains may use a projected CRS (e.g., UTM). Oceanmesh will transform and blend sizing grids across mixed CRSs automatically.
+* Automatic handling: oceanmesh transforms query coordinates between stereographic and lat/lon (and projected regional CRSs) as needed—no manual reprojection code is required.
+* Validation: `generate_multiscale_mesh` enforces CRS compatibility, bbox containment, and correct stereo flag usage; error messages guide fixes.
+
+![Global Regional Multiscale](path/to/image.png)
+*The image above (placeholder) would show the global mesh with a refined Australia region.*
+
 sdf = om.signed_distance_function(shoreline)
 ```
 ![Figure_1](https://user-images.githubusercontent.com/18619644/133544070-2d0f2552-c29a-4c44-b0aa-d3649541af4d.png)
