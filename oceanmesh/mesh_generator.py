@@ -389,9 +389,29 @@ def _validate_multiscale_domains(domains, edge_lengths):
                 )
         # Containment checks for regional domains
         for i, d in enumerate(domains[1:], start=1):
-            if not bbox_contains(global_domain.bbox, d.bbox):
+            # Perform containment in lat/lon if global stereographic domain provided its bbox in stereo space
+            g_bbox = global_domain.bbox
+            d_bbox = d.bbox
+            try:
+                if getattr(global_domain, 'stereo', False):
+                    # Convert regional bbox corners to stereo then compare
+                    lon_min, lon_max, lat_min, lat_max = d_bbox
+                    reg_corners_lon = [lon_min, lon_max, lon_max, lon_min]
+                    reg_corners_lat = [lat_min, lat_min, lat_max, lat_max]
+                    sx, sy = to_stereo(np.array(reg_corners_lon), np.array(reg_corners_lat))
+                    stereo_reg_bbox = (float(np.min(sx)), float(np.max(sx)), float(np.min(sy)), float(np.max(sy)))
+                    if not bbox_contains(g_bbox, stereo_reg_bbox):
+                        errors.append(
+                            f"Regional domain #{i} bbox {d_bbox} (lat/lon) not contained within global stereo bbox {g_bbox}."
+                        )
+                else:
+                    if not bbox_contains(g_bbox, d_bbox):
+                        errors.append(
+                            f"Regional domain #{i} bbox {d_bbox} not contained within global bbox {g_bbox}."
+                        )
+            except Exception:
                 errors.append(
-                    f"Regional domain #{i} bbox {d.bbox} not contained within global bbox {global_domain.bbox}."
+                    f"Regional domain #{i} containment check failed due to transformation error; verify CRS and stereo settings."
                 )
             # Stereo flag must be False for regional domains
             if getattr(d, "stereo", False):
