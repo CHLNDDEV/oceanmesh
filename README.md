@@ -43,7 +43,7 @@ Functionality
 Citing
 ======
 
-The Python version of the algorithm does not yet have a citation; however, similar algorithms and ideas are shared between both version.
+The Python version of the algorithm does not have a citation; however, similar algorithms and ideas are shared between the published MATLAB version.
 
 ```
 [1] - Roberts, K. J., Pringle, W. J., and Westerink, J. J., 2019.
@@ -164,6 +164,9 @@ Reading in geophysical data
 
 Shoreline datasets are necessary to build signed distance functions which define the meshing domain. Here we show how to download a world shoreline dataset referred to as [GSHHG](https://www.ngdc.noaa.gov/mgg/shorelines/) and read it into to `oceanmesh`.
 
+**Note**: The following code blocks demonstrate downloading and using the GSHHS shoreline dataset. If you're running these examples locally, execute the download code block first. Subsequent examples in this README assume the dataset has been downloaded to your working directory. In CI, individual code blocks run in isolation, so blocks that depend on downloaded data are marked to be skipped.
+
+<!--pytest-codeblocks:skip-->
 ```python
 import zipfile
 
@@ -196,10 +199,13 @@ shoreline.plot(
 )
 # Using our shoreline, we create a signed distance function
 # which will be used for meshing later on.
+```
+ 
 Global mesh generation with regional refinement
 ---------------------------------------------------
 Oceanmesh also supports combining a global mesh with one or more regional refinement zones. This pattern is valuable for global ocean circulation models that require higher resolution in coastal or shelf regions (e.g., Australia) while keeping coarser resolution elsewhere. The workflow proceeds in two conceptual steps: (1) define all sizing functions in WGS84 (EPSG:4326) latitude/longitude coordinates; (2) generate the global mesh in a stereographic projection. All coordinate transformations between stereographic space and WGS84 are handled automatically during mesh generation—users only supply domains and sizing functions with the correct ordering and flags.
 
+<!--pytest-codeblocks:skip-->
 ```python
 import os
 import numpy as np
@@ -331,9 +337,6 @@ Key points:
 
 ![Global Regional Multiscale](path/to/image.png)
 *The image above (placeholder) would show the global mesh with a refined Australia region.*
-
-sdf = om.signed_distance_function(shoreline)
-```
 ![Figure_1](https://user-images.githubusercontent.com/18619644/133544070-2d0f2552-c29a-4c44-b0aa-d3649541af4d.png)
 
 DEMs are used to build some mesh size functions (e.g., wavelength, enforcing size bounds, enforce maximum Courant bounds) but are not essential for mesh generation purposes. The DEM used below 'Eastcoast.nc' was created using the Python package [elevation](https://github.com/bopen/elevation) with the following command:
@@ -343,6 +346,7 @@ eio clip - o EastCoast.nc --bounds -74.4 40.2 -73.4 41.2
 ```
 This data is a clip from the [SRTM30 m](https://lpdaac.usgs.gov/products/srtmgl1nv003/) elevation dataset.
 
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -366,12 +370,14 @@ dem.plot(
     vmax=10,  # maximum elevation value in plot
 )
 ```
+<!--pytest-codeblocks:skip-->
 ![Figure_2](https://user-images.githubusercontent.com/18619644/133544110-44497a6b-4a5a-482c-9447-cdc2f3663f17.png)
 
 # Defining the domain
 ---------------------
 The domain is defined by a signed distance function. A signed distance function can be automatically generated from a complex coastal ocean domain as such
 
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -403,6 +409,7 @@ All mesh size functions are defined on regular Cartesian grids. The properties o
 
 A high degree of mesh refinement is often necessary near the shoreline boundary to capture its geometric complexity. If mesh resolution is poorly distributed, critical conveyances may be missed, leading to larger-scale errors in the nearshore circulation. Thus, a mesh size function that is equal to a user-defined minimum mesh size h0 along the shoreline boundary, growing as a linear function of the signed distance d from it, may be appropriate.
 
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -420,6 +427,7 @@ fig, ax, pc = edge_length.plot(
     holding=True,
 )
 shoreline.plot(ax=ax)
+<!--pytest-codeblocks:skip-->
 ```
 ![Figure_3](https://user-images.githubusercontent.com/18619644/133544111-314cb668-7fd2-45db-b754-4dc204617628.png)
 
@@ -427,6 +435,7 @@ One major drawback of the distance mesh size function is that the minimum mesh s
 
 In this function, the feature size (e.g., the width of channels and/or tributaries and the radius of curvature of the shoreline) along the coast is estimated by computing distances to the medial axis of the shoreline geometry. In `oceanmesh`, we have implemented an approximate medial axis method closely following [Koko, (2015)](https://ideas.repec.org/a/eee/apmaco/v250y2015icp650-664.html).
 
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -458,6 +467,7 @@ shoreline.plot(ax=ax)
 Some mesh size functions will not produce smooth element size transitions when meshed and this can lead to problems with numerical simulation. All mesh size function can thus be graded such that neighboring mesh sizes are bounded above by a constant. Mesh grading edits coarser regions and preserves the finer mesh resolution zones.
 
 Repeating the above but applying a gradation rate of 15% produces the following:
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -479,6 +489,7 @@ fig, ax, pc = edge_length.plot(
     ylim=[40.3, 40.8],
 )
 shoreline.plot(ax=ax)
+<!--pytest-codeblocks:skip-->
 ```
 ![Figure_5](https://user-images.githubusercontent.com/18619644/133544114-cedc0750-b33a-4b7c-9fa5-d14b4e169c40.png)
 
@@ -487,6 +498,7 @@ shoreline.plot(ax=ax)
 In shallow water theory, the wave celerity, and hence the wavelength λ, is proportional to the square root of the depth of the water column. This relationship indicates that more mesh resolution at shallower depths is required to resolve waves that are shorter than those in deep water. With this considered, a mesh size function hwl that ensures a certain number of elements are present per wavelength (usually of the M2-dominant semi-diurnal tidal species but the frequency of the dominant wave can be specified via kwargs) can be deduced.
 
 In this snippet, as before we compute the feature size function, but now we also compute the wavelength-to-gridscale sizing function using the SRTM dataset and compute the minimum of all the functions before grading. We discretize the wavelength of the M2 by 30 elements (e.g., wl=30)
+<!--pytest-codeblocks:skip-->
 ```python
 import oceanmesh as om
 
@@ -516,6 +528,7 @@ fig, ax, pc = edge_length.plot(
     ylim=[40.3, 40.8],
 )
 shoreline.plot(ax=ax)
+<!--pytest-codeblocks:skip-->
 ```
 ![Figure_7](https://user-images.githubusercontent.com/18619644/133544116-ba0f9404-a01e-4b30-bb0d-841c8f61224d.png)
 
@@ -596,6 +609,7 @@ In this example, we demonstrate all of the above to build a mesh around New York
 
 **Here we use the GSHHS shoreline [here](http://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip) and the Python package `meshio` to write the mesh to a VTK file for visualization in ParaView. Other mesh formats are possible; see `meshio` for more details**
 
+<!--pytest-codeblocks:skip-->
 ```python
 import meshio
 import oceanmesh as om
@@ -643,6 +657,7 @@ The major downside of the DistMesh algorithm is that it cannot handle regional d
 
 Areas of finer refinement can be incorporated seamlessly by using the `generate_multiscale_mesh` function. In this case, the user passes lists of signed distance and edge length functions to the mesh generator but besides this the user API remains the same to the previous mesh generation example. The mesh sizing transitions between nests are handled automatically to produce meshes suitable for FEM and FVM numerical simulations through the parameters prefixed with "blend".
 
+<!--pytest-codeblocks:skip-->
 ```python
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -669,28 +684,24 @@ bbox2 = np.array(
 )
 extent2 = om.Region(extent=bbox2, crs=EPSG)
 min_edge_length2 = 4.6e-4  # minimum mesh size in domain in projection
+
 s1 = om.Shoreline(fname, extent1.bbox, min_edge_length1)
 sdf1 = om.signed_distance_function(s1)
 el1 = om.distance_sizing_function(s1, max_edge_length=0.05)
 s2 = om.Shoreline(fname, extent2.bbox, min_edge_length2)
 sdf2 = om.signed_distance_function(s2)
 el2 = om.distance_sizing_function(s2)
-# Control the element size transition
-# from coarse to fine with the kwargs prefixed with `blend`
-points, cells = om.generate_multiscale_mesh(
-    [sdf1, sdf2],
-    [el1, el2],
-)
-# remove degenerate mesh faces and other common problems in the mesh
+
+# Control the element size transition from coarse to fine
+points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2])
+
+# Remove some common mesh issues and smooth
 points, cells = om.make_mesh_boundaries_traversable(points, cells)
-# remove singly connected elements (elements connected to only one other element)
 points, cells = om.delete_faces_connected_to_one_face(points, cells)
-# remove poor boundary elements with quality < 15%
 points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
-# apply a Laplacian smoother that preservers the mesh size distribution
 points, cells = om.laplacian2(points, cells)
 
-# plot it showing the different levels of resolution
+# Plot showing different levels of resolution
 triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
 gs = gridspec.GridSpec(2, 2)
 gs.update(wspace=0.5)
@@ -707,7 +718,7 @@ bbox3 = np.array(
     dtype=float,
 )
 
-ax = plt.subplot(gs[0, 0])  #
+ax = plt.subplot(gs[0, 0])
 ax.set_aspect("equal")
 ax.triplot(triang, "-", lw=1)
 ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
@@ -737,6 +748,7 @@ The process is done in two steps:
  * first the definition of the sizing functions in WGS84 coordinates,
  * then the mesh generation is done in the stereographic projection
 
+<!--pytest-codeblocks:skip-->
 ```python
 import os
 import numpy as np
