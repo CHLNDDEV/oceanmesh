@@ -5,3 +5,6 @@ include README.md LICENSE.txt
 global-include CMakeLists.txt
 include versioneer.py
 include oceanmesh/_version.py
+recursive-include oceanmesh/_vendor/inpoly *.py
+recursive-include oceanmesh/_vendor/inpoly *.pyx *.c
+include oceanmesh/_vendor/inpoly/LICENSE_INPOLY.txt

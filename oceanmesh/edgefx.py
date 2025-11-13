@@ -8,7 +8,7 @@ import numpy as np
 import scipy.spatial
 import skfmm
 from _HamiltonJacobi import gradient_limit
-from inpoly import inpoly2
+from oceanmesh._vendor.inpoly import inpoly2
 from shapely.geometry import LineString
 from skimage.morphology import medial_axis
 

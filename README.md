@@ -39,6 +39,63 @@ Functionality
     * A variety of commonly used mesh size functions to distribute element sizes that can easily be controlled via a simple scripting application interface.
     * Mesh checking and clean-up methods to avoid simulation problems.
 
+    Third-Party Code
+    ================
+
+    OceanMesh includes vendored copies of the following third-party libraries:
+
+    - inpoly-python by Darren Engwirda — fast point-in-polygon testing
+        - Source: https://github.com/dengwirda/inpoly-python
+        - License: Custom (see `oceanmesh/_vendor/inpoly/LICENSE_INPOLY.txt`)
+        - Vendored to avoid build dependency issues with Cython extensions; we use the
+            pure-Python implementation for maximum compatibility.
+        - Performance: The pure-Python implementation is adequate for typical mesh
+            generation workloads, but for very large point-in-polygon queries it can be
+            slower than the Cython-accelerated kernel.
+        - Optional acceleration: If you have a compiled extension available locally,
+            you can enable it by setting the environment variable
+            `PYTHON_INPOLY_ACCEL=1` before running. OceanMesh will attempt to use a
+            compatible `inpoly_` kernel when this flag is set, otherwise it will
+            default to the pure-Python path.
+        - Tips for large inputs: Consider batching very large point query arrays in
+            your own workflows to reduce peak memory use when evaluating polygons.
+
+### Performance Optimization
+
+The vendored `inpoly` package includes an optional Cython-compiled extension that can provide large speedups (often 60–115×) for point-in-polygon queries. By default, oceanmesh uses the pure-Python implementation so it works everywhere without compilers.
+
+Enable the fast Cython kernel:
+
+1) Install with the optional performance extras (editable or source installs):
+
+```bash
+pip install -e .[fast]
+```
+
+2) Build from source (force compilation):
+
+```bash
+pip install cython numpy
+pip install --no-binary oceanmesh .
+```
+
+3) From a cloned repo (editable dev mode):
+
+```bash
+git clone https://github.com/CHLNDDEV/oceanmesh.git
+cd oceanmesh
+pip install -e .[fast]
+```
+
+Check which implementation is active:
+
+```python
+import oceanmesh._vendor.inpoly.inpoly2 as inpoly_mod
+print("Compiled kernel:", getattr(inpoly_mod, "_COMPILED_KERNEL_AVAILABLE", False))
+```
+
+Note: The Cython extension is optional and marked as such in setup. If compilation fails or a compiler is unavailable, installation still succeeds and the pure-Python fallback is used automatically.
+
 
 Citing
 ======

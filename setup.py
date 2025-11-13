@@ -1,6 +1,14 @@
 import os
 import sys
 import configparser
+from setuptools import Extension
+
+# Try to import Cython for optional inpoly speedup
+try:
+    from Cython.Build import cythonize
+    CYTHON_AVAILABLE = True
+except Exception:
+    CYTHON_AVAILABLE = False
 
 from pybind11.setup_helpers import Pybind11Extension, build_ext
 from setuptools import setup  # , find_packages
@@ -41,6 +49,69 @@ else:
         Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
         for fi, loc in zip(files, is_called)
     ]
+
+# Optional Cython extension for vendored inpoly (point-in-polygon)
+# Provides significant speedup over the pure-Python fallback. Build is optional.
+def maybe_add_inpoly_extension():
+    global ext_modules
+    try:
+        import numpy as np
+    except Exception:
+        # numpy will be available during isolated builds via pyproject.toml
+        # but if not, skip adding the optional extension
+        return
+
+    inpoly_ext_name = "oceanmesh._vendor.inpoly.inpoly_"
+    pyx_path = os.path.join("oceanmesh", "_vendor", "inpoly", "inpoly_.pyx")
+    c_path = os.path.join("oceanmesh", "_vendor", "inpoly", "inpoly_.c")
+
+    if CYTHON_AVAILABLE and os.path.exists(pyx_path):
+        try:
+            inpoly_ext = Extension(
+                inpoly_ext_name,
+                sources=[pyx_path],
+                include_dirs=[np.get_include()],
+                define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+                optional=True,
+            )
+            inpoly_modules = cythonize(
+                [inpoly_ext],
+                compiler_directives={
+                    "language_level": 3,
+                    "boundscheck": False,
+                    "wraparound": False,
+                    "cdivision": True,
+                    "nonecheck": False,
+                },
+                annotate=False,
+            )
+            ext_modules.extend(inpoly_modules)
+        except Exception as ex:
+            print(
+                f"[setup.py] Cythonization of {pyx_path} failed: {ex}. "
+                "Falling back to pre-generated C source if available."
+            )
+            if os.path.exists(c_path):
+                inpoly_ext = Extension(
+                    inpoly_ext_name,
+                    sources=[c_path],
+                    include_dirs=[np.get_include()],
+                    define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+                    optional=True,
+                )
+                ext_modules.append(inpoly_ext)
+    elif os.path.exists(c_path):
+        inpoly_ext = Extension(
+            inpoly_ext_name,
+            sources=[c_path],
+            include_dirs=[np.get_include()],
+            define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
+            optional=True,
+        )
+        ext_modules.append(inpoly_ext)
+
+
+maybe_add_inpoly_extension()
 
 cmdclass = versioneer.get_cmdclass()
 cmdclass.update({"build_ext": build_ext})

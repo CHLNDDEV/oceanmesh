@@ -5,7 +5,7 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
-from inpoly import inpoly2
+from oceanmesh._vendor.inpoly import inpoly2
 
 from . import Shoreline, edges
 

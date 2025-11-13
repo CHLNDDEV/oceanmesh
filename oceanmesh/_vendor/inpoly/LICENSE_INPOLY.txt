@@ -1,0 +1,26 @@
+This is the license for the vendored inpoly-python code located in
+oceanmesh/_vendor/inpoly/. The original source is:
+https://github.com/dengwirda/inpoly-python
+
+[Original LICENSE.md content follows]
+
+This license covers the following vendored files from inpoly-python:
+- oceanmesh/_vendor/inpoly/inpoly2.py (pure-Python implementation)
+- oceanmesh/_vendor/inpoly/inpoly_.pyx (Cython fast kernel source)
+- oceanmesh/_vendor/inpoly/inpoly_.c (pre-generated C from Cython, if present)
+- oceanmesh/_vendor/inpoly/__init__.py (package initialization)
+
+Copyright (c) Darren Engwirda
+
+Permission is hereby granted to use, copy, and distribute this software for any
+non-commercial purpose and without fee, provided that the copyright notice
+appears in all copies. Modified versions must be plainly marked as such, and
+must not be misrepresented as being the original software. The author reserves
+all rights for commercial distribution of this software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
