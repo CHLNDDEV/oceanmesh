@@ -6,6 +6,7 @@ from setuptools import Extension
 # Try to import Cython for optional inpoly speedup
 try:
     from Cython.Build import cythonize
+
     CYTHON_AVAILABLE = True
 except Exception:
     CYTHON_AVAILABLE = False

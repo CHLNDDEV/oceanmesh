@@ -15,6 +15,7 @@ This test draws on patterns from:
 
 Issue Reference: #86 (global+regional multiscale capability)
 """
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -48,7 +49,11 @@ def filter_triangles(points, cells):
     filtered_cells = []
     for cell in cells:
         p1, p2, p3 = points[cell[0]], points[cell[1]], points[cell[2]]
-        if not (crosses_dateline(p1[0], p2[0]) or crosses_dateline(p2[0], p3[0]) or crosses_dateline(p3[0], p1[0])):
+        if not (
+            crosses_dateline(p1[0], p2[0])
+            or crosses_dateline(p2[0], p3[0])
+            or crosses_dateline(p3[0], p1[0])
+        ):
             filtered_cells.append(cell)
     return filtered_cells
 
@@ -148,9 +153,9 @@ def test_global_regional_multiscale_australia():
     points, cells = om.generate_multiscale_mesh(
         [domain_global_stereo, sdf_regional],
         [edge_length_global, edge_length_regional],
-        blend_width=200000,         # width of transition zone in METERS (~200 km)
-        blend_max_iter=25,          # reduced iterations for blending (runtime control)
-        max_iter=45,                # reduced per-domain iterations (runtime control)
+        blend_width=200000,  # width of transition zone in METERS (~200 km)
+        blend_max_iter=25,  # reduced iterations for blending (runtime control)
+        max_iter=45,  # reduced per-domain iterations (runtime control)
         seed=0,
         plot=1,
     )
@@ -161,7 +166,9 @@ def test_global_regional_multiscale_australia():
     points, cells = om.make_mesh_boundaries_traversable(points, cells)
     points, cells = om.delete_faces_connected_to_one_face(points, cells)
     points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
-    points, cells = om.laplacian2(points, cells, max_iter=25)  # reduced smoothing iterations
+    points, cells = om.laplacian2(
+        points, cells, max_iter=25
+    )  # reduced smoothing iterations
 
     # -----------------------------
     # 5. Quality metrics & assertions
@@ -206,12 +213,14 @@ def test_global_regional_multiscale_australia():
     global_only_quality = quality[~in_regional]  # noqa: F841
 
     # Assert that regional mask captured elements
-    assert in_regional.any(), "No elements detected inside Australia regional refinement bbox"
+    assert (
+        in_regional.any()
+    ), "No elements detected inside Australia regional refinement bbox"
     regional_count = int(np.count_nonzero(in_regional))
     N_MIN_REGIONAL = 50
-    assert regional_count > N_MIN_REGIONAL, (
-        f"Regional refinement too sparse: {regional_count} elements (expected > {N_MIN_REGIONAL})"
-    )
+    assert (
+        regional_count > N_MIN_REGIONAL
+    ), f"Regional refinement too sparse: {regional_count} elements (expected > {N_MIN_REGIONAL})"
     rq_mean = float(np.mean(regional_quality))
     print(f"Regional (Australia) mean quality: {rq_mean:.3f}")
     # assert rq_mean > 0.6, "Australia regional refinement mean quality should exceed 0.6"
@@ -245,29 +254,55 @@ def test_global_regional_multiscale_australia():
 
     # Panel 1: Global view
     ax1 = fig.add_subplot(gs[0])
-    ax1.triplot(triang, '-', lw=0.3, color='gray')
-    ax1.set_title('Global Mesh with Australia Refinement')
-    ax1.set_aspect('equal', adjustable='box')
+    ax1.triplot(triang, "-", lw=0.3, color="gray")
+    ax1.set_title("Global Mesh with Australia Refinement")
+    ax1.set_aspect("equal", adjustable="box")
     ax1.set_xlim(-180, 180)
     ax1.set_ylim(-90, 90)
     # Australia bbox
     ax1.plot(
-        [australia_bbox[0], australia_bbox[1], australia_bbox[1], australia_bbox[0], australia_bbox[0]],
-        [australia_bbox[2], australia_bbox[2], australia_bbox[3], australia_bbox[3], australia_bbox[2]],
-        'r--', lw=1.0,
+        [
+            australia_bbox[0],
+            australia_bbox[1],
+            australia_bbox[1],
+            australia_bbox[0],
+            australia_bbox[0],
+        ],
+        [
+            australia_bbox[2],
+            australia_bbox[2],
+            australia_bbox[3],
+            australia_bbox[3],
+            australia_bbox[2],
+        ],
+        "r--",
+        lw=1.0,
     )
 
     # Panel 2: Zoomed Australia
     ax2 = fig.add_subplot(gs[1])
-    ax2.triplot(triang, '-', lw=0.5, color='blue')
+    ax2.triplot(triang, "-", lw=0.5, color="blue")
     ax2.set_xlim(australia_bbox[0] - 2, australia_bbox[1] + 2)
     ax2.set_ylim(australia_bbox[2] - 2, australia_bbox[3] + 2)
-    ax2.set_title('Australia Region (Refined)')
-    ax2.set_aspect('equal', adjustable='box')
+    ax2.set_title("Australia Region (Refined)")
+    ax2.set_aspect("equal", adjustable="box")
     ax2.plot(
-        [australia_bbox[0], australia_bbox[1], australia_bbox[1], australia_bbox[0], australia_bbox[0]],
-        [australia_bbox[2], australia_bbox[2], australia_bbox[3], australia_bbox[3], australia_bbox[2]],
-        'r--', lw=1.0,
+        [
+            australia_bbox[0],
+            australia_bbox[1],
+            australia_bbox[1],
+            australia_bbox[0],
+            australia_bbox[0],
+        ],
+        [
+            australia_bbox[2],
+            australia_bbox[2],
+            australia_bbox[3],
+            australia_bbox[3],
+            australia_bbox[2],
+        ],
+        "r--",
+        lw=1.0,
     )
 
     plt.tight_layout()
@@ -276,7 +311,7 @@ def test_global_regional_multiscale_australia():
         out_dir = os.path.join(tests_dir, "output")
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, "test_global_regional_multiscale.png")
-        plt.savefig(out_path, dpi=150, bbox_inches='tight')
+        plt.savefig(out_path, dpi=150, bbox_inches="tight")
         print(f"Saved visualization to {out_path}")
     plt.show()  # left disabled for CI environments
 
@@ -284,9 +319,9 @@ def test_global_regional_multiscale_australia():
     # 8. Additional assertions on sizing semantics
     # -----------------------------
     # Ensure regional sizing minimum is finer than global sizing minimum
-    assert edge_length_regional.hmin < edge_length_global.hmin, (
-        f"Expected regional hmin {edge_length_regional.hmin:.3f} < global hmin {edge_length_global.hmin:.3f}"
-    )
+    assert (
+        edge_length_regional.hmin < edge_length_global.hmin
+    ), f"Expected regional hmin {edge_length_regional.hmin:.3f} < global hmin {edge_length_global.hmin:.3f}"
 
     # Compare approximate triangle areas (in degree^2) inside vs outside region to ensure refinement
     # Planar degree-based area approximation (sufficient for relative comparison)
@@ -295,21 +330,23 @@ def test_global_regional_multiscale_australia():
     x1, y1 = lon_cells_flat[:, 0], lat_cells_flat[:, 0]
     x2, y2 = lon_cells_flat[:, 1], lat_cells_flat[:, 1]
     x3, y3 = lon_cells_flat[:, 2], lat_cells_flat[:, 2]
-    tri_areas = 0.5 * np.abs(
-        x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)
-    )
+    tri_areas = 0.5 * np.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))
     regional_area_mean = float(np.mean(tri_areas[in_regional]))
     global_area_mean = float(np.mean(tri_areas[~in_regional]))
     print(
         f"Mean triangle area (deg^2): regional={regional_area_mean:.4e}, global={global_area_mean:.4e}"
     )
-    assert regional_area_mean < global_area_mean, (
-        "Regional triangle mean area should be smaller than global mean area, indicating refinement"
-    )
+    assert (
+        regional_area_mean < global_area_mean
+    ), "Regional triangle mean area should be smaller than global mean area, indicating refinement"
 
     # Stereo flag sanity checks
-    assert getattr(domain_global_stereo, 'stereo', False) is True, "Global domain stereo flag must be True"
-    assert getattr(sdf_regional, 'stereo', False) is False, "Regional domain must not have stereo flag set"
+    assert (
+        getattr(domain_global_stereo, "stereo", False) is True
+    ), "Global domain stereo flag must be True"
+    assert (
+        getattr(sdf_regional, "stereo", False) is False
+    ), "Regional domain must not have stereo flag set"
 
 
 if __name__ == "__main__":
