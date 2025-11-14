@@ -81,6 +81,7 @@ pip install --no-binary oceanmesh .
 
 3) From a cloned repo (editable dev mode):
 
+<!--pytest-codeblocks:skip-->
 ```bash
 git clone https://github.com/CHLNDDEV/oceanmesh.git
 cd oceanmesh

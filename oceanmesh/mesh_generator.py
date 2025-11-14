@@ -310,7 +310,7 @@ def _check_bbox(bbox):
     assert int(len(bbox) / 2), "`dim` must be 2"
 
 
-def _validate_multiscale_domains(domains, edge_lengths):
+def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
     """Validate domain & sizing function compatibility for multiscale meshing.
 
     Checks performed:

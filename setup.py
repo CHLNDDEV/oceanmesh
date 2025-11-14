@@ -70,8 +70,9 @@ else:
 
 # Optional Cython extension for vendored inpoly (point-in-polygon)
 # Provides significant speedup over the pure-Python fallback. Build is optional.
+
+
 def maybe_add_inpoly_extension():
-    global ext_modules
     try:
         import numpy as np
     except Exception:

@@ -33,13 +33,16 @@ if str(_REPO_ROOT) not in sys.path:
 # Turn on verbose logging from oceanmesh internals
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
-import oceanmesh as om
-from oceanmesh.region import to_lat_lon
+import oceanmesh as om  # noqa: E402
+from oceanmesh.region import to_lat_lon  # noqa: E402
 
 
 # utilities functions for plotting
+
+
 def crosses_dateline(lon1, lon2):
     return abs(lon1 - lon2) > 180
+
 
 def filter_triangles(points, cells):
     filtered_cells = []
@@ -48,6 +51,7 @@ def filter_triangles(points, cells):
         if not (crosses_dateline(p1[0], p2[0]) or crosses_dateline(p2[0], p3[0]) or crosses_dateline(p3[0], p1[0])):
             filtered_cells.append(cell)
     return filtered_cells
+
 
 def test_global_regional_multiscale_australia():
     """Test global+regional multiscale meshing with Australia refinement.
@@ -176,10 +180,10 @@ def test_global_regional_multiscale_australia():
     )
 
     # Relaxed counts: ensure non-empty mesh and refinement presence rather than hard global thresholds
-    #assert num_vertices > 0, "Mesh must have at least one vertex"
-    #assert num_elements > 0, "Mesh must have at least one element"
-    #assert mean_quality > 0.6, f"Mean quality {mean_quality:.3f} should be > 0.6"
-    #assert min_quality > 0.1, f"Minimum quality {min_quality:.3f} should be > 0.1"
+    # assert num_vertices > 0, "Mesh must have at least one vertex"
+    # assert num_elements > 0, "Mesh must have at least one element"
+    # assert mean_quality > 0.6, f"Mean quality {mean_quality:.3f} should be > 0.6"
+    # assert min_quality > 0.1, f"Minimum quality {min_quality:.3f} should be > 0.1"
 
     # -----------------------------
     # 6. Transition zone & regional quality validation
@@ -197,7 +201,9 @@ def test_global_regional_multiscale_australia():
         & (cy <= australia_bbox[3])
     )
     regional_quality = quality[in_regional]
-    global_only_quality = quality[~in_regional]
+    # global_only_quality intentionally unused; kept for potential comparative diagnostics
+    # noqa below suppresses flake8 unused variable warning.
+    global_only_quality = quality[~in_regional]  # noqa: F841
 
     # Assert that regional mask captured elements
     assert in_regional.any(), "No elements detected inside Australia regional refinement bbox"
@@ -208,7 +214,7 @@ def test_global_regional_multiscale_australia():
     )
     rq_mean = float(np.mean(regional_quality))
     print(f"Regional (Australia) mean quality: {rq_mean:.3f}")
-    #assert rq_mean > 0.6, "Australia regional refinement mean quality should exceed 0.6"
+    # assert rq_mean > 0.6, "Australia regional refinement mean quality should exceed 0.6"
 
     # Simple transition check: elements with centroid within ~2 deg of bbox edges
     buffer = 2.0
@@ -220,10 +226,10 @@ def test_global_regional_multiscale_australia():
     ) & ~in_regional
     transition_quality = quality[near_transition]
     # Assert that transition zone captured elements
-    #assert near_transition.any(), "No elements detected in transition zone around regional bbox"
+    # assert near_transition.any(), "No elements detected in transition zone around regional bbox"
     tq_mean = float(np.mean(transition_quality))
     print(f"Transition zone mean quality: {tq_mean:.3f}")
-    #assert tq_mean > 0.5, "Transition zone mean quality should exceed 0.5"
+    # assert tq_mean > 0.5, "Transition zone mean quality should exceed 0.5"
 
     # -----------------------------
     # 7. Optional visualization (comment out plt.show for CI)
@@ -231,7 +237,7 @@ def test_global_regional_multiscale_australia():
     # Convert mesh coordinates to lat/lon for global plotting
     lon_plot, lat_plot = to_lat_lon(points[:, 0], points[:, 1])
     # Filter out triangles that cross the dateline
-    cells = filter_triangles(np.array([lon,lat]).T, cells)
+    cells = filter_triangles(np.array([lon, lat]).T, cells)
 
     triang = tri.Triangulation(lon_plot, lat_plot, cells)
     fig = plt.figure(figsize=(10, 5))
@@ -311,4 +317,3 @@ if __name__ == "__main__":
     print("[INFO] Running global+regional multiscale test as a standalone script...")
     test_global_regional_multiscale_australia()
     print("[INFO] Test completed successfully.")
-
