@@ -313,7 +313,12 @@ def multiscale_signed_distance_function(signed_distance_functions):
     for i, sdf in enumerate(signed_distance_functions):
         # set eval method to covering
         tmp = [
-            Domain(s.bbox, s.covering, crs=getattr(s, "crs", None), stereo=getattr(s, "stereo", False))
+            Domain(
+                s.bbox,
+                s.covering,
+                crs=getattr(s, "crs", None),
+                stereo=getattr(s, "stereo", False),
+            )
             for s in signed_distance_functions[i + 1 :]
         ]
         nests.append(Difference([sdf, *tmp]))

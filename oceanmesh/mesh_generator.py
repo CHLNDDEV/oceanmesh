@@ -344,15 +344,23 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
 
     # Helper flags for conditional CRS requirements
     domain_crs_list = [getattr(d, "crs", None) for d in domains]
-    edge_crs_list = [getattr(el, "crs", None) if hasattr(el, "crs") else None for el in edge_lengths]
-    has_any_crs = any(c is not None for c in domain_crs_list) or any(c is not None for c in edge_crs_list)
+    edge_crs_list = [
+        getattr(el, "crs", None) if hasattr(el, "crs") else None for el in edge_lengths
+    ]
+    has_any_crs = any(c is not None for c in domain_crs_list) or any(
+        c is not None for c in edge_crs_list
+    )
 
     # Detect implicit global domain: EPSG:4326 + global-like bbox but stereo=False
     implicit_global_idx = None
     for i, d in enumerate(domains):
         dcrs = getattr(d, "crs", None)
         try:
-            if dcrs is not None and CRS.from_user_input(dcrs).to_epsg() == 4326 and is_global_bbox(d.bbox):
+            if (
+                dcrs is not None
+                and CRS.from_user_input(dcrs).to_epsg() == 4326
+                and is_global_bbox(d.bbox)
+            ):
                 implicit_global_idx = i
                 break
         except Exception:
@@ -393,13 +401,20 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
             g_bbox = global_domain.bbox
             d_bbox = d.bbox
             try:
-                if getattr(global_domain, 'stereo', False):
+                if getattr(global_domain, "stereo", False):
                     # Convert regional bbox corners to stereo then compare
                     lon_min, lon_max, lat_min, lat_max = d_bbox
                     reg_corners_lon = [lon_min, lon_max, lon_max, lon_min]
                     reg_corners_lat = [lat_min, lat_min, lat_max, lat_max]
-                    sx, sy = to_stereo(np.array(reg_corners_lon), np.array(reg_corners_lat))
-                    stereo_reg_bbox = (float(np.min(sx)), float(np.max(sx)), float(np.min(sy)), float(np.max(sy)))
+                    sx, sy = to_stereo(
+                        np.array(reg_corners_lon), np.array(reg_corners_lat)
+                    )
+                    stereo_reg_bbox = (
+                        float(np.min(sx)),
+                        float(np.max(sx)),
+                        float(np.min(sy)),
+                        float(np.max(sy)),
+                    )
                     if not bbox_contains(g_bbox, stereo_reg_bbox):
                         errors.append(
                             f"Regional domain #{i} bbox {d_bbox} (lat/lon) not contained within global stereo bbox {g_bbox}."
@@ -415,9 +430,13 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                 )
             # Stereo flag must be False for regional domains
             if getattr(d, "stereo", False):
-                errors.append(f"Regional domain #{i} has stereo=True; only the global domain may set stereo=True.")
+                errors.append(
+                    f"Regional domain #{i} has stereo=True; only the global domain may set stereo=True."
+                )
             # CRS compatibility between global and regional
-            ok_crs, msg_crs = validate_crs_compatible(getattr(global_domain, "crs", None), getattr(d, "crs", None))
+            ok_crs, msg_crs = validate_crs_compatible(
+                getattr(global_domain, "crs", None), getattr(d, "crs", None)
+            )
             if not ok_crs:
                 errors.append(msg_crs)
 
@@ -427,7 +446,11 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
         if not getattr(ig, "stereo", False):
             # If any other domain has a CRS that is not equal to EPSG:4326, require stereo=True and ordering
             try:
-                ig_crs = CRS.from_user_input(ig.crs) if getattr(ig, "crs", None) is not None else None
+                ig_crs = (
+                    CRS.from_user_input(ig.crs)
+                    if getattr(ig, "crs", None) is not None
+                    else None
+                )
                 for j, d in enumerate(domains):
                     if j == implicit_global_idx:
                         continue
@@ -453,7 +476,9 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
             d_crs = getattr(d, "crs", None)
             if el_crs is not None and d_crs is not None:
                 try:
-                    if not CRS.from_user_input(el_crs).equals(CRS.from_user_input(d_crs)):
+                    if not CRS.from_user_input(el_crs).equals(
+                        CRS.from_user_input(d_crs)
+                    ):
                         errors.append(
                             f"Edge length #{i} CRS {get_crs_string(el_crs)} does not match domain CRS {get_crs_string(d_crs)}."
                         )
@@ -553,7 +578,9 @@ def generate_multiscale_mesh(domains, edge_lengths, **kwargs):
     if not ok:
         formatted = "\n - " + "\n - ".join(verrors)
         raise ValueError(
-            "Multiscale domain validation failed with the following issues:" + formatted + "\nGuidance: Ensure a single global domain (stereo=True, EPSG:4326) precedes regional domains; supply CRS metadata via Shoreline; regional bboxes must lie within global bbox; sizing Grid CRS must match domain CRS."
+            "Multiscale domain validation failed with the following issues:"
+            + formatted
+            + "\nGuidance: Ensure a single global domain (stereo=True, EPSG:4326) precedes regional domains; supply CRS metadata via Shoreline; regional bboxes must lie within global bbox; sizing Grid CRS must match domain CRS."
         )
     opts = {
         "max_iter": 100,
@@ -801,7 +828,11 @@ def _unpack_sizing(edge_length, opts):
         fh = edge_length.eval
         min_edge_length = edge_length.hmin
         # Defensive: if hmin is invalid, recompute from grid values
-        if min_edge_length is None or not np.isfinite(min_edge_length) or min_edge_length <= 0:
+        if (
+            min_edge_length is None
+            or not np.isfinite(min_edge_length)
+            or min_edge_length <= 0
+        ):
             vals = edge_length.values
             if np.ma.isMaskedArray(vals):
                 vals = np.ma.filled(vals, np.nan)
@@ -869,7 +900,9 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult, opts):
     hbars = np.asarray(hbars, dtype=float)
     valid = np.isfinite(hbars) & (hbars > 0)
     if not np.any(valid):
-        raise ValueError("Sizing function returned no positive finite values inside domain.")
+        raise ValueError(
+            "Sizing function returned no positive finite values inside domain."
+        )
     if not np.all(valid):
         repl = np.nanmedian(hbars[valid])
         hbars = np.where(valid, hbars, repl)

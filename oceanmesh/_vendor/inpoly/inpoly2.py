@@ -18,70 +18,68 @@ import os
 
 def inpoly2(vert, node, edge=None, ftol=5.0e-14):
     """
-    INPOLY2: compute "points-in-polygon" queries.
+      INPOLY2: compute "points-in-polygon" queries.
 
-    STAT = INPOLY2(VERT, NODE, EDGE) returns the "inside/ou-
-    tside" status for a set of vertices VERT and a polygon
-    NODE, EDGE embedded in a two-dimensional plane. General
-    non-convex and multiply-connected polygonal regions can
-    be handled. VERT is an N-by-2 array of XY coordinates to
-    be tested. STAT is an associated N-by-1 boolean array,
-    with STAT[II] = TRUE if VERT[II, :] is an inside point.
+      STAT = INPOLY2(VERT, NODE, EDGE) returns the "inside/ou-
+      tside" status for a set of vertices VERT and a polygon
+      NODE, EDGE embedded in a two-dimensional plane. General
+      non-convex and multiply-connected polygonal regions can
+      be handled. VERT is an N-by-2 array of XY coordinates to
+      be tested. STAT is an associated N-by-1 boolean array,
+      with STAT[II] = TRUE if VERT[II, :] is an inside point.
 
-    The polygonal region is defined as a piecewise-straight-
-    line-graph, where NODE is an M-by-2 array of polygon ve-
-    rtices and EDGE is a P-by-2 array of edge indexing. Each
-    row in EDGE represents an edge of the polygon, such that
-    NODE[EDGE[KK, 0], :] and NODE[EDGE[KK, 2], :] are the
-    coordinates of the endpoints of the KK-TH edge. If the
-    argument EDGE is omitted it assumed that the vertices in
-    NODE are connected in ascending order.
+      The polygonal region is defined as a piecewise-straight-
+      line-graph, where NODE is an M-by-2 array of polygon ve-
+      rtices and EDGE is a P-by-2 array of edge indexing. Each
+      row in EDGE represents an edge of the polygon, such that
+      NODE[EDGE[KK, 0], :] and NODE[EDGE[KK, 2], :] are the
+      coordinates of the endpoints of the KK-TH edge. If the
+      argument EDGE is omitted it assumed that the vertices in
+      NODE are connected in ascending order.
 
-    STAT, BNDS = INPOLY2(..., FTOL) also returns an N-by-1
-    boolean array BNDS, with BNDS[II] = TRUE if VERT[II, :]
-    lies "on" a boundary segment, where FTOL is a floating-
-    point tolerance for boundary comparisons. By default,
-    FTOL ~ EPS ^ 0.85.
+      STAT, BNDS = INPOLY2(..., FTOL) also returns an N-by-1
+      boolean array BNDS, with BNDS[II] = TRUE if VERT[II, :]
+      lies "on" a boundary segment, where FTOL is a floating-
+      point tolerance for boundary comparisons. By default,
+      FTOL ~ EPS ^ 0.85.
 
-    --------------------------------------------------------
+      --------------------------------------------------------
 
-    This algorithm is based on a "crossing-number" test,
-    counting the number of times a line extending from each
-    point past the right-most end of the polygon intersects
-    with the polygonal boundary. Points with odd counts are
-    "inside". A simple implementation requires that each
-    edge intersection be checked for each point, leading to
-    O(N*M) complexity...
+      This algorithm is based on a "crossing-number" test,
+      counting the number of times a line extending from each
+      point past the right-most end of the polygon intersects
+      with the polygonal boundary. Points with odd counts are
+      "inside". A simple implementation requires that each
+      edge intersection be checked for each point, leading to
+      O(N*M) complexity...
 
-    This implementation seeks to improve these bounds:
+      This implementation seeks to improve these bounds:
 
-  * Sorting the query points by y-value and determining can-
-    didate edge intersection sets via binary-search. Given a
-    configuration with N test points, M edges and an average
-    point-edge "overlap" of H, the overall complexity scales
-    like O(M*H + M*LOG(N) + N*LOG(N)), where O(N*LOG(N)) operat-
-    ions required for the set of binary-searches, and O(M*H)
-    operations required for the intersection tests, where H
-    is typically small on average, such that H << N.
+    * Sorting the query points by y-value and determining can-
+      didate edge intersection sets via binary-search. Given a
+      configuration with N test points, M edges and an average
+      point-edge "overlap" of H, the overall complexity scales
+      like O(M*H + M*LOG(N) + N*LOG(N)), where O(N*LOG(N)) operat-
+      ions required for the set of binary-searches, and O(M*H)
+      operations required for the intersection tests, where H
+      is typically small on average, such that H << N.
 
-  * Carefully checking points against the bounding-box asso-
-    ciated with each polygon edge. This minimises the number
-    of calls to the (relatively) expensive edge intersection
-    test.
+    * Carefully checking points against the bounding-box asso-
+      ciated with each polygon edge. This minimises the number
+      of calls to the (relatively) expensive edge intersection
+      test.
 
-    Updated: 19 Dec, 2020
+      Updated: 19 Dec, 2020
 
-    Authors: Darren Engwirda, Keith Roberts
+      Authors: Darren Engwirda, Keith Roberts
 
     """
 
     vert = np.asarray(vert, dtype=np.float64)
     node = np.asarray(node, dtype=np.float64)
 
-    STAT = np.full(
-        vert.shape[0], False, dtype=bool)
-    BNDS = np.full(
-        vert.shape[0], False, dtype=bool)
+    STAT = np.full(vert.shape[0], False, dtype=bool)
+    BNDS = np.full(vert.shape[0], False, dtype=bool)
 
     if node.size == 0:
         return STAT, BNDS
@@ -110,13 +108,15 @@ def inpoly2(vert, node, edge=None, ftol=5.0e-14):
 
     lbar = (xdel + ydel) / 2.0
 
-    veps = (lbar * ftol)
+    veps = lbar * ftol
 
-    mask = np.logical_and.reduce((
-        vert[:, 0] >= xmin - veps,
-        vert[:, 1] >= ymin - veps,
-        vert[:, 0] <= xmax + veps,
-        vert[:, 1] <= ymax + veps)
+    mask = np.logical_and.reduce(
+        (
+            vert[:, 0] >= xmin - veps,
+            vert[:, 1] >= ymin - veps,
+            vert[:, 0] <= xmax + veps,
+            vert[:, 1] <= ymax + veps,
+        )
     )
 
     vert = vert[mask]
@@ -130,7 +130,7 @@ def inpoly2(vert, node, edge=None, ftol=5.0e-14):
 
     lbar = (xdel + ydel) / 2.0
 
-    if (xdel > ydel):
+    if xdel > ydel:
         vert = vert[:, (1, 0)]
         node = node[:, (1, 0)]
 
@@ -158,13 +158,11 @@ def _inpoly(vert, node, edge, ftol, lbar):
 
     """
 
-    feps = ftol * (lbar ** +1)
-    veps = ftol * (lbar ** +1)
+    feps = ftol * (lbar**+1)
+    veps = ftol * (lbar**+1)
 
-    stat = np.full(
-        vert.shape[0], False, dtype=bool)
-    bnds = np.full(
-        vert.shape[0], False, dtype=bool)
+    stat = np.full(vert.shape[0], False, dtype=bool)
+    bnds = np.full(vert.shape[0], False, dtype=bool)
 
     # ----------------------------------- compute y-range overlap
     ivec = np.argsort(vert[:, 1], kind="quicksort")
@@ -187,11 +185,8 @@ def _inpoly(vert, node, edge, ftol, lbar):
 
     EDEL = np.abs(XDEL) + YDEL
 
-    ione = np.searchsorted(
-        vert[:, 1], YMIN, "left", sorter=ivec
-    )
-    itwo = np.searchsorted(
-        vert[:, 1], YMAX, "right", sorter=ivec)
+    ione = np.searchsorted(vert[:, 1], YMIN, "left", sorter=ivec)
+    itwo = np.searchsorted(vert[:, 1], YMAX, "right", sorter=ivec)
 
     # ----------------------------------- loop over polygon edges
     for epos in range(edge.shape[0]):
@@ -238,8 +233,7 @@ def _inpoly(vert, node, edge, ftol, lbar):
                         bnds[jvrt] = True
                         stat[jvrt] = True
 
-                    elif (mul1 <= mul2) and (ypos >= yone) \
-                            and (ypos < ytwo):
+                    elif (mul1 <= mul2) and (ypos >= yone) and (ypos < ytwo):
                         # ------------------- advance crossing number
                         stat[jvrt] = not stat[jvrt]
 
@@ -258,6 +252,7 @@ _ACCEL_ENV = os.environ.get("PYTHON_INPOLY_ACCEL")
 if _ACCEL_ENV and _ACCEL_ENV not in ("0", "false", "False", "no", "off"):
     try:
         from oceanmesh._vendor.inpoly.inpoly_ import _inpoly  # type: ignore  # noqa: F811
+
         _COMPILED_KERNEL_AVAILABLE = True
     except (ImportError, ModuleNotFoundError) as _ex:  # narrow exception set
         # Optional debug logging when import fails

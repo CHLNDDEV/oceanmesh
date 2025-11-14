@@ -49,7 +49,9 @@ def bbox_contains(outer, inner):
 
     oxmin, oxmax, oymin, oymax = outer
     ixmin, ixmax, iymin, iymax = inner
-    return (oxmin <= ixmin) and (oxmax >= ixmax) and (oymin <= iymin) and (oymax >= iymax)
+    return (
+        (oxmin <= ixmin) and (oxmax >= ixmax) and (oymin <= iymin) and (oymax >= iymax)
+    )
 
 
 def validate_crs_compatible(global_crs, regional_crs):
@@ -71,7 +73,10 @@ def validate_crs_compatible(global_crs, regional_crs):
         g = CRS.from_user_input(global_crs)
         r = CRS.from_user_input(regional_crs)
     except Exception as e:
-        return False, f"Failed to parse CRS. global={get_crs_string(global_crs)}, regional={get_crs_string(regional_crs)}; error={e}"
+        return (
+            False,
+            f"Failed to parse CRS. global={get_crs_string(global_crs)}, regional={get_crs_string(regional_crs)}; error={e}",
+        )
 
     # Global must be EPSG:4326 (WGS84 geographic)
     try:

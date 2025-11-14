@@ -798,8 +798,11 @@ class DEM(Grid):
                     if _src_crs is None or _dst_crs is None or _src_crs == _dst_crs:
                         return _bbox_vals
                     from pyproj import Transformer
+
                     xmin, xmax, ymin, ymax = _bbox_vals
-                    transformer = Transformer.from_crs(_dst_crs, _src_crs, always_xy=True)
+                    transformer = Transformer.from_crs(
+                        _dst_crs, _src_crs, always_xy=True
+                    )
                     # transform the two diagonal corners then rebuild axis-aligned bbox
                     xs, ys = transformer.transform([xmin, xmax], [ymin, ymax])
                     xmin_t, xmax_t = min(xs), max(xs)
@@ -820,11 +823,18 @@ class DEM(Grid):
                     region_crs = bbox.crs if hasattr(bbox, "crs") else desired_crs
                     _region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
                     # Transform to raster CRS if needed
-                    _region_bbox_src = _transform_bbox_to_src(_region_bbox, src_crs, region_crs)
+                    _region_bbox_src = _transform_bbox_to_src(
+                        _region_bbox, src_crs, region_crs
+                    )
                     # Intersect with raster bounds to avoid WindowError
                     ds_bounds = src.bounds  # (left, bottom, right, top)
                     # Convert ds_bounds to (xmin,xmax,ymin,ymax)
-                    ds_bbox_conv = (ds_bounds.left, ds_bounds.right, ds_bounds.bottom, ds_bounds.top)
+                    ds_bbox_conv = (
+                        ds_bounds.left,
+                        ds_bounds.right,
+                        ds_bounds.bottom,
+                        ds_bounds.top,
+                    )
                     xmin = max(_region_bbox_src[0], ds_bbox_conv[0])
                     xmax = min(_region_bbox_src[1], ds_bbox_conv[1])
                     ymin = max(_region_bbox_src[2], ds_bbox_conv[2])
@@ -842,7 +852,9 @@ class DEM(Grid):
                             dx_syn = (_region_bbox[1] - _region_bbox[0]) / (_nx - 1)
                             dy_syn = (_region_bbox[3] - _region_bbox[2]) / (_ny - 1)
                             # build synthetic affine (note y origin is top in raster, so use ymax and negative dy)
-                            self.meta["transform"] = Affine(dx_syn, 0, _region_bbox[0], 0, -dy_syn, _region_bbox[3])
+                            self.meta["transform"] = Affine(
+                                dx_syn, 0, _region_bbox[0], 0, -dy_syn, _region_bbox[3]
+                            )
                             bbox = _region_bbox  # adopt requested bbox
                             # skip window clipping logic
                             # transpose to match later expectations
@@ -856,7 +868,9 @@ class DEM(Grid):
                         # Prepare bounds in rasterio (left,bottom,right,top)
                         _bounds_for_window = (xmin, ymin, xmax, ymax)
                         try:
-                            window = from_bounds(*_bounds_for_window, transform=src.transform)
+                            window = from_bounds(
+                                *_bounds_for_window, transform=src.transform
+                            )
                         except Exception as e:
                             raise RuntimeError(
                                 "Failed to create window for DEM subset. "
@@ -868,10 +882,17 @@ class DEM(Grid):
                         bbox = (xmin, xmax, ymin, ymax)
 
                 # Warn if user requested output CRS different from raster CRS (no reprojection performed here)
-                if (src_crs is not None) and (desired_crs is not None) and (src_crs != desired_crs) and not ((src_crs is None) or src.transform == Affine.identity):
+                if (
+                    (src_crs is not None)
+                    and (desired_crs is not None)
+                    and (src_crs != desired_crs)
+                    and not ((src_crs is None) or src.transform == Affine.identity)
+                ):
                     logger.warning(
                         "DEM opened in its native CRS %s but requested CRS %s differs. "
-                        "Values are NOT reprojected; proceeding in native CRS.", src_crs, desired_crs
+                        "Values are NOT reprojected; proceeding in native CRS.",
+                        src_crs,
+                        desired_crs,
                     )
                     # overwrite desired_crs to keep internal consistency
                     crs = src_crs.to_string()
