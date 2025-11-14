@@ -45,8 +45,26 @@ if os.name == "nt":
     ]
 else:
     # no CGAL libraries necessary from CGAL 5.0 onwards
+    # Ensure linker can find conda-provided lib paths on macOS/Linux
+    conda_prefix = os.environ.get("CONDA_PREFIX", sys.prefix)
+    conda_lib = os.path.join(conda_prefix, "lib")
+    have_libdir = os.path.isdir(conda_lib)
+
+    extra_link_args = []
+    library_dirs = []
+    if have_libdir:
+        library_dirs = [conda_lib]
+        # Help the linker locate shared libs at build and at runtime
+        extra_link_args = [f"-L{conda_lib}", f"-Wl,-rpath,{conda_lib}"]
+
     ext_modules = [
-        Pybind11Extension(loc, [fi], libraries=["gmp", "mpfr"])
+        Pybind11Extension(
+            loc,
+            [fi],
+            libraries=["gmp", "mpfr"],
+            library_dirs=library_dirs,
+            extra_link_args=extra_link_args,
+        )
         for fi, loc in zip(files, is_called)
     ]
 
