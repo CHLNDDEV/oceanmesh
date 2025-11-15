@@ -243,13 +243,16 @@ with zipfile.ZipFile("gshhg-shp-2.3.7.zip", "r") as zip_ref:
     zip_ref.extractall("gshhg-shp-2.3.7")
 
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-EPSG = 4326  # EPSG code for WGS84 which is what you want to mesh in
-# Specify and extent to read in and a minimum mesh size in the unit of the projection
+EPSG = 4326  # EPSG code for WGS84
+# Specify an extent to read in and a minimum mesh size in the units of the projection
 extent = om.Region(extent=(-75.000, -70.001, 40.0001, 41.9000), crs=EPSG)
-min_edge_length = 0.01  # In the units of the projection!
-shoreline = om.Shoreline(
-    fname, extent.bbox, min_edge_length, crs=EPSG
-)  # NB: the Shoreline class assumes WGS84:4326 if not specified
+min_edge_length = 0.01
+
+# Preferred: pass the Region object directly (automatically uses the Region's CRS)
+shoreline = om.Shoreline(fname, extent, min_edge_length)
+
+# Alternative (backward compatible): pass bbox and crs separately
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 shoreline.plot(
     xlabel="longitude (WGS84 degrees)",
     ylabel="latitude (WGS84 degrees)",
@@ -258,6 +261,28 @@ shoreline.plot(
 # Using our shoreline, we create a signed distance function
 # which will be used for meshing later on.
 ```
+
+### Working with Projected Coordinate Systems
+
+When working in projected CRSs (e.g., UTM), always prefer passing a Region object so that both the bbox and CRS travel together.
+
+```python
+# Working with UTM coordinates (e.g., EPSG:32610 - UTM Zone 10N)
+EPSG = 32610
+extent = om.Region(extent=(xmin, xmax, ymin, ymax), crs=EPSG)
+min_edge_length = 15  # meters (UTM uses meters)
+
+# Correct: Region object carries both bbox and CRS
+shore = om.Shoreline(fname, extent, min_edge_length)
+
+# Also correct: Explicit CRS parameter with tuple
+shore = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
+
+# Wrong: bbox in UTM but CRS defaults to WGS84 (do NOT do this)
+# shore = om.Shoreline(fname, extent.bbox, min_edge_length)  # Error likely
+```
+
+> Note: Best Practice — Always pass a Region object to Shoreline instead of just the bbox. This ensures the CRS is automatically matched and prevents coordinate system mismatches.
  
 Global mesh generation with regional refinement
 ---------------------------------------------------
@@ -289,8 +314,11 @@ global_bbox = (-180.0, 180.0, -89.0, 90.0)
 global_region = om.Region(extent=global_bbox, crs=EPSG)
 min_edge_length1 = 1.0   # degrees (approximate target minimum at shoreline; units follow EPSG:4326)
 max_edge_length1 = 3.0   # degrees (approximate coarse offshore size)
-shoreline_global_latlon = om.Shoreline(fname_global_latlon, global_region.bbox, min_edge_length1)
+shoreline_global_latlon = om.Shoreline(fname_global_latlon, global_region, min_edge_length1)  # Preferred: pass Region object to automatically use its CRS
 sdf_global_latlon = om.signed_distance_function(shoreline_global_latlon)
+
+> Note: Passing the `Region` directly couples bbox + CRS and is especially important in global/multiscale workflows that mix WGS84 sizing functions with stereographic meshing. See "Working with Projected Coordinate Systems" for details.
+<!-- retained above after moving -->
 
 # Sizing functions (distance + feature) built in WGS84 (units: degrees). Internal routines convert to meters where needed.
 edge_length_global_dist = om.distance_sizing_function(shoreline_global_latlon, rate=0.11)
@@ -310,7 +338,7 @@ aus_bbox = (110.0, 160.0, -45.0, -10.0)
 aus_region = om.Region(extent=aus_bbox, crs=EPSG)
 min_edge_length2 = 0.25  # degrees (refined shoreline resolution; could use projected CRS instead, e.g., UTM)
 max_edge_length2 = 1.5   # degrees (regional offshore resolution)
-shoreline_regional = om.Shoreline(fname_global_latlon, aus_region.bbox, min_edge_length2)
+shoreline_regional = om.Shoreline(fname_global_latlon, aus_region, min_edge_length2)  # Preferred: pass Region object to automatically use its CRS
 sdf_regional = om.signed_distance_function(shoreline_regional)
 edge_length_regional_dist = om.distance_sizing_function(shoreline_regional, rate=0.13)
 edge_length_regional_feat = om.feature_sizing_function(
@@ -326,10 +354,10 @@ edge_length_regional = om.enforce_mesh_gradation(edge_length_regional, gradation
 # Stereographic domain for global meshing (must set stereo=True)
 shoreline_global_stereo = om.Shoreline(
     fname_global_stereo,
-    global_region.bbox,
+    global_region,
     min_edge_length1,
     stereo=True,
-)
+)  # Preferred: pass Region object to automatically use its CRS
 sdf_global_stereo = om.signed_distance_function(shoreline_global_stereo)
 # Global domain must use stereographic projection for meshing
 
@@ -443,7 +471,9 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 EPSG = 4326  # EPSG:4326 or WGS84
 extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length = 0.01  # minimum mesh size in domain in projection
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, extent, min_edge_length)  # Preferred: pass Region directly
+# Alternative (tuple + explicit CRS):
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 
 # build a signed distance functiona automatically
 sdf = om.signed_distance_function(shoreline)
@@ -475,7 +505,9 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 EPSG = 4326  # EPSG:4326 or WGS84
 extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length = 0.01  # minimum mesh size in domain in projection
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, extent, min_edge_length)  # Preferred pattern
+# Alternative:
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
 fig, ax, pc = edge_length.plot(
     xlabel="longitude (WGS84 degrees)",
@@ -501,7 +533,10 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 EPSG = 4326  # EPSG:4326 or WGS84
 extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length = 0.01  # minimum mesh size in domain in projection
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, extent, min_edge_length)
+# Recommended: Passing Region lets bbox+CRS travel together, avoiding mismatches.
+# Alternative:
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 sdf = om.signed_distance_function(shoreline)
 # Visualize the medial points
 edge_length = om.feature_sizing_function(
@@ -533,7 +568,9 @@ fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
 EPSG = 4326  # EPSG:4326 or WGS84
 extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
 min_edge_length = 0.01  # minimum mesh size in domain in projection
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, extent, min_edge_length)
+# Alternative:
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
@@ -567,7 +604,7 @@ min_edge_length = 0.01
 
 extent = om.Region(extent=(-74.3, -73.8, 40.3,40.8), crs=4326)
 dem = om.DEM(fdem, bbox=extent,crs=4326)
-shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, dem.bbox, min_edge_length)  # DEM.bbox already a tuple; Region pattern not applicable here
 sdf = om.signed_distance_function(shoreline)
 edge_length1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length2 = om.wavelength_sizing_function(
@@ -608,7 +645,9 @@ dem = om.DEM(fdem, crs=EPSG)
 
 min_edge_length = 0.0025  # minimum mesh size in domain in projection
 max_edge_length = 0.10  # maximum mesh size in domain in projection
-shoreline = om.Shoreline(fname, extent.bbox, min_edge_length)
+shoreline = om.Shoreline(fname, extent, min_edge_length)
+# Alternative:
+# shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=EPSG)
 sdf = om.signed_distance_function(shoreline)
 
 edge_length1 = om.feature_sizing_function(

@@ -29,6 +29,52 @@ logger = logging.getLogger(__name__)
 __all__ = ["Shoreline", "DEM", "get_polygon_coordinates", "create_circle_coords"]
 
 
+def _infer_crs_from_coordinates(bbox):
+    """
+    Heuristically infer whether a bbox looks like geographic (WGS84) or projected.
+
+    Parameters
+    ----------
+    bbox : tuple
+        (xmin, xmax, ymin, ymax)
+
+    Returns
+    -------
+    is_geographic : bool
+        True if coordinates appear geographic (lon/lat degrees), False if likely projected.
+
+    Notes
+    -----
+    This is a coarse heuristic intended to catch obvious cases:
+      - If x in [-180, 180] and y in [-90, 90] -> geographic
+      - If any |coord| > 360 -> projected
+      - If horizontal magnitudes are in [180, 360] (typical of meters-based UTM ranges) -> projected
+    Ambiguous cases default to geographic to preserve historical behavior.
+    """
+    try:
+        xmin, xmax, ymin, ymax = bbox
+    except Exception:
+        return True
+
+    xs = (xmin, xmax)
+    ys = (ymin, ymax)
+
+    # Any very large absolute values strongly indicates projected units (meters)
+    if any(abs(v) > 360 for v in xs + ys):
+        return False
+
+    # Clear geographic ranges
+    if all(-180.0 <= v <= 180.0 for v in xs) and all(-90.0 <= v <= 90.0 for v in ys):
+        return True
+
+    # Values between 180 and 360 degrees on x suggest projected values mislabeled
+    if any(180.0 < abs(v) <= 360.0 for v in xs + ys):
+        return False
+
+    # Default: assume geographic to remain backward compatible
+    return True
+
+
 def create_circle_coords(radius, center, arc_res):
     """
     Given a radius and a center point, creates a numpy array of coordinates
@@ -497,14 +543,15 @@ class Shoreline(Region):
     ----------
     shp : str or pathlib.Path
         Path to shapefile containing shoreline data.
-    bbox : tuple
-        Bounding box of the region of interest. The format is
-        (xmin, xmax, ymin, ymax).
+    bbox : tuple | numpy.ndarray | oceanmesh.Region
+        Bounding box of the region of interest OR a Region object.
+        If a Region object is passed, its bbox and crs are automatically used.
+        If a tuple/array is passed, the expected bbox format is (xmin, xmax, ymin, ymax).
     h0 : float
         Minimum grid spacing.
     crs : str, optional
-        Coordinate reference system of the shapefile. Default is
-        'EPSG:4326'.
+        Coordinate reference system to interpret bbox when bbox is a tuple/array.
+        Ignored when bbox is a Region object (the Region's CRS is used).
     refinements : int, optional
         Number of refinements to apply to the shoreline. Default is 1.
     minimum_area_mult : float, optional
@@ -534,20 +581,55 @@ class Shoreline(Region):
         if isinstance(shp, str):
             shp = Path(shp)
 
-        if isinstance(bbox, tuple):
-            _boubox = np.asarray(_create_boubox(bbox))
+        # Determine bbox coordinates and CRS to use
+        crs_to_use = crs
+
+        if isinstance(bbox, Region):
+            bbox_coords = bbox.bbox
+            region_crs = bbox.crs
+            if crs != "EPSG:4326":
+                logger.warning(
+                    "Shoreline: Both a Region object and an explicit 'crs' were provided; "
+                    "the Region's CRS will take precedence (crs=%s).",
+                    region_crs,
+                )
+            crs_to_use = region_crs
         else:
-            _boubox = np.asarray(bbox)
+            bbox_coords = bbox
+            # Backward compatibility for tuple/array input; optional auto-detection
+            if isinstance(bbox_coords, tuple) and crs == "EPSG:4326":
+                looks_geo = _infer_crs_from_coordinates(bbox_coords)
+                if not looks_geo:  # Only inspect shapefile native CRS when clearly projected
+                    try:
+                        native = gpd.read_file(shp).crs
+                    except Exception:
+                        native = None
+                    if (native is not None) and (
+                        CRS.from_user_input(native)
+                        != CRS.from_user_input("EPSG:4326")
+                    ):
+                        logger.info(
+                            "Shoreline: bbox looks projected but 'crs' not specified; using shapefile's native CRS %s",
+                            native,
+                        )
+                        crs_to_use = native
+
+        # Build polygon representation and normalized bbox tuple
+        if isinstance(bbox_coords, tuple):
+            _boubox = np.asarray(_create_boubox(bbox_coords))
+            bbox_tuple = bbox_coords
+        else:
+            _boubox = np.asarray(bbox_coords)
             if not _is_path_ccw(_boubox):
                 _boubox = np.flipud(_boubox)
-            bbox = (
+            bbox_tuple = (
                 np.nanmin(_boubox[:, 0]),
                 np.nanmax(_boubox[:, 0]),
                 np.nanmin(_boubox[:, 1]),
                 np.nanmax(_boubox[:, 1]),
             )
 
-        super().__init__(bbox, crs)
+        super().__init__(bbox_tuple, crs_to_use)
 
         self.shp = shp
         self.h0 = h0
@@ -653,8 +735,11 @@ class Shoreline(Region):
         msg = f"Reading in ESRI Shapefile {self.shp}"
         logger.info(msg)
 
+        # Load once to get native CRS, then transform if necessary
+        gdf = gpd.read_file(self.shp)
+        native_crs = gdf.crs
         # transform if necessary
-        s = self.transform_to(gpd.read_file(self.shp), self.crs)
+        s = self.transform_to(gdf, self.crs)
 
         # Explode to remove multipolygons or multi-linestrings (if present)
         s = s.explode(index_parts=True)
@@ -680,7 +765,21 @@ class Shoreline(Region):
                 polys.append(np.vstack((poly, delimiter)))
 
         if len(polys) == 0:
-            raise ValueError("Shoreline data does not intersect with bbox")
+            cur_crs = None
+            try:
+                cur_crs = CRS.from_user_input(self.crs).to_string()
+            except Exception:
+                cur_crs = str(self.crs)
+            native_str = str(native_crs) if native_crs is not None else "None"
+            raise ValueError(
+                "Shoreline data does not intersect with bbox. "
+                f"Shoreline CRS in use: {cur_crs}; shapefile native CRS: {native_str}; "
+                f"bbox={_bbox}.\n"
+                "If your bbox is in a different CRS, prefer passing a Region object: "
+                "Shoreline(fname, region, h0).\n"
+                "Alternatively, specify the CRS explicitly when using a tuple bbox: "
+                "Shoreline(fname, bbox, h0, crs=YOUR_CRS)."
+            )
 
         logger.debug("Exiting: _read")
 
@@ -766,10 +865,11 @@ class DEM(Grid):
         dem : str or pathlib.Path
             Path to the DEM file
         crs : str, optional
-            Coordinate reference system of the DEM, by default 'EPSG:4326'
-        bbox : oceanmesh.Region class
-            Bounding box of the DEM, by default None.
-            Note that if none, it will read in the entire DEM.
+            Coordinate reference system to interpret bbox when bbox is a tuple. If a Region
+            object is provided for bbox, the Region's CRS is used and this parameter is ignored.
+        bbox : oceanmesh.Region, optional
+            Bounding box of the DEM. Prefer passing a Region object; when provided, both the
+            bbox extents and Region CRS are used. If None, the entire DEM is read.
         extrapolate : bool, optional
             Extrapolate the DEM outside the bounding box, by default False
         """
@@ -777,10 +877,21 @@ class DEM(Grid):
         if isinstance(dem, str):
             dem = Path(dem)
 
+        region = None
+        region_crs = None
+        _region_bbox = None
         if bbox is not None:
             assert isinstance(bbox, Region), "bbox must be a Region class object"
-            # Extract the total bounds from the extent
-            bbox = bbox.total_bounds
+            region = bbox  # Preserve original Region object
+            region_crs = region.crs
+            _region_bbox = region.total_bounds
+            if crs != "EPSG:4326":
+                logger.warning(
+                    "DEM: Both a Region object and an explicit 'crs' were provided; the Region's CRS will take precedence (crs=%s).",
+                    region_crs,
+                )
+            crs = CRS.from_user_input(region_crs).to_string()
+            bbox = _region_bbox  # Replace bbox with plain tuple bounds
 
         if dem.exists():
             msg = f"Reading in {dem}"
@@ -819,12 +930,14 @@ class DEM(Grid):
                     # along y-axis later for bottom-left origin grids.
                     topobathy = np.transpose(topobathy, (1, 0))
                 else:
-                    # Region bbox currently (xmin,xmax,ymin,ymax) in bbox.crs
-                    region_crs = bbox.crs if hasattr(bbox, "crs") else desired_crs
-                    _region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
+                    # Region bbox currently (xmin,xmax,ymin,ymax) already in tuple form
+                    if _region_bbox is None:
+                        _region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
+                    # Use previously captured region_crs if available, else fall back to desired_crs
+                    _region_crs_for_transform = region_crs if region_crs is not None else desired_crs
                     # Transform to raster CRS if needed
                     _region_bbox_src = _transform_bbox_to_src(
-                        _region_bbox, src_crs, region_crs
+                        _region_bbox, src_crs, _region_crs_for_transform
                     )
                     # Intersect with raster bounds to avoid WindowError
                     ds_bounds = src.bounds  # (left, bottom, right, top)
