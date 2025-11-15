@@ -18,6 +18,12 @@ import versioneer
 
 sys.path.append(os.path.dirname(__file__))
 
+# Build system: This package uses pybind11's setuptools integration to compile
+# C++ extensions (HamiltonJacobi, delaunay_class, fast_geometry). CMake is NOT
+# invoked for building oceanmesh itself; on Windows it may be required only by
+# external tools (e.g., vcpkg) to build CGAL dependencies. Optional inpoly
+# acceleration is enabled when the [fast] extra pulls in Cython.
+
 # https://github.com/pybind/python_example/
 is_called = [
     "_HamiltonJacobi",
