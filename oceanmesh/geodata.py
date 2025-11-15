@@ -599,14 +599,15 @@ class Shoreline(Region):
             # Backward compatibility for tuple/array input; optional auto-detection
             if isinstance(bbox_coords, tuple) and crs == "EPSG:4326":
                 looks_geo = _infer_crs_from_coordinates(bbox_coords)
-                if not looks_geo:  # Only inspect shapefile native CRS when clearly projected
+                if (
+                    not looks_geo
+                ):  # Only inspect shapefile native CRS when clearly projected
                     try:
                         native = gpd.read_file(shp).crs
                     except Exception:
                         native = None
                     if (native is not None) and (
-                        CRS.from_user_input(native)
-                        != CRS.from_user_input("EPSG:4326")
+                        CRS.from_user_input(native) != CRS.from_user_input("EPSG:4326")
                     ):
                         logger.info(
                             "Shoreline: bbox looks projected but 'crs' not specified; using shapefile's native CRS %s",
@@ -934,7 +935,9 @@ class DEM(Grid):
                     if _region_bbox is None:
                         _region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
                     # Use previously captured region_crs if available, else fall back to desired_crs
-                    _region_crs_for_transform = region_crs if region_crs is not None else desired_crs
+                    _region_crs_for_transform = (
+                        region_crs if region_crs is not None else desired_crs
+                    )
                     # Transform to raster CRS if needed
                     _region_bbox_src = _transform_bbox_to_src(
                         _region_bbox, src_crs, _region_crs_for_transform

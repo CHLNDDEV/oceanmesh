@@ -41,12 +41,20 @@ def test_shoreline_region_overrides_explicit_crs(caplog):
     h0 = 0.01
     caplog.clear()
     shp = Shoreline(fname, region, h0, crs=32610)
-    assert "Region's CRS will take precedence" in " ".join(r.message for r in caplog.records)
+    assert "Region's CRS will take precedence" in " ".join(
+        r.message for r in caplog.records
+    )
     assert str(shp.crs.to_string()) == str(region.crs.to_string())
 
 
 @pytest.mark.skipif(
-    not os.path.exists(os.path.join(os.path.dirname(os.path.dirname(__file__)), "om_issue", "shoreline_for_om_32610_buffered.gpkg")),
+    not os.path.exists(
+        os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "om_issue",
+            "shoreline_for_om_32610_buffered.gpkg",
+        )
+    ),
     reason="UTM test data not available",
 )
 def test_shoreline_autodetects_projected_tuple_bbox(caplog):
@@ -57,11 +65,17 @@ def test_shoreline_autodetects_projected_tuple_bbox(caplog):
         "shoreline_for_om_32610_buffered.gpkg",
     )
     import geopandas as gp
-    region_gdf = gp.read_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "om_issue", "region.gpkg")).to_crs(32610)
+
+    region_gdf = gp.read_file(
+        os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "om_issue", "region.gpkg"
+        )
+    ).to_crs(32610)
     xmin, ymin, xmax, ymax = region_gdf.total_bounds
     bbox_utm = (xmin + 500, xmax - 500, ymin + 500, ymax - 500)
     h0 = 15.0
     import logging
+
     caplog.clear()
     caplog.set_level(logging.INFO, logger="oceanmesh.geodata")
     shp = Shoreline(gpkg, bbox_utm, h0)
@@ -74,6 +88,7 @@ def test_shoreline_geographic_tuple_no_override(caplog):
     bbox_geo = (-75.0, -74.9, 40.0, 40.1)
     h0 = 0.01
     import logging
+
     caplog.clear()
     caplog.set_level(logging.INFO, logger="oceanmesh.geodata")
     shp = Shoreline(fname, bbox_geo, h0)  # default crs
