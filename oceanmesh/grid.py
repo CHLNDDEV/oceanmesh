@@ -459,6 +459,8 @@ class Grid(Region):
         if ax is None:
             fig, ax = plt.subplots()
             ax.axis("equal")
+        else:
+            fig = ax.get_figure()
         pc = ax.pcolor(
             _xg[::coarsen, ::coarsen],
             _yg[::coarsen, ::coarsen],

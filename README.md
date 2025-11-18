@@ -97,6 +97,7 @@ sudo apt install libcgal-dev
 
 CGAL can also be installed with conda:
 
+<!--pytest-codeblocks:skip-->
 ```bash
 conda install -c conda-forge cgal
 ```
@@ -155,7 +156,7 @@ pip install -e .[fast]
 - Questions or problems? Post issues on GitHub or ask in Slack: https://join.slack.com/t/oceanmesh2d/shared_invite/zt-su1q3lh3-C_j6AIOQPrewqZnanhzN7g
 - Contact: Dr. Keith Roberts (keithrbt0@gmail.com)
 - Version information: oceanmesh uses versioneer.
-
+<!--pytest-codeblocks:skip-->
 ```bash
 python -c "import oceanmesh; print(oceanmesh.__version__)"
 python setup.py version
@@ -238,6 +239,8 @@ import oceanmesh as om
 dem = om.DEM("datasets/EastCoast.nc", crs=4326)
 dem.plot(title="SRTM 30m", vmin=-10, vmax=10)
 ```
+![DEM](docs/images/dem_visualization_trimmed.png)
+
 
 ### 5.3 Defining the Domain
 
@@ -272,6 +275,8 @@ extent = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=4326)
 shoreline = om.Shoreline(fname, extent, 0.01)
 edge_length = om.distance_sizing_function(shoreline, rate=0.15)
 ```
+![Distance sizing](docs/images/my_edge_length_sizing_function.png)
+
 
 <!--pytest-codeblocks:skip-->
 
@@ -284,6 +289,7 @@ sdf = om.signed_distance_function(shoreline)
 edge_length = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.15)
 ```
+![Feature sizing](docs/images/feature_sizing_function.png)
 
 <!--pytest-codeblocks:skip-->
 
@@ -299,6 +305,8 @@ edge1 = om.feature_sizing_function(shoreline, sdf, max_edge_length=0.05)
 edge2 = om.wavelength_sizing_function(dem, wl=100, period=12.42 * 3600)
 edge = om.enforce_mesh_gradation(om.compute_minimum([edge1, edge2]), gradation=0.15)
 ```
+![Feature sizing](docs/images/feature_sizing+wavelength.png)
+
 
 <!--pytest-codeblocks:skip-->
 
@@ -316,6 +324,10 @@ edge_grad = om.bathymetric_gradient_sizing_function(
 )
 edge = om.enforce_mesh_gradation(om.compute_minimum([edge_feat, edge_grad]), gradation=0.15)
 ```
+
+![Gradient sizing](docs/images/my_composite_edge_length_sizing_function.png)
+
+
 
 ### 5.5 Cleaning up the Mesh
 
@@ -433,7 +445,7 @@ points, cells = om.generate_multiscale_mesh(
 )
 ```
 
-![Global Regional Multiscale](tests/output/test_global_regional_multiscale_trimmed.png)
+![Global Regional Multiscale](docs/images/test_global_regional_multiscale.png)
 *The image shows the global mesh with a refined Australia region.*
 
 <!--pytest-codeblocks:skip-->
