@@ -144,8 +144,10 @@ Note: CMake is required by vcpkg to build CGAL dependencies, but is not used to 
 To install from source with optional Cython-accelerated extensions, see 7. Performance Optimization. In short:
 
 ```bash
-pip install -e .[fast]
+pip install -e '.[fast]'
 ```
+
+Note: If you use `zsh`, you must quote or escape the square brackets in extras (e.g., `'.[fast]'` or `.\[fast\]`) to prevent the shell from treating them as glob patterns.
 
 [Back to top](#table-of-contents)
 
@@ -476,7 +478,7 @@ The vendored inpoly package includes an optional Cython-compiled extension that 
 - Editable/source installs with extras:
 
 ```bash
-pip install -e .[fast]
+pip install -e '.[fast]'
 ```
 
 - Force compilation from source:
@@ -493,7 +495,7 @@ pip install --no-binary oceanmesh .
 ```bash
 git clone https://github.com/CHLNDDEV/oceanmesh.git
 cd oceanmesh
-pip install -e .[fast]
+pip install -e '.[fast]'
 ```
 
 Check which implementation is active:
