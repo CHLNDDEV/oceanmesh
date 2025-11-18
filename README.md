@@ -17,13 +17,26 @@ Get a mesh up and running in minutes. For a full walkthrough, see 5. Basic Usage
 <!--pytest-codeblocks:skip-->
 
 ```python
+import numpy as np
 import oceanmesh as om
 
 # 1) Define a region (WGS84 example)
 region = om.Region(extent=(-75.00, -70.00, 40.00, 42.00), crs=4326)
 
+# Alternatively, define an arbitrary polygon extent (lon, lat vertices)
+poly_vertices = np.array(
+  [
+    [-74.2, 40.4],
+    [-73.9, 40.4],
+    [-73.8, 40.7],
+    [-74.1, 40.8],
+    [-74.2, 40.4],  # close polygon
+  ]
+)
+poly_region = om.Region(extent=poly_vertices, crs=4326)
+
 # 2) Build shoreline and signed distance function from a coastline shapefile
-shore = om.Shoreline("path/to/coastline.shp", region, min_edge_length=0.01)
+shore = om.Shoreline("path/to/coastline.shp", poly_region, min_edge_length=0.01)
 sdf = om.signed_distance_function(shore)
 
 # 3) Create a sizing function and generate the mesh
