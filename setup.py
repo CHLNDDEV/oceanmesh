@@ -1,18 +1,10 @@
 import os
 import sys
 import configparser
-from setuptools import Extension
 
-# Try to import Cython for optional inpoly speedup
-try:
-    from Cython.Build import cythonize
-
-    CYTHON_AVAILABLE = True
-except Exception:
-    CYTHON_AVAILABLE = False
-
-from pybind11.setup_helpers import Pybind11Extension, build_ext
-from setuptools import setup  # , find_packages
+import numpy as np
+from pybind11.setup_helpers import Pybind11Extension, build_ext as pybind_build_ext
+from setuptools import Extension, setup  # , find_packages
 
 import versioneer
 
@@ -21,8 +13,7 @@ sys.path.append(os.path.dirname(__file__))
 # Build system: This package uses pybind11's setuptools integration to compile
 # C++ extensions (HamiltonJacobi, delaunay_class, fast_geometry). CMake is NOT
 # invoked for building oceanmesh itself; on Windows it may be required only by
-# external tools (e.g., vcpkg) to build CGAL dependencies. Optional inpoly
-# acceleration is enabled when the [fast] extra pulls in Cython.
+# external tools (e.g., vcpkg) to build CGAL dependencies.
 
 # https://github.com/pybind/python_example/
 is_called = [
@@ -75,72 +66,48 @@ else:
         for fi, loc in zip(files, is_called)
     ]
 
-# Optional Cython extension for vendored inpoly (point-in-polygon)
-# Provides significant speedup over the pure-Python fallback. Build is optional.
 
+def maybe_add_cython_extensions():
+    """Optionally build Cython extension for point-in-polygon acceleration.
 
-def maybe_add_inpoly_extension():
-    try:
-        import numpy as np
-    except Exception:
-        # numpy will be available during isolated builds via pyproject.toml
-        # but if not, skip adding the optional extension
-        return
+    Uses the presence of either a .pyx (when building from a git checkout
+    with Cython available) or a pre-generated .c file (when building from
+    an sdist) to decide whether to add the extension. If neither is present
+    the build proceeds without the accelerated kernel.
+    """
 
-    inpoly_ext_name = "oceanmesh._vendor.inpoly.inpoly_"
-    pyx_path = os.path.join("oceanmesh", "_vendor", "inpoly", "inpoly_.pyx")
-    c_path = os.path.join("oceanmesh", "_vendor", "inpoly", "inpoly_.c")
+    from pathlib import Path
 
-    if CYTHON_AVAILABLE and os.path.exists(pyx_path):
-        try:
-            inpoly_ext = Extension(
-                inpoly_ext_name,
-                sources=[pyx_path],
-                include_dirs=[np.get_include()],
-                define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
-                optional=True,
-            )
-            inpoly_modules = cythonize(
-                [inpoly_ext],
-                compiler_directives={
-                    "language_level": 3,
-                    "boundscheck": False,
-                    "wraparound": False,
-                    "cdivision": True,
-                    "nonecheck": False,
-                },
-                annotate=False,
-            )
-            ext_modules.extend(inpoly_modules)
-        except Exception as ex:
-            print(
-                f"[setup.py] Cythonization of {pyx_path} failed: {ex}. "
-                "Falling back to pre-generated C source if available."
-            )
-            if os.path.exists(c_path):
-                inpoly_ext = Extension(
-                    inpoly_ext_name,
-                    sources=[c_path],
-                    include_dirs=[np.get_include()],
-                    define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
-                    optional=True,
-                )
-                ext_modules.append(inpoly_ext)
-    elif os.path.exists(c_path):
-        inpoly_ext = Extension(
-            inpoly_ext_name,
-            sources=[c_path],
-            include_dirs=[np.get_include()],
-            define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
-            optional=True,
-        )
-        ext_modules.append(inpoly_ext)
+    src_dir = Path(__file__).parent / "oceanmesh" / "geometry"
+    pyx_path = src_dir / "point_in_polygon_.pyx"
+    c_path = src_dir / "point_in_polygon_.c"
 
+    sources = None
+    if pyx_path.is_file():
+        sources = [str(pyx_path)]
+    elif c_path.is_file():
+        sources = [str(c_path)]
+    else:
+        return []
 
-maybe_add_inpoly_extension()
+    extra_compile_args = []
+    if sys.platform == "win32":
+        extra_compile_args = ["/O2"]
+    else:
+        extra_compile_args = ["-O3"]
+
+    ext = Extension(
+        "oceanmesh.geometry.point_in_polygon_",
+        sources=sources,
+        include_dirs=[np.get_include()],
+        extra_compile_args=extra_compile_args,
+    )
+
+    return [ext]
+
 
 cmdclass = versioneer.get_cmdclass()
-cmdclass.update({"build_ext": build_ext})
+cmdclass.update({"build_ext": pybind_build_ext})
 
 
 def get_requirements():
@@ -157,6 +124,23 @@ def get_requirements():
         requirements.append("fiona<1.10")
 
     return requirements
+
+
+cython_exts = maybe_add_cython_extensions()
+ext_modules.extend(cython_exts)
+
+try:
+    from Cython.Build import cythonize
+
+    have_cython = True
+except ImportError:  # pragma: no cover - Cython not installed
+    have_cython = False
+
+if have_cython and cython_exts:
+    cythonized = cythonize(cython_exts, compiler_directives={"language_level": "3"})
+    # Replace the plain Cython extensions in ext_modules with the
+    # cythonized ones, leaving the pybind11 extensions untouched.
+    ext_modules = [e for e in ext_modules if e not in cython_exts] + list(cythonized)
 
 
 if __name__ == "__main__":

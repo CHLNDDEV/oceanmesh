@@ -139,28 +139,41 @@ Prerequisites to build CGAL using the provided batch file:
 - Git
 
 After successful installation of a CGAL development package, proceed via one of the two options below to generate a Python environment with OceanMesh installed.
-
+performance-critical operations:
 If you are using a conda-based Python distribution, then `install_oceanmesh.bat` should take care of everything, provided no package conflicts arise.
+-  **Point-in-polygon queries** are implemented by
+   :mod:`oceanmesh.geometry.point_in_polygon` using a pure-Python
+   ray-casting backend with optional fast paths via Shapely and
+   Matplotlib when available. When built, an optional Cython extension
+   (:mod:`oceanmesh.geometry.point_in_polygon_`) can accelerate the
+   core ray-casting kernel.
 
-If you have a different Python distribution, or if you do not want to use packages from conda-forge, then:
+   Backend selection follows two environment variables:
 
-1. Obtain binary wheels for your Python distribution for the latest GDAL, Fiona, and Rasterio (https://www.lfd.uci.edu/~gohlke/pythonlibs).
-2. Create a new virtual environment and activate it.
-3. Execute: `cmd.exe /C "for %f in (GDAL\*.whl Fiona\*.whl rasterio\*.whl) do pip install %f"`
-4. Execute: `pip install geopandas rasterio scikit-fmm pybind11`
-5. Execute: `python setup.py install`
+   - ``OCEANMESH_INPOLY_METHOD`` chooses among the Python backends
+     (``"raycasting"``, ``"shapely"``, ``"matplotlib"``). When this is
+     set, the corresponding backend is used and the Cython kernel is
+     not invoked.
+   - ``OCEANMESH_INPOLY_ACCEL`` controls whether the compiled kernel is
+     considered when ``OCEANMESH_INPOLY_METHOD`` is *not* set to a
+     recognised method name. In this case, if the extension is
+     available, the Cython kernel is tried first and the code
+     gracefully falls back to the pure-Python implementation if the
+     import or call fails.
+
+   This keeps installations robust while allowing users to explicitly
+   select a backend for debugging or reproducibility, and to benefit
+   from additional speed on platforms with a C compiler toolchain.
 
 Note: CMake is required by vcpkg to build CGAL dependencies, but is not used to build oceanmesh itself (which uses setuptools with pybind11).
 
 ### 3.3 Development installation
 
-To install from source with optional Cython-accelerated extensions, see 7. Performance Optimization. In short:
+To install from source for development and testing:
 
 ```bash
-pip install -e '.[fast]'
+pip install -e .
 ```
-
-Note: If you use `zsh`, you must quote or escape the square brackets in extras (e.g., `'.[fast]'` or `.\[fast\]`) to prevent the shell from treating them as glob patterns.
 
 [Back to top](#table-of-contents)
 
@@ -484,44 +497,21 @@ points, cells = om.generate_mesh(domain, edge, stereo=True, max_iter=100)
 
 ## 7. Performance Optimization
 
-The vendored inpoly package includes an optional Cython-compiled extension that can provide large speedups (often 60–115×) for point-in-polygon queries. By default, oceanmesh uses the pure-Python implementation so it works everywhere without compilers.
+OceanMesh uses efficient, GPL-compatible geometry backends for
+performance-critical operations:
 
-### Enabling fast extensions ([fast] extra)
+- **Point-in-polygon queries** use the new
+  `oceanmesh.geometry.inpoly2` implementation, which can automatically
+  take advantage of Shapely prepared geometries or Matplotlib path
+  operations when those libraries are available, falling back to a
+  portable pure-Python ray-casting algorithm otherwise.
+- **Delaunay triangulation** is provided by a pure-Python
+  Bowyer–Watson implementation with an optional Cython-accelerated
+  kernel, enabled automatically when built.
 
-- Editable/source installs with extras:
-
-```bash
-pip install -e '.[fast]'
-```
-
-- Force compilation from source:
-
-```bash
-pip install cython numpy
-pip install --no-binary oceanmesh .
-```
-
-- From a cloned repo (editable dev mode):
-
-<!--pytest-codeblocks:skip-->
-
-```bash
-git clone https://github.com/CHLNDDEV/oceanmesh.git
-cd oceanmesh
-pip install -e '.[fast]'
-```
-
-Check which implementation is active:
-
-```python
-import oceanmesh._vendor.inpoly.inpoly2 as inpoly_mod
-print("Compiled kernel:", getattr(inpoly_mod, "_COMPILED_KERNEL_AVAILABLE", False))
-```
-
-Notes:
-
-- The Cython extension is optional and marked as such in setup. If compilation fails or a compiler is unavailable, installation still succeeds and the pure-Python fallback is used automatically.
-- The [fast] extra installs Cython (see setup.cfg extras_require). During build, setup.py will cythonize `oceanmesh/_vendor/inpoly/inpoly_.pyx` when Cython is present; otherwise it falls back to a pre-generated C source if available.
+No special extras or build flags are required to enable these
+optimizations; the fastest available backend is selected at runtime
+based on the installed dependencies.
 
 [Back to top](#table-of-contents)
 
@@ -529,13 +519,12 @@ Notes:
 
 ## 8. Third-Party Code
 
-OceanMesh includes vendored copies of the following third-party libraries:
-
-- inpoly-python by Darren Engwirda — fast point-in-polygon testing
-  - Source: https://github.com/dengwirda/inpoly-python
-  - License: Custom (see `oceanmesh/_vendor/inpoly/LICENSE_INPOLY.txt`)
-  - Vendored to avoid build dependency issues with Cython extensions; we use the pure-Python implementation for maximum compatibility.
-  - Optional acceleration: If a compiled extension is available (see 7. Performance Optimization), oceanmesh will use it; otherwise, it defaults to the pure-Python path.
+OceanMesh relies on a number of well-established open-source
+dependencies (see `setup.cfg` for the full list), but does not
+currently vendor any third-party geometry libraries. Earlier releases
+included a vendored copy of `inpoly-python`; this has been fully
+replaced by the native GPL-compatible implementation in
+`oceanmesh.geometry.inpoly2`.
 
 [Back to top](#table-of-contents)
 
