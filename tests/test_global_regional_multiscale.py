@@ -17,6 +17,11 @@ Issue Reference: #86 (global+regional multiscale capability)
 """
 
 import os
+
+# Force acceleration env variables for point-in-polygon
+os.environ["OCEANMESH_INPOLY_ACCEL"] = "1"
+os.environ["OCEANMESH_INPOLY_ACCEL_DEBUG"] = "1"
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri

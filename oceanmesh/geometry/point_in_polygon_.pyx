@@ -38,6 +38,14 @@ def inpoly2_fast(np.ndarray[DTYPE_t, ndim=2] vert,
         True where point is classified as boundary.
     """
 
+    # Ensure inputs are C-contiguous for typed memoryviews.
+    if not vert.flags["C_CONTIGUOUS"]:
+        vert = np.ascontiguousarray(vert, dtype=np.float64)
+    if not node.flags["C_CONTIGUOUS"]:
+        node = np.ascontiguousarray(node, dtype=np.float64)
+    if not edge.flags["C_CONTIGUOUS"]:
+        edge = np.ascontiguousarray(edge, dtype=np.int32)
+
     cdef Py_ssize_t n_vert = vert.shape[0]
     cdef Py_ssize_t n_edge = edge.shape[0]
 

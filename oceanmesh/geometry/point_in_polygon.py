@@ -25,6 +25,7 @@ It returns ``(STAT, BNDS)``:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Literal, Optional, Tuple
 
@@ -46,14 +47,22 @@ except Exception:  # pragma: no cover - optional dependency
     _HAVE_MPL = False
 
 
+logger = logging.getLogger(__name__)
+
+
 _COMPILED_KERNEL_AVAILABLE = False
-_ACCEL_ENV = os.environ.get("OCEANMESH_INPOLY_ACCEL", "0")
+_ACCEL_ENV = os.environ.get("OCEANMESH_INPOLY_ACCEL", "1")
 if _ACCEL_ENV.lower() not in {"0", "false", "no", "off"}:
     try:  # pragma: no cover - exercised only when extension present
         from oceanmesh.geometry.point_in_polygon_ import inpoly2_fast  # type: ignore
 
         _COMPILED_KERNEL_AVAILABLE = True
     except Exception:  # pragma: no cover - extension missing or failed
+        logger.warning(
+            "Cython-accelerated inpoly2 kernel is not available; "
+            "falling back to Python backends. Set OCEANMESH_INPOLY_ACCEL=0 "
+            "to silence this warning if you intend to run without acceleration."
+        )
         if os.environ.get("OCEANMESH_INPOLY_ACCEL_DEBUG"):
             import traceback
 
@@ -145,6 +154,11 @@ def inpoly2(
             bnd[valid_mask] = bnds
             return stat, bnd
         except Exception:  # pragma: no cover - debug only when requested
+            logger.warning(
+                "Cython-accelerated inpoly2 kernel raised an exception; "
+                "falling back to Python backends. Set "
+                "OCEANMESH_INPOLY_ACCEL_DEBUG=1 for details."
+            )
             if os.environ.get("OCEANMESH_INPOLY_ACCEL_DEBUG"):
                 import traceback
 

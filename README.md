@@ -145,8 +145,8 @@ If you are using a conda-based Python distribution, then `install_oceanmesh.bat`
    :mod:`oceanmesh.geometry.point_in_polygon` using a pure-Python
    ray-casting backend with optional fast paths via Shapely and
    Matplotlib when available. When built, an optional Cython extension
-   (:mod:`oceanmesh.geometry.point_in_polygon_`) can accelerate the
-   core ray-casting kernel.
+   (:mod:`oceanmesh.geometry.point_in_polygon_`) accelerates the core
+   ray-casting kernel and is **enabled by default**.
 
    Backend selection follows two environment variables:
 
@@ -156,14 +156,17 @@ If you are using a conda-based Python distribution, then `install_oceanmesh.bat`
      not invoked.
    - ``OCEANMESH_INPOLY_ACCEL`` controls whether the compiled kernel is
      considered when ``OCEANMESH_INPOLY_METHOD`` is *not* set to a
-     recognised method name. In this case, if the extension is
-     available, the Cython kernel is tried first and the code
-     gracefully falls back to the pure-Python implementation if the
-     import or call fails.
+     recognised method name. By default (unset or non-falsey), OceanMesh
+     will attempt to import and use the Cython kernel; if the extension
+     is missing or fails at runtime, a **warning is logged** and the
+     code gracefully falls back to the pure-Python implementation.
 
-   This keeps installations robust while allowing users to explicitly
-   select a backend for debugging or reproducibility, and to benefit
-   from additional speed on platforms with a C compiler toolchain.
+   If you intend to run without acceleration (for example on a
+   platform without a compiler toolchain), set
+   ``OCEANMESH_INPOLY_ACCEL=0`` to disable the compiled kernel and
+   silence the warning. Otherwise, a warning is emitted to highlight
+   that performance may be significantly degraded compared to the
+   accelerated path.
 
 Note: CMake is required by vcpkg to build CGAL dependencies, but is not used to build oceanmesh itself (which uses setuptools with pybind11).
 

@@ -816,11 +816,15 @@ def generate_mesh(domain, edge_length, **kwargs):
         maxdp = delta_t * np.sqrt((Ftot**2).sum(1)).max()
 
         logger.info(
-            f"Iteration #{count + 1}, max movement is {maxdp}, there are {len(p)} vertices and {len(t)}"
+            "Iteration #%d, max movement %.3f, vertices %s, elements %s",
+            count + 1,
+            float(maxdp),
+            f"{len(p):,}",
+            f"{len(t):,}",
         )
 
         end = time.time()
-        logger.info(f"Elapsed wall-clock time {end - start} seconds")
+        logger.info("Elapsed wall-clock time %.3f seconds", end - start)
 
 
 def _unpack_sizing(edge_length, opts):
