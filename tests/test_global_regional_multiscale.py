@@ -1,34 +1,39 @@
 """Test global + regional multiscale meshing (Australia refinement).
 
 Validates new mixed global (stereographic) + regional multiscale support:
-  - Global stereographic domain (EPSG:4326, stereo=True)
-  - Regional Australia refinement domain (EPSG:4326, stereo=False)
-  - Domain validation, CRS handling, stereo propagation
-  - Sizing function blending and transition zone quality
+    - Global stereographic domain (EPSG:4326, stereo=True)
+    - Regional Australia refinement domain (EPSG:4326, stereo=False)
+    - Domain validation, CRS handling, stereo propagation
+    - Sizing function blending and transition zone quality
 
 Produces a mesh and asserts reasonable vertex/element counts and quality metrics.
 Optional visualization saved to 'test_global_regional_multiscale.png'.
 
 This test draws on patterns from:
-  * tests/test_global_stereo.py
-  * tests/test_multiscale.py
+    * tests/test_global_stereo.py
+    * tests/test_multiscale.py
 
 Issue Reference: #86 (global+regional multiscale capability)
 """
 
+import logging
 import os
+import pathlib
+import sys
+
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+import numpy as np
+
+import oceanmesh as om
+from oceanmesh.region import to_lat_lon
+
 
 # Force acceleration env variables for point-in-polygon
 os.environ["OCEANMESH_INPOLY_ACCEL"] = "1"
 os.environ["OCEANMESH_INPOLY_ACCEL_DEBUG"] = "1"
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.tri as tri
-import matplotlib.gridspec as gridspec
-import pathlib
-import sys
-import logging
 
 # Allow running this test directly via `python tests/test_global_regional_multiscale.py`
 # without requiring an editable install. Insert repo root onto sys.path early.
@@ -36,11 +41,9 @@ _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+
 # Turn on verbose logging from oceanmesh internals
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-
-import oceanmesh as om  # noqa: E402
-from oceanmesh.region import to_lat_lon  # noqa: E402
 
 
 # utilities functions for plotting

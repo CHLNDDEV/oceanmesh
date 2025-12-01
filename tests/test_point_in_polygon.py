@@ -9,7 +9,6 @@ optional Cython-accelerated kernel when available.
 from __future__ import annotations
 
 import importlib
-import os
 
 import numpy as np
 import pytest
@@ -192,7 +191,6 @@ def _run_all_methods(node, edge, pts):
 
     results = {}
     for method in ("raycasting", "shapely", "matplotlib"):
-        env = {"OCEANMESH_INPOLY_METHOD": method}
         # Use a small context by temporarily setting the env var.
         from os import environ
 
