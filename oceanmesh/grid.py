@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
 from scipy.interpolate import RegularGridInterpolator
+from pyproj import CRS, Transformer
 
 from .idw import Invdisttree
 from .region import Region, to_stereo
@@ -12,34 +13,77 @@ logger = logging.getLogger(__name__)
 
 
 def compute_minimum(edge_lengths):
-    """Determine the minimum of all edge lengths in the domain"""
-    _crs = edge_lengths[0].crs
-    msg = "All edgelengths must have the same CRS"
-    for el in edge_lengths[1::]:
-        assert _crs == el.crs, msg
-    # project all edge_lengths onto the grid of the first one
-    base_edge_length = edge_lengths[0]
-    edge_lengths = [
-        edge_length.interpolate_to(base_edge_length)
-        for edge_length in edge_lengths[1::]
-    ]
-    edge_lengths.insert(0, base_edge_length)
+    """Determine the minimum of all edge lengths in the domain, reprojecting
+    grids as needed so everything aligns on the first grid's CRS and lattice.
 
-    minimum_values = np.minimum.reduce(
-        [edge_length.values for edge_length in edge_lengths]
-    )
-    min_edgelength = np.amin(minimum_values)
-    # construct a new grid object with these values
+    Behavior:
+    - Uses the first grid as the base grid (target CRS and lattice)
+    - For each other grid:
+        - If CRS matches, interpolate directly to base grid
+        - If CRS differs, transform base grid coordinates into the grid's CRS,
+          sample that grid at those coordinates, and construct a temporary grid
+          aligned with the base lattice
+    - Computes an element-wise minimum across all aligned grids
+    - Computes hmin from positive finite values only
+    """
+    base = edge_lengths[0]
+    base_crs = CRS.from_user_input(base.crs)
+
+    # Prepare base grid coordinate mesh for sampling
+    bx, by = base.create_grid()
+
+    aligned_grids = [base]
+    for other in edge_lengths[1:]:
+        ocrs = CRS.from_user_input(other.crs)
+        if ocrs.equals(base_crs):
+            aligned_grids.append(other.interpolate_to(base))
+        else:
+            # Transform base grid coordinates into the other grid's CRS, sample, and wrap
+            transformer = Transformer.from_crs(base_crs, ocrs, always_xy=True)
+            ox1d, oy1d = transformer.transform(bx.ravel(), by.ravel())
+            ox = np.asarray(ox1d, dtype=float).reshape(bx.shape)
+            oy = np.asarray(oy1d, dtype=float).reshape(by.shape)
+            # Evaluate 'other' on its CRS at transformed coordinates
+            sampled = other.eval((ox, oy))
+            aligned = Grid(
+                bbox=base.bbox,
+                dx=base.dx,
+                dy=base.dy,
+                hmin=other.hmin,
+                values=sampled,
+                extrapolate=True,
+                crs=base.crs,
+            )
+            aligned.build_interpolant()
+            aligned_grids.append(aligned)
+
+    # Compute elementwise minimum while handling masked arrays consistently
+    values_list = []
+    for g in aligned_grids:
+        values_list.append(g.values)
+    minimum_values = np.minimum.reduce(values_list)
+
+    # Determine hmin from positive finite values only
+    _vals_for_min = minimum_values
+    if np.ma.isMaskedArray(_vals_for_min):
+        _vals_for_min = np.ma.filled(_vals_for_min, np.nan)
+    _vals_for_min = np.asarray(_vals_for_min)
+    _pos = _vals_for_min[np.isfinite(_vals_for_min) & (_vals_for_min > 0)]
+    if _pos.size == 0:
+        raise ValueError(
+            "compute_minimum: No positive values found across input grids to determine hmin."
+        )
+    min_edgelength = float(np.nanmin(_pos))
+
     grid = Grid(
-        bbox=base_edge_length.bbox,
-        dx=base_edge_length.dx,
-        dy=base_edge_length.dy,
+        bbox=base.bbox,
+        dx=base.dx,
+        dy=base.dy,
         hmin=min_edgelength,
         values=minimum_values,
         extrapolate=True,
-        crs=base_edge_length.crs,
+        crs=base.crs,
     )
-
     grid.build_interpolant()
     return grid
 
@@ -160,7 +204,7 @@ class Grid(Region):
         """
         x = self.x0y0[0] + np.arange(0, self.nx) * self.dx  # ascending monotonically
         y = self.x0y0[1] + np.arange(0, self.ny) * abs(self.dy)
-        # y = y[::-1]  # descending monotonically
+        # y increases upward; grids elsewhere rely on this convention
         return x, y
 
     def create_grid(self):
@@ -239,7 +283,7 @@ class Grid(Region):
         assert isinstance(grid2, Grid), "Object must be Grid."
         # check if they overlap
         x1min, x1max, y1min, y1max = self.bbox
-        x2min, x2max, y2min, y2max = self.bbox
+        x2min, x2max, y2min, y2max = grid2.bbox
         overlap = x1min < x2max and x2min < x1max and y1min < y2max and y2min < y1max
         assert overlap, "Grid objects do not overlap."
         lon1, lat1 = self.create_vectors()
@@ -269,6 +313,41 @@ class Grid(Region):
             crs=grid2.crs,
         )
 
+    def reproject_to(self, target_grid):
+        """Reproject and resample this grid onto the target_grid's lattice and CRS.
+
+        If CRS matches, this is equivalent to interpolate_to(target_grid).
+        If CRS differs, transforms target lattice coordinates into self.crs,
+        samples values there, and returns a Grid aligned with target_grid.
+        """
+        from pyproj import CRS as _CRS, Transformer as _Transformer
+
+        tcrs = _CRS.from_user_input(target_grid.crs)
+        scrs = _CRS.from_user_input(self.crs)
+        if scrs.equals(tcrs):
+            return self.interpolate_to(target_grid)
+
+        # Build target lattice
+        tx, ty = target_grid.create_grid()
+        # Transform target coordinates into source CRS
+        tr = _Transformer.from_crs(tcrs, scrs, always_xy=True)
+        sx1d, sy1d = tr.transform(tx.ravel(), ty.ravel())
+        sx = np.asarray(sx1d, dtype=float).reshape(tx.shape)
+        sy = np.asarray(sy1d, dtype=float).reshape(ty.shape)
+
+        sampled = self.eval((sx, sy))
+        out = Grid(
+            bbox=target_grid.bbox,
+            dx=target_grid.dx,
+            dy=target_grid.dy,
+            hmin=self.hmin,
+            values=sampled,
+            extrapolate=True,
+            crs=target_grid.crs,
+        )
+        out.build_interpolant()
+        return out
+
     def blend_into(self, coarse, blend_width=10, p=1, nnear=6, eps=0.0):
         """Blend self.values into the values of the coarse grid one so that the
            values transition smoothly. The kwargs control the blending procedure.
@@ -288,7 +367,7 @@ class Grid(Region):
         _coarse_w_fine: :class:`Grid`
             The coarse grid with the finer grid interpolated and blended.
         """
-        _FILL = -99999  # uncommon value
+        _FILL = -99999  # uncommon value used to mark padding region
         if not isinstance(coarse, Grid):
             raise ValueError("Object must be Grid.")
         # check if they overlap
@@ -331,10 +410,13 @@ class Grid(Region):
         ask_index = _vals == _FILL
         known_index = _vals != _FILL
 
-        _tree = Invdisttree(_pts[known_index], _vals[known_index])
-        _vals[ask_index] = _tree(_pts[ask_index], nnear=nnear, eps=eps, p=p)
-
-        _hmin = np.amin(_vals[ask_index])
+        # If no padding cells projected onto coarse grid, skip IDW and just compute hmin
+        if np.any(ask_index):
+            _tree = Invdisttree(_pts[known_index], _vals[known_index])
+            _vals[ask_index] = _tree(_pts[ask_index], nnear=nnear, eps=eps, p=p)
+            _hmin = np.amin(_vals[ask_index])
+        else:
+            _hmin = np.amin(_vals)
         _coarse_w_fine.hmin = _hmin
         # put it back
         _coarse_w_fine.values = _vals.reshape(*_coarse_w_fine.values.shape)
@@ -377,6 +459,8 @@ class Grid(Region):
         if ax is None:
             fig, ax = plt.subplots()
             ax.axis("equal")
+        else:
+            fig = ax.get_figure()
         pc = ax.pcolor(
             _xg[::coarsen, ::coarsen],
             _yg[::coarsen, ::coarsen],

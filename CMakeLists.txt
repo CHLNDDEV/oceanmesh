@@ -1,3 +1,15 @@
+##############################################################################
+# LEGACY/UNSUPPORTED BUILD SCRIPT
+#
+# This CMake configuration is retained for historical reference only.
+# It is NOT used by the standard Python build, which uses setuptools with
+# pybind11 (see setup.py and pyproject.toml). Do not rely on this file for
+# normal development or installation. The supported build path is:
+#   - pip/setuptools (Pybind11Extension) invoked via setup.py
+# On Windows, CMake may still be required by vcpkg solely to build CGAL
+# dependencies; it is not used to build oceanmesh itself.
+##############################################################################
+
 cmake_minimum_required(VERSION 2.8.12)
 
 project(oceanmesh)

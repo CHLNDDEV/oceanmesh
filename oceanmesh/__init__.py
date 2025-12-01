@@ -57,7 +57,7 @@ from oceanmesh.signed_distance_function import (
     signed_distance_function,
 )
 
-from .fix_mesh import fix_mesh, simp_vol
+from .fix_mesh import fix_mesh, simp_vol, simp_qual
 from .mesh_generator import (
     generate_mesh,
     generate_multiscale_mesh,

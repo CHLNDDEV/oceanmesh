@@ -5,7 +5,7 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.spatial
-from inpoly import inpoly2
+from oceanmesh.geometry import inpoly2
 
 from . import Shoreline, edges
 
@@ -116,10 +116,13 @@ def _plot(geo, filename=None, samples=100000):
 
 
 class Domain:
-    def __init__(self, bbox, func, covering=None):
+    def __init__(self, bbox, func, covering=None, crs=None, stereo=False):
         self.bbox = bbox
         self.domain = func
         self.covering = covering
+        # Optional projection metadata for validation/rich workflows
+        self.crs = crs
+        self.stereo = bool(stereo)
 
     def eval(self, x):
         return self.domain(x)
@@ -143,7 +146,11 @@ def _compute_bbox(domains):
 class Union(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
-        super().__init__(bbox, domains)
+        # Propagate CRS/stereo metadata (do not validate here; validation is handled upstream)
+        crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
+        crs = crs_vals[0] if len(crs_vals) > 0 else None
+        stereo = any(getattr(d, "stereo", False) for d in domains)
+        super().__init__(bbox, domains, crs=crs, stereo=stereo)
 
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
@@ -153,7 +160,10 @@ class Union(Domain):
 class Intersection(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
-        super().__init__(bbox, domains)
+        crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
+        crs = crs_vals[0] if len(crs_vals) > 0 else None
+        stereo = any(getattr(d, "stereo", False) for d in domains)
+        super().__init__(bbox, domains, crs=crs, stereo=stereo)
 
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
@@ -163,7 +173,10 @@ class Intersection(Domain):
 class Difference(Domain):
     def __init__(self, domains):
         bbox = _compute_bbox(domains)
-        super().__init__(bbox, domains)
+        crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
+        crs = crs_vals[0] if len(crs_vals) > 0 else None
+        stereo = any(getattr(d, "stereo", False) for d in domains)
+        super().__init__(bbox, domains, crs=crs, stereo=stereo)
 
     def eval(self, x):
         return np.maximum.reduce(
@@ -203,21 +216,31 @@ def signed_distance_function(shoreline, invert=False):
     e_box = edges.get_poly_edges(shoreline.boubox)
 
     def func(x):
-        # Initialize d with some positive number larger than geps
-        dist = np.zeros(len(x)) + 1.0
-        # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, boubox, e_box)
-        # are points inside the shoreline?
-        in_shoreline, _ = inpoly2(x, np.nan_to_num(poly), e)
-        # compute dist to shoreline
-        try:
-            d, _ = tree.query(x, k=1, workers=-1)
-        except (Exception,):
-            d, _ = tree.query(x, k=1, n_jobs=-1)
-        # d is signed negative if inside the
-        # intersection of two areas and vice versa.
+        # Sanitize inputs: handle non-finite query points gracefully
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        finite_mask = np.isfinite(x).all(axis=1)
+
+        # Default: very large positive distance (outside domain)
+        d = np.full(n, 1.0e12, dtype=float)
+        in_boubox = np.zeros(n, dtype=bool)
+        in_shoreline = np.zeros(n, dtype=bool)
+
+        if np.any(finite_mask):
+            x_f = x[finite_mask]
+            # are points inside the boubox?
+            ib, _ = inpoly2(x_f, boubox, e_box)
+            in_boubox[finite_mask] = ib
+            # are points inside the shoreline?
+            ish, _ = inpoly2(x_f, np.nan_to_num(poly), e)
+            in_shoreline[finite_mask] = ish
+            # compute distance to shoreline for finite points
+            d_f, _ = tree.query(x_f, k=1)
+            d[finite_mask] = d_f
+
+        # Signed distance: negative inside intersection of boubox and shoreline
         cond = np.logical_and(in_shoreline, in_boubox)
-        dist = (-1) ** (cond) * d
+        dist = ((-1) ** cond) * d
         if invert:
             dist *= -1
         return dist
@@ -228,21 +251,28 @@ def signed_distance_function(shoreline, invert=False):
     )
 
     def func_covering(x):
-        # Initialize d with some positive number larger than geps
-        dist = np.zeros(len(x)) + 1.0
-        # are points inside the boubox?
-        in_boubox, _ = inpoly2(x, boubox, e_box)
-        # compute dist to shoreline
-        try:
-            d, _ = tree2.query(x, k=1, workers=-1)
-        except (Exception,):
-            d, _ = tree2.query(x, k=1, n_jobs=-1)
-        # d is signed negative if inside the
-        # intersection of two areas and vice versa.
-        dist = (-1) ** (in_boubox) * d
+        # Sanitize inputs: handle non-finite query points gracefully
+        x = np.asarray(x, dtype=float)
+        n = len(x)
+        finite_mask = np.isfinite(x).all(axis=1)
+
+        d = np.full(n, 1.0e12, dtype=float)
+        in_boubox = np.zeros(n, dtype=bool)
+
+        if np.any(finite_mask):
+            x_f = x[finite_mask]
+            ib, _ = inpoly2(x_f, boubox, e_box)
+            in_boubox[finite_mask] = ib
+            d_f, _ = tree2.query(x_f, k=1)
+            d[finite_mask] = d_f
+
+        dist = ((-1) ** (in_boubox)) * d
         return dist
 
-    return Domain(shoreline.bbox, func, covering=func_covering)
+    # Attach CRS and stereo metadata from the shoreline for downstream validation
+    crs = getattr(shoreline, "crs", None)
+    stereo = getattr(shoreline, "stereo", False)
+    return Domain(shoreline.bbox, func, covering=func_covering, crs=crs, stereo=stereo)
 
 
 def _create_boubox(bbox):
@@ -282,7 +312,15 @@ def multiscale_signed_distance_function(signed_distance_functions):
     nests = []
     for i, sdf in enumerate(signed_distance_functions):
         # set eval method to covering
-        tmp = [Domain(s.bbox, s.covering) for s in signed_distance_functions[i + 1 :]]
+        tmp = [
+            Domain(
+                s.bbox,
+                s.covering,
+                crs=getattr(s, "crs", None),
+                stereo=getattr(s, "stereo", False),
+            )
+            for s in signed_distance_functions[i + 1 :]
+        ]
         nests.append(Difference([sdf, *tmp]))
 
     union = Union(nests)

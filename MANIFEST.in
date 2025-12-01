@@ -5,3 +5,5 @@ include README.md LICENSE.txt
 global-include CMakeLists.txt
 include versioneer.py
 include oceanmesh/_version.py
+recursive-include oceanmesh/geometry *.py
+recursive-include oceanmesh/geometry *.pyx *.c

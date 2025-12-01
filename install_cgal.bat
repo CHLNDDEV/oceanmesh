@@ -3,6 +3,9 @@ setlocal
 
 REM This is because the latest vcpkg uses a portable python 3.10 that wont run on Windows 7
 REM
+REM CMAKE is required here only because vcpkg uses it to build CGAL and its dependencies.
+REM OceanMesh itself does NOT use CMAKE for its Python build; it relies on setuptools + pybind11.
+REM See setup.py for details of the extension build process.
 for /F %%v in ('powershell -Command [environment]::OSVersion.Version.Major') do set OS_VER=%%v
 if "%OS_VER%" LSS "10" (
   echo This install script requires Windows 10 or later [you have version "%OS_VER%"]
