@@ -3,7 +3,14 @@ from pyproj import CRS, Transformer
 
 from .projections import CARTOPY_AVAILABLE, StereoProjection
 
-__all__ = ["Region", "warp_coordinates", "to_stereo", "to_lat_lon", "stereo_to_3d", "to_3d"]
+__all__ = [
+    "Region",
+    "warp_coordinates",
+    "to_stereo",
+    "to_lat_lon",
+    "stereo_to_3d",
+    "to_3d",
+]
 
 
 # ---- Helpers for CRS and bbox validation in multiscale meshes ----
@@ -120,7 +127,6 @@ def _get_stereo_projection(scale_factor=1.0):
         value when cartopy/pyproj are available.
     """
 
-    global _STEREO_PROJ_CACHE
     k0_key = float(scale_factor)
     if k0_key not in _STEREO_PROJ_CACHE and CARTOPY_AVAILABLE:
         _STEREO_PROJ_CACHE[k0_key] = StereoProjection(scale_factor=k0_key)

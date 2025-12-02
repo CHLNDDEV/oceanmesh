@@ -35,20 +35,19 @@ except Exception:  # pragma: no cover - when cartopy is not installed
 
 
 class StereoProjection:
-    """North-polar stereographic projection helper.
+    r"""North-polar stereographic projection helper.
 
-    This class wraps cartopy's :class:`~cartopy.crs.NorthPolarStereo`
-    projection and exposes helpers for forward and inverse coordinate
-    transforms, as well as a convenience method for computing the local
-    scale factor of the projection.
+    This class provides forward (lon/lat -> x/y) and inverse (x/y -> lon/lat)
+    transforms for a north-polar stereographic CRS, along with a helper for
+    computing the local scale factor :math:`k(\phi)` using a configurable
+    reference scale factor :math:`k_0`.
 
     Parameters
     ----------
     scale_factor:
         The reference scale factor :math:`k_0` used in the analytic
-        expression for the stereographic scale distortion.
-        For a standard north-polar stereographic projection this is
-        typically 1.0.
+        expression for the stereographic scale distortion. For a standard
+        north-polar stereographic projection this is typically 1.0.
     """
 
     def __init__(self, scale_factor: float = 1.0) -> None:
@@ -79,7 +78,9 @@ class StereoProjection:
 
         return self._stereo
 
-    def to_stereo(self, lon: np.ndarray, lat: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def to_stereo(
+        self, lon: np.ndarray, lat: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """Project longitude/latitude to stereographic x/y.
 
         Parameters
@@ -116,7 +117,7 @@ class StereoProjection:
         return lon, lat
 
     def get_scale_factor(self, lat: np.ndarray) -> np.ndarray:
-        """Return the stereographic scale factor at the given latitude.
+        r"""Return the stereographic scale factor at the given latitude.
 
         The scale factor :math:`k(\phi)` for a polar stereographic
         projection is given by

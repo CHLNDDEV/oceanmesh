@@ -1030,7 +1030,7 @@ def _project_points_back(p, fd, deps):
 
 
 def _stereo_distortion(lat, k0=1.0):
-    """Return stereographic scale factor at latitude.
+    r"""Return stereographic scale factor at latitude.
 
     When cartopy is available, this uses
     :class:`oceanmesh.projections.StereoProjection` to compute the
@@ -1061,7 +1061,7 @@ def _stereo_distortion(lat, k0=1.0):
 
 
 def _stereo_distortion_dist(lat, k0=1.0):
-    """Return stereographic scale factor in distance units.
+    r"""Return stereographic scale factor in distance units.
 
     This is analogous to :func:`_stereo_distortion` but scaled by
     ``pi/180`` to convert degrees to radians. When cartopy is
@@ -1109,9 +1109,7 @@ def _generate_initial_points(
         p0 = p.reshape(2, -1).T
         x, y = to_stereo(p0[:, 0], p0[:, 1])
         p = np.asarray([x, y]).T
-        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(
-            p0[:, 1], k0=k0
-        )
+        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(p0[:, 1], k0=k0)
     else:
         p = p.reshape(2, -1).T
         r0 = fh(p)

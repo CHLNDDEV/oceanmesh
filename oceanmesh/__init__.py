@@ -127,7 +127,7 @@ from . import _version
 __version__ = _version.get_versions()["version"]
 
 try:  # Optional global-stereo helpers (import may fail generically)
-    from .projections import StereoProjection, CARTOPY_AVAILABLE
+    from .projections import CARTOPY_AVAILABLE
 
     __all__.extend(["StereoProjection", "CARTOPY_AVAILABLE"])
 except ImportError:
