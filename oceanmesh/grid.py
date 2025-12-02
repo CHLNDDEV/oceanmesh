@@ -455,6 +455,10 @@ class Grid(Region):
         """
         _xg, _yg = self.create_grid()
         if stereo:
+            # Transform to stereographic coordinates for plotting.
+            # Uses cartopy's NorthPolarStereo when available
+            # (pip install oceanmesh[global]) and falls back to
+            # analytic formulas otherwise.
             _xg, _yg = to_stereo(_xg, _yg)
         if ax is None:
             fig, ax = plt.subplots()

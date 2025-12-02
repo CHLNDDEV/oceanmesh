@@ -88,7 +88,9 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
+def enforce_mesh_gradation(
+    grid, gradation=0.15, crs="EPSG:4326", stereo=False, scale_factor=1.0
+):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -124,17 +126,40 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
     if stereo:
-        logger.info("Global mesh: fixing gradient on the north pole...")
-        # max distortion at the pole: 2 / 180 * PI / (1 - cos(lat))**2
-        dx_stereo = grid.dx * 1 / 180 * np.pi / 2
-        # in stereo projection, all north hemisphere is contained in the unit sphere
-        # we want to fix the gradient close to the north pole,
-        # so we extract all the coordinates between -1 and 1 in stereographic projection
+        from .projections import CARTOPY_AVAILABLE
+        from .region import _get_stereo_projection
+
+        logger.info(
+            "Global mesh: fixing gradient on the north pole (using %s projection, k0=%s)...",
+            "cartopy" if CARTOPY_AVAILABLE else "hardcoded",
+            scale_factor,
+        )
+        # Obtain a stereographic projection configured with the
+        # caller-provided scale_factor so that k0 meaningfully affects
+        # the polar correction.
+        proj = _get_stereo_projection(scale_factor=scale_factor)
+
+        # Choose a reasonable physical radius (in metres) around the
+        # north pole within which to regularise the gradient. Here we
+        # use ~2000 km.
+        r_max = 2_000_000.0
+
+        # Resolution in stereographic metres, based on underlying lon/lat step.
+        dx_deg = grid.dx
+        dx_stereo = dx_deg * np.pi / 180.0 * 6_371_000.0
 
         us, vs = np.meshgrid(
-            np.arange(-1, 1, dx_stereo), np.arange(-1, 1, dx_stereo), indexing="ij"
+            np.arange(-r_max, r_max, dx_stereo),
+            np.arange(-r_max, r_max, dx_stereo),
+            indexing="ij",
         )
-        ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
+
+        if proj is not None:
+            ulon, vlat = proj.to_lat_lon(us.ravel(), vs.ravel())
+        else:
+            # Fall back to module-level transform if projection could
+            # not be constructed.
+            ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
         utmp = grid.eval((ulon, vlat))
         utmp = np.reshape(utmp, us.shape)
         szs = utmp.shape
@@ -143,9 +168,9 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         # this is merely to fix the north pole gradient
         vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp.flatten("F"))
         vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
-        # construct stereo interpolating function
+        # construct stereo interpolating function in projection metres
         grid_stereo = Grid(
-            bbox=(-1, 1, -1, 1),
+            bbox=(-r_max, r_max, -r_max, r_max),
             dx=dx_stereo,
             values=vtmp,
             hmin=grid.hmin,
@@ -155,7 +180,11 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         grid_stereo.build_interpolant()
         # reinject back into the original grid and redo the gradient computation
         xg, yg = grid.create_grid()
-        tmp[yg > 0] = grid_stereo.eval(to_stereo(xg[yg > 0], yg[yg > 0]))
+        if proj is not None:
+            xs, ys = proj.to_stereo(xg[yg > 0], yg[yg > 0])
+        else:
+            xs, ys = to_stereo(xg[yg > 0], yg[yg > 0])
+        tmp[yg > 0] = grid_stereo.eval((xs, ys))
         logger.info(
             "Global mesh: reinject back stereographic gradient and recomputing gradient..."
         )

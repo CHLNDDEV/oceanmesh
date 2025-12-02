@@ -577,6 +577,7 @@ class Shoreline(Region):
         minimum_area_mult=4.0,
         smooth_shoreline=True,
         stereo=False,
+        scale_factor=1.0,
     ):
         if isinstance(shp, str):
             shp = Path(shp)
@@ -634,14 +635,23 @@ class Shoreline(Region):
 
         self.shp = shp
         self.h0 = h0
-        # Retain stereo flag for downstream validation (e.g., multiscale mixing)
+        # Retain stereo flag for downstream validation (e.g., multiscale mixing).
+        # When True, stereographic transformations will use cartopy's
+        # NorthPolarStereo when available (see oceanmesh.projections).
         self.stereo = bool(stereo)
+        if scale_factor <= 0:
+            raise ValueError("scale_factor must be > 0")
+        self.__scale_factor = float(scale_factor)
         self.inner = []
         self.outer = []
         self.mainland = []
         self.boubox = _boubox
         self.refinements = refinements
         self.minimum_area_mult = minimum_area_mult
+        if self.stereo:
+            from oceanmesh.projections import check_cartopy_available
+
+            check_cartopy_available()
 
         polys = self._read()
 
@@ -707,6 +717,19 @@ class Shoreline(Region):
         if value <= 0:
             raise ValueError("h0 must be > 0")
         self.__h0 = value
+
+    @property
+    def scale_factor(self):
+        """Reference stereographic scale factor k0 for global meshes."""
+
+        return self.__scale_factor
+
+    @scale_factor.setter
+    def scale_factor(self, value):
+        value = float(value)
+        if value <= 0:
+            raise ValueError("scale_factor must be > 0")
+        self.__scale_factor = value
 
     @staticmethod
     def transform_to(gdf, dst_crs):

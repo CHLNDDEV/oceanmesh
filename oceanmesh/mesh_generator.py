@@ -104,7 +104,6 @@ def write_to_fort14(
                 np.column_stack((k + 1, points[k][0], points[k][1], topobathymetry[k])),
                 delimiter=" ",
                 fmt="%i %f %f %f",
-                newline="\n",
             )
 
         # Write element connectivity
@@ -726,8 +725,14 @@ def generate_mesh(domain, edge_length, **kwargs):
     opts.update(kwargs)
     _parse_kwargs(kwargs)
 
-    fd, bbox = _unpack_domain(domain, opts)
+    fd, bbox, scale_factor = _unpack_domain(domain, opts)
     fh, min_edge_length = _unpack_sizing(edge_length, opts)
+
+    # Propagate stereographic scale factor (k0) from the signed-distance
+    # domain into the meshing options so that global stereo workflows can
+    # correctly apply distortion corrections in both the initial point
+    # generation and force computation routines.
+    opts["scale_factor"] = scale_factor
 
     _check_bbox(bbox)
     bbox = np.array(bbox).reshape(-1, 2)
@@ -756,6 +761,7 @@ def generate_mesh(domain, edge_length, **kwargs):
             fd,
             pfix,
             opts["stereo"],
+            k0=scale_factor,
         )
     else:
         p = opts["points"]
@@ -863,17 +869,35 @@ def _unpack_sizing(edge_length, opts):
 
 
 def _unpack_domain(domain, opts):
+    """Unpack a domain into (fd, bbox, scale_factor).
+
+    Parameters
+    ----------
+    domain : Domain or callable
+        Signed distance function domain object or a raw callable.
+    opts : dict
+        Meshing options, expected to contain ``bbox`` when ``domain`` is a
+        callable.
+
+    Returns
+    -------
+    fd : callable
+        The signed distance function evaluator.
+    bbox : tuple
+        The bounding box associated with the domain.
+    scale_factor : float
+        The stereographic reference scale factor k0 (defaults to 1.0 when
+        not provided on the domain).
+    """
+
     if isinstance(domain, Domain):
-        bbox = domain.bbox
-        fd = domain.eval
+        return domain.eval, domain.bbox, getattr(domain, "scale_factor", 1.0)
     elif callable(domain):
-        bbox = opts["bbox"]
-        fd = domain
+        return domain, opts["bbox"], 1.0
     else:
         raise ValueError(
             "`domain` must be a function or a :class:`signed_distance_function object"
         )
-    return fd, bbox
 
 
 def _get_bars(t):
@@ -891,13 +915,14 @@ def _compute_forces(p, t, fh, min_edge_length, L0mult, opts):
     L = np.sqrt((barvec**2).sum(1))  # L = Bar lengths
     L[L == 0] = np.finfo(float).eps
     if opts["stereo"]:
+        k0 = opts.get("scale_factor", 1.0)
         # For global+regional multiscale meshes, this branch handles the global stereo case.
         # Regional sizing functions have been wrapped or transformed earlier so fh(p2)
         # evaluates correctly on lat/lon even though points are maintained in stereo space.
         p1 = p[bars].sum(1) / 2
         x, y = to_lat_lon(p1[:, 0], p1[:, 1])
         p2 = np.asarray([x, y]).T
-        hbars = fh(p2) * _stereo_distortion_dist(y)
+        hbars = fh(p2) * _stereo_distortion_dist(y, k0=k0)
     else:
         hbars = fh(p[bars].sum(1) / 2)
     # Guard against non-finite or non-positive sizing values that can poison forces
@@ -1004,26 +1029,71 @@ def _project_points_back(p, fd, deps):
     return p
 
 
-def _stereo_distortion(lat):
-    # we use here Stereographic projection of the sphere
-    # from the north pole onto the plane
-    # https://en.wikipedia.org/wiki/Stereographic_projection
+def _stereo_distortion(lat, k0=1.0):
+    """Return stereographic scale factor at latitude.
+
+    When cartopy is available, this uses
+    :class:`oceanmesh.projections.StereoProjection` to compute the
+    scale factor via
+
+    .. math:: k(\phi) = 2 k_0 / (1 + \sin \phi),
+
+    with :math:`k_0 = 1`. Otherwise, it falls back to the historical
+    analytic expression based on a north-polar stereographic
+    projection of the unit sphere.
+    """
+
+    try:
+        from .region import _get_stereo_projection
+
+        proj = _get_stereo_projection(scale_factor=k0)
+        if proj is not None:
+            return proj.get_scale_factor(lat)
+    except Exception:
+        # Fall back to legacy formula if projections cannot be used
+        pass
+
     lat0 = 90
     ll = lat + lat0
     lrad = ll / 180 * np.pi
-    res = 2 / (1 + np.sin(lrad))
+    res = 2 * k0 / (1 + np.sin(lrad))
     return res
 
 
-def _stereo_distortion_dist(lat):
+def _stereo_distortion_dist(lat, k0=1.0):
+    """Return stereographic scale factor in distance units.
+
+    This is analogous to :func:`_stereo_distortion` but scaled by
+    ``pi/180`` to convert degrees to radians. When cartopy is
+    available, it reuses :class:`StereoProjection` and otherwise
+    falls back to the legacy implementation.
+    """
+
+    try:
+        from .region import _get_stereo_projection
+
+        proj = _get_stereo_projection(scale_factor=k0)
+        if proj is not None:
+            return proj.get_scale_factor(lat) * np.pi / 180.0
+    except Exception:
+        pass
+
     lrad = np.radians(lat)
-    # Calculate the scale factor for the stereographic projection
-    res = 2 / (1 + np.sin(lrad)) / 180 * np.pi
+    res = 2 * k0 / (1 + np.sin(lrad)) / 180 * np.pi
     return res
 
 
-def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, stereo=False):
-    """Create initial distribution in bounding box (equilateral triangles)"""
+def _generate_initial_points(
+    min_edge_length, geps, bbox, fh, fd, pfix, stereo=False, k0=1.0
+):
+    """Create initial distribution in bounding box (equilateral triangles).
+
+    When ``stereo`` is True, points are generated in lon/lat and
+    then projected to stereographic coordinates. The local spacing is
+    adjusted by the stereographic distortion factor using the
+    configurable reference scale factor ``k0``.
+    """
+
     if stereo:
         bbox = np.array([[-180, 180], [-89, 89]])
     p = np.mgrid[
@@ -1039,7 +1109,9 @@ def _generate_initial_points(min_edge_length, geps, bbox, fh, fd, pfix, stereo=F
         p0 = p.reshape(2, -1).T
         x, y = to_stereo(p0[:, 0], p0[:, 1])
         p = np.asarray([x, y]).T
-        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(p0[:, 1])
+        r0 = fh(to_lat_lon(p[:, 0], p[:, 1])) * _stereo_distortion(
+            p0[:, 1], k0=k0
+        )
     else:
         p = p.reshape(2, -1).T
         r0 = fh(p)

@@ -1,7 +1,9 @@
 import numpy as np
 from pyproj import CRS, Transformer
 
-__all__ = ["Region", "warp_coordinates"]
+from .projections import CARTOPY_AVAILABLE, StereoProjection
+
+__all__ = ["Region", "warp_coordinates", "to_stereo", "to_lat_lon", "stereo_to_3d", "to_3d"]
 
 
 # ---- Helpers for CRS and bbox validation in multiscale meshes ----
@@ -104,6 +106,27 @@ def warp_coordinates(points, src_crs, dst_crs):
     return np.asarray(points).T
 
 
+_STEREO_PROJ_CACHE = {}
+
+
+def _get_stereo_projection(scale_factor=1.0):
+    """Return a cached :class:`StereoProjection` for a given k0.
+
+    Parameters
+    ----------
+    scale_factor:
+        Reference stereographic scale factor :math:`k_0` used in the
+        distortion formula. Projections are cached per distinct k0
+        value when cartopy/pyproj are available.
+    """
+
+    global _STEREO_PROJ_CACHE
+    k0_key = float(scale_factor)
+    if k0_key not in _STEREO_PROJ_CACHE and CARTOPY_AVAILABLE:
+        _STEREO_PROJ_CACHE[k0_key] = StereoProjection(scale_factor=k0_key)
+    return _STEREO_PROJ_CACHE.get(k0_key, None)
+
+
 def stereo_to_3d(u, v, R=1):
     # to 3D
     #    c=4*R**2/(u**2+v**2+4*R**2)
@@ -120,6 +143,20 @@ def stereo_to_3d(u, v, R=1):
 
 
 def to_lat_lon(x, y, z=None, R=1):
+    """Convert stereographic or 3D Cartesian coordinates to lon/lat.
+
+    When cartopy is available and ``z is None`` with the default
+    radius ``R == 1``, this uses the cartopy-based
+    :class:`StereoProjection` inverse transform. Otherwise it falls
+    back to the legacy analytic formulas for backward compatibility.
+    """
+
+    if z is None and R == 1 and CARTOPY_AVAILABLE:
+        proj = _get_stereo_projection()
+        if proj is not None:
+            lon, lat = proj.to_lat_lon(np.asarray(x), np.asarray(y))
+            return lon, lat
+
     if z is None:
         x, y, z = stereo_to_3d(x, y, R=R)
 
@@ -150,11 +187,23 @@ def to_3d(x, y, R=1):
 
 
 def to_stereo(x, y, R=1):
+    """Project lon/lat to stereographic coordinates.
+
+    When cartopy is available and the default radius ``R == 1`` is
+    used, this delegates to the cartopy-based :class:`StereoProjection`
+    helper. Otherwise, it falls back to the legacy analytic formulas
+    based on a unit sphere, preserving historical behaviour.
+    """
+
+    if R == 1 and CARTOPY_AVAILABLE:
+        proj = _get_stereo_projection()
+        if proj is not None:
+            u, v = proj.to_stereo(np.asarray(x), np.asarray(y))
+            return u, v
+
     kx, ky, kz = to_3d(x, y, R)
 
-    # to 2D in stereo
-    #    u = 2*R*kx/(R+kz)
-    #    v = 2*R*ky/(R+kz)
+    # to 2D in stereo (legacy formulation)
     u = -kx / (R + kz)
     v = -ky / (R + kz)
 
