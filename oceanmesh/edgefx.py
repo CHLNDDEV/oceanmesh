@@ -129,14 +129,14 @@ def enforce_mesh_gradation(
         from .projections import CARTOPY_AVAILABLE
         from .region import _get_stereo_projection
 
+        backend = "cartopy" if CARTOPY_AVAILABLE else "hardcoded"
         logger.info(
-            "Global mesh: fixing gradient on the north pole (using %s projection, k0=%s)...",
-            "cartopy" if CARTOPY_AVAILABLE else "hardcoded",
+            "Global mesh: fixing gradient on the north pole (backend=%s, k0=%s, distortion_correction=%s)...",
+            backend,
             scale_factor,
+            "enabled" if CARTOPY_AVAILABLE else "disabled",
         )
-        # Obtain a stereographic projection configured with the
-        # caller-provided scale_factor so that k0 meaningfully affects
-        # the polar correction.
+
         proj = _get_stereo_projection(scale_factor=scale_factor)
 
         # Choose a reasonable physical radius (in metres) around the
@@ -156,18 +156,45 @@ def enforce_mesh_gradation(
 
         if proj is not None:
             ulon, vlat = proj.to_lat_lon(us.ravel(), vs.ravel())
+            # Spatially-varying stereographic scale factor k(phi) on
+            # the intermediate polar grid.
+            k_polar = proj.get_scale_factor(vlat)
         else:
             # Fall back to module-level transform if projection could
-            # not be constructed.
-            ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
+            # not be constructed. Normalise metre-based coordinates by
+            # Earth radius so that to_lat_lon operates on the
+            # non-dimensional unit-sphere coordinates expected by the
+            # legacy stereographic formulas used when CARTOPY_AVAILABLE
+            # is False. This keeps the polar patch consistent with
+            # to_stereo/to_lat_lon.
+            R_earth = 6_371_000.0
+            us_unit = us / R_earth
+            vs_unit = vs / R_earth
+            ulon, vlat = to_lat_lon(us_unit.ravel(), vs_unit.ravel())
+            k_polar = None
+
         utmp = grid.eval((ulon, vlat))
         utmp = np.reshape(utmp, us.shape)
-        szs = utmp.shape
+
+        # Distortion-aware gradient limiting: operate on mesh sizes
+        # scaled by the local stereographic factor so the limiter
+        # acts in approximately physical space.
+        if k_polar is not None:
+            k_polar_grid = np.reshape(k_polar, utmp.shape)
+            utmp_work = utmp * k_polar_grid
+        else:
+            utmp_work = utmp
+
+        szs = utmp_work.shape
         szs = (szs[0], szs[1], 1)
-        #  we choose an excessively large number for the gradiation = 10
-        # this is merely to fix the north pole gradient
-        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp.flatten("F"))
+        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp_work.flatten("F"))
         vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
+
+        # Inverse correction: return to geographic sizing by dividing
+        # out the stereographic distortion.
+        if k_polar is not None:
+            vtmp /= k_polar_grid
+
         # construct stereo interpolating function in projection metres
         grid_stereo = Grid(
             bbox=(-r_max, r_max, -r_max, r_max),

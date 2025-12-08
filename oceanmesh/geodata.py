@@ -533,7 +533,7 @@ def remove_dup(arr: np.ndarray):
 
 
 class Shoreline(Region):
-    """
+    r"""
     The shoreline class extends :class:`Region` to store data
     that is later used to create signed distance functions to
     represent irregular shoreline geometries. This data
@@ -565,6 +565,32 @@ class Shoreline(Region):
         global world meshes (with EPSG:4326 inputs), and False for regional meshes. This
         flag is retained on the Shoreline instance and propagated to downstream Domain
         objects for validation in generate_multiscale_mesh.
+    scale_factor : float, optional
+        Reference stereographic scale factor :math:`k_0` used in distortion
+        calculations for global meshes when ``stereo=True``. Default is 1.0
+        (standard north-polar stereographic). The scale factor affects mesh
+        sizing near the poles via the formula
+
+        .. math::
+
+            k(\phi) = \frac{2 k_0}{1 + \sin \phi},
+
+        where :math:`\phi` is latitude. A value of ``k0 = 0.994`` is commonly
+        used in polar stereographic projections (e.g., EPSG:3413 for the
+        Arctic and EPSG:3031 for the Antarctic) to minimise distortion at
+        standard parallels.
+
+        This parameter is propagated through :class:`Domain` objects to mesh
+        generation and gradient enforcement functions. It is only relevant
+        when ``stereo=True``.
+
+        References
+        ----------
+        - GitHub PR #87: https://github.com/CHLNDDEV/oceanmesh/pull/87
+        - Seamsh stereographic example:
+          https://git.immc.ucl.ac.be/jlambrechts/seamsh/-/blob/ca380b59fe4d2ea57ffbf08a7b0c70bdf7df1afb/examples/6-stereographics.py#L55
+        - Snyder, J.P. (1987). *Map Projections - A Working Manual*.
+            USGS Professional Paper 1395.
     """
 
     def __init__(
@@ -582,7 +608,119 @@ class Shoreline(Region):
         if isinstance(shp, str):
             shp = Path(shp)
 
-        # Determine bbox coordinates and CRS to use
+        crs_to_use, bbox_coords = self._determine_bbox_and_crs(shp, bbox, crs)
+
+        # Build polygon representation and normalized bbox tuple
+        if isinstance(bbox_coords, tuple):
+            _boubox = np.asarray(_create_boubox(bbox_coords))
+            bbox_tuple = bbox_coords
+        else:
+            _boubox = np.asarray(bbox_coords)
+            if not _is_path_ccw(_boubox):
+                _boubox = np.flipud(_boubox)
+            bbox_tuple = (
+                np.nanmin(_boubox[:, 0]),
+                np.nanmax(_boubox[:, 0]),
+                np.nanmin(_boubox[:, 1]),
+                np.nanmax(_boubox[:, 1]),
+            )
+
+        super().__init__(bbox_tuple, crs_to_use)
+
+        self.shp = shp
+        self.h0 = h0
+        # Retain stereo flag for downstream validation (e.g., multiscale mixing).
+        # When True, stereographic transformations will use cartopy's
+        # NorthPolarStereo when available (see oceanmesh.projections).
+        self.stereo = bool(stereo)
+        if scale_factor <= 0:
+            raise ValueError("scale_factor must be > 0")
+        # Store k0 for the stereographic distortion formula
+        #
+        #   k(\phi) = 2 k_0 / (1 + sin(\phi))
+        #
+        # which is used to modulate mesh sizing as a function of
+        # latitude in global meshes (see PR #87 and Snyder, 1987).
+        self.__scale_factor = float(scale_factor)
+        self.inner = []
+        self.outer = []
+        self.mainland = []
+        self.boubox = _boubox
+        self.refinements = refinements
+        self.minimum_area_mult = minimum_area_mult
+        if self.stereo:
+            from oceanmesh.projections import CARTOPY_AVAILABLE, check_cartopy_available
+            from oceanmesh.region import is_crs_suitable_for_global, is_global_bbox
+
+            # Stereo handling can fall back to legacy analytic
+            # formulas when cartopy is unavailable. Only require
+            # cartopy when the cartopy-backed projection helper is in
+            # use; otherwise log a warning and continue so existing
+            # hardcoded workflows remain supported.
+            if CARTOPY_AVAILABLE:
+                check_cartopy_available()
+            else:
+                logger.warning(
+                    "Shoreline: cartopy is not available; falling back to legacy stereographic "
+                    "formulas for stereo=True workflows. Consider installing cartopy for more "
+                    "accurate global projections."
+                )
+
+            suitable, msg = is_crs_suitable_for_global(crs_to_use)
+            if suitable:
+                logger.info("Shoreline: global (stereo=True) domain CRS check: %s", msg)
+            else:
+                logger.warning(
+                    "Shoreline: global (stereo=True) domain CRS may be unsuitable: %s",
+                    msg,
+                )
+
+            # Additional warning when bbox looks global and CRS is not
+            # the canonical EPSG:4326 geographic CRS.
+            try:
+                crs_obj = CRS.from_user_input(crs_to_use)
+                epsg = crs_obj.to_epsg()
+            except Exception:
+                crs_obj = None
+                epsg = None
+
+            if is_global_bbox(bbox_tuple, crs_obj) and epsg != 4326:
+                logger.warning(
+                    "Global domain detected with CRS %s (not EPSG:4326). Ensure this CRS is appropriate "
+                    "for global-scale meshing. Stereographic transformations will use scale_factor=%s.",
+                    crs_to_use,
+                    scale_factor,
+                )
+
+        polys = self._read()
+
+        if stereo:
+            self.bbox = (
+                np.nanmin(polys[:, 0] * 0.99),
+                np.nanmax(polys[:, 0] * 0.99),
+                np.nanmin(polys[:, 1] * 0.99),
+                np.nanmax(polys[:, 1] * 0.99),
+            )  # so that bbox overlaps with antarctica > and becomes the outer boundary
+            self.boubox = np.asarray(_create_boubox(self.bbox))
+
+        if smooth_shoreline:
+            polys = _smooth_shoreline(polys, self.refinements)
+
+        polys = _densify(polys, self.h0, self.bbox)
+
+        polys = _clip_polys(polys, self.bbox)
+
+        self.inner, self.mainland, self.boubox = _classify_shoreline(
+            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, stereo
+        )
+
+    @staticmethod
+    def _determine_bbox_and_crs(shp, bbox, crs):
+        """Return (crs_to_use, bbox_coords) applying legacy inference rules.
+
+        This helper centralises the bbox/CRS selection logic
+        """
+
         crs_to_use = crs
 
         if isinstance(bbox, Region):
@@ -616,64 +754,7 @@ class Shoreline(Region):
                         )
                         crs_to_use = native
 
-        # Build polygon representation and normalized bbox tuple
-        if isinstance(bbox_coords, tuple):
-            _boubox = np.asarray(_create_boubox(bbox_coords))
-            bbox_tuple = bbox_coords
-        else:
-            _boubox = np.asarray(bbox_coords)
-            if not _is_path_ccw(_boubox):
-                _boubox = np.flipud(_boubox)
-            bbox_tuple = (
-                np.nanmin(_boubox[:, 0]),
-                np.nanmax(_boubox[:, 0]),
-                np.nanmin(_boubox[:, 1]),
-                np.nanmax(_boubox[:, 1]),
-            )
-
-        super().__init__(bbox_tuple, crs_to_use)
-
-        self.shp = shp
-        self.h0 = h0
-        # Retain stereo flag for downstream validation (e.g., multiscale mixing).
-        # When True, stereographic transformations will use cartopy's
-        # NorthPolarStereo when available (see oceanmesh.projections).
-        self.stereo = bool(stereo)
-        if scale_factor <= 0:
-            raise ValueError("scale_factor must be > 0")
-        self.__scale_factor = float(scale_factor)
-        self.inner = []
-        self.outer = []
-        self.mainland = []
-        self.boubox = _boubox
-        self.refinements = refinements
-        self.minimum_area_mult = minimum_area_mult
-        if self.stereo:
-            from oceanmesh.projections import check_cartopy_available
-
-            check_cartopy_available()
-
-        polys = self._read()
-
-        if stereo:
-            self.bbox = (
-                np.nanmin(polys[:, 0] * 0.99),
-                np.nanmax(polys[:, 0] * 0.99),
-                np.nanmin(polys[:, 1] * 0.99),
-                np.nanmax(polys[:, 1] * 0.99),
-            )  # so that bbox overlaps with antarctica > and becomes the outer boundary
-            self.boubox = np.asarray(_create_boubox(self.bbox))
-
-        if smooth_shoreline:
-            polys = _smooth_shoreline(polys, self.refinements)
-
-        polys = _densify(polys, self.h0, self.bbox)
-
-        polys = _clip_polys(polys, self.bbox)
-
-        self.inner, self.mainland, self.boubox = _classify_shoreline(
-            self.bbox, self.boubox, polys, self.h0 / 2, self.minimum_area_mult, stereo
-        )
+        return crs_to_use, bbox_coords
 
     @property
     def shp(self):
@@ -720,7 +801,25 @@ class Shoreline(Region):
 
     @property
     def scale_factor(self):
-        """Reference stereographic scale factor k0 for global meshes."""
+        r"""Reference stereographic scale factor :math:`k_0` for global meshes.
+
+        The scale factor :math:`k_0` (typically 1.0) is used in the
+        stereographic distortion formula
+
+        .. math::
+
+                k(\phi) = \frac{2 k_0}{1 + \sin \phi},
+
+        to adjust mesh sizing at different latitudes. Common choices are
+
+        * ``k0 = 1.0`` (default): standard north-polar stereographic
+        * ``k0 = 0.994``: used in EPSG:3413 (Arctic) and EPSG:3031
+            (Antarctic) to reduce distortion at standard parallels
+            (roughly 70°N/S).
+
+        See PR #87 for a discussion of scale-factor selection and how it
+        propagates through the Shoreline → Domain → mesh pipeline.
+        """
 
         return self.__scale_factor
 

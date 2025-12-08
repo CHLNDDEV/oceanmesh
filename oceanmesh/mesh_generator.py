@@ -358,7 +358,7 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
             if (
                 dcrs is not None
                 and CRS.from_user_input(dcrs).to_epsg() == 4326
-                and is_global_bbox(d.bbox)
+                and is_global_bbox(d.bbox, getattr(d, "crs", None))
             ):
                 implicit_global_idx = i
                 break
@@ -383,17 +383,34 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                 gcrs_str = get_crs_string(gcrs)
             except Exception:
                 gcrs_str = str(gcrs)
-            # Explicitly require global CRS be EPSG:4326
+            # Relaxed global CRS requirement: allow non-EPSG:4326 but
+            # emit guidance so users can verify suitability.
             try:
                 parsed = CRS.from_user_input(gcrs)
-                if parsed.to_epsg() != 4326:
-                    errors.append(
-                        f"Global domain CRS {gcrs_str} must be EPSG:4326 for global+regional multiscale meshing."
-                    )
+                epsg = parsed.to_epsg()
             except Exception:
-                errors.append(
-                    f"Global domain CRS '{gcrs_str}' could not be parsed; expected EPSG:4326."
+                parsed = None
+                epsg = None
+
+            if parsed is None:
+                logger.warning(
+                    "Global domain CRS '%s' could not be parsed; proceeding but multiscale validation "
+                    "may be unreliable.",
+                    gcrs_str,
                 )
+            else:
+                if epsg != 4326:
+                    logger.warning(
+                        "Global domain CRS %s is not EPSG:4326. This may work for global+regional multiscale "
+                        "meshing if the CRS is appropriate for global coverage. Proceeding with validation.",
+                        gcrs_str,
+                    )
+                if parsed.is_projected and is_global_bbox(global_domain.bbox, parsed):
+                    logger.warning(
+                        "Global domain uses projected CRS %s with global-like bbox. Ensure this projection is "
+                        "suitable for global-scale meshing (e.g., stereographic).",
+                        gcrs_str,
+                    )
         # Containment checks for regional domains
         for i, d in enumerate(domains[1:], start=1):
             # Perform containment in lat/lon if global stereographic domain provided its bbox in stereo space
@@ -419,7 +436,12 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                             f"Regional domain #{i} bbox {d_bbox} (lat/lon) not contained within global stereo bbox {g_bbox}."
                         )
                 else:
-                    if not bbox_contains(g_bbox, d_bbox):
+                    if not bbox_contains(
+                        g_bbox,
+                        d_bbox,
+                        getattr(global_domain, "crs", None),
+                        getattr(d, "crs", None),
+                    ):
                         errors.append(
                             f"Regional domain #{i} bbox {d_bbox} not contained within global bbox {g_bbox}."
                         )
@@ -438,6 +460,13 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
             )
             if not ok_crs:
                 errors.append(msg_crs)
+            else:
+                logger.info(
+                    "Multiscale CRS compatibility: global=%s, regional=%s -> %s",
+                    get_crs_string(getattr(global_domain, "crs", None)),
+                    get_crs_string(getattr(d, "crs", None)),
+                    msg_crs,
+                )
 
     # Implicit global-like domain with EPSG:4326 but stereo=False mixing with different CRS
     if implicit_global_idx is not None:
@@ -468,7 +497,8 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                 # If CRS parsing fails, skip this implicit enforcement
                 pass
 
-    # Edge length CRS matching
+    # Edge length CRS matching and informational logging for projected
+    # regional domains.
     for i, (d, el) in enumerate(zip(domains, edge_lengths)):
         if hasattr(el, "crs"):
             el_crs = getattr(el, "crs", None)
@@ -485,6 +515,21 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                     errors.append(
                         f"Edge length #{i} CRS could not be compared to domain CRS (el={get_crs_string(el_crs)}, domain={get_crs_string(d_crs)})."
                     )
+
+        # Projected CRS support for regional domains: log when projected
+        # CRS is used for refinement.
+        d_crs = getattr(d, "crs", None)
+        if (i > 0) and (d_crs is not None):
+            try:
+                d_parsed = CRS.from_user_input(d_crs)
+            except Exception:
+                d_parsed = None
+            if d_parsed is not None and d_parsed.is_projected:
+                logger.info(
+                    "Regional domain #%d uses projected CRS %s, which is appropriate for regional refinement.",
+                    i,
+                    get_crs_string(d_crs),
+                )
 
     return len(errors) == 0, errors
 
@@ -1032,15 +1077,52 @@ def _project_points_back(p, fd, deps):
 def _stereo_distortion(lat, k0=1.0):
     r"""Return stereographic scale factor at latitude.
 
-    When cartopy is available, this uses
-    :class:`oceanmesh.projections.StereoProjection` to compute the
-    scale factor via
+    Computes the local scale factor for a north-polar stereographic
+    projection, which quantifies how distances on the projected plane
+    relate to distances on the sphere at a given latitude.
 
-    .. math:: k(\phi) = 2 k_0 / (1 + \sin \phi),
+    Parameters
+    ----------
+    lat : float or array_like
+        Latitude in degrees (scalar or array).
+    k0 : float, optional
+        Reference scale factor at the projection origin (north pole).
+        Default is 1.0. Common values include
 
-    with :math:`k_0 = 1`. Otherwise, it falls back to the historical
-    analytic expression based on a north-polar stereographic
-    projection of the unit sphere.
+        * ``k0 = 1.0``: standard stereographic (true scale at the pole)
+        * ``k0 = 0.994``: used in EPSG:3413/3031 to minimise distortion
+          near ~70° latitude.
+
+    Returns
+    -------
+    k : float or array_like
+        Local scale factor at the given latitude(s).
+
+    Notes
+    -----
+    The scale factor formula for a north-polar stereographic projection
+    is
+
+    .. math::
+
+        k(\phi) = \frac{2 k_0}{1 + \sin \phi},
+
+    where :math:`\phi` is latitude and :math:`k_0` is the reference
+    scale factor. When cartopy is available, this function delegates to
+    :class:`oceanmesh.projections.StereoProjection` so that the scale
+    factors are computed in a CRS-aware manner; otherwise it falls back
+    to the analytic expression above based on a unit sphere.
+
+    The value of :math:`k(\phi)` influences mesh sizing near the poles
+    when generating global meshes with ``stereo=True``.
+
+    References
+    ----------
+    - Snyder, J.P. (1987). *Map Projections - A Working Manual*.
+      USGS Professional Paper 1395.
+    - GitHub PR #87: https://github.com/CHLNDDEV/oceanmesh/pull/87
+    - Seamsh stereographic example:
+      https://git.immc.ucl.ac.be/jlambrechts/seamsh/-/blob/ca380b59fe4d2ea57ffbf08a7b0c70bdf7df1afb/examples/6-stereographics.py#L55
     """
 
     try:
@@ -1064,9 +1146,40 @@ def _stereo_distortion_dist(lat, k0=1.0):
     r"""Return stereographic scale factor in distance units.
 
     This is analogous to :func:`_stereo_distortion` but scaled by
-    ``pi/180`` to convert degrees to radians. When cartopy is
-    available, it reuses :class:`StereoProjection` and otherwise
-    falls back to the legacy implementation.
+    :math:`\pi/180` to convert degrees to radians, making it suitable
+    for distance-based calculations in mesh generation.
+
+    Parameters
+    ----------
+    lat : float or array_like
+        Latitude in degrees.
+    k0 : float, optional
+        Reference scale factor. Default is 1.0.
+
+    Returns
+    -------
+    k_dist : float or array_like
+        Scale factor in distance units (radians per degree).
+
+    Notes
+    -----
+    The formula is
+
+    .. math::
+
+        k_{dist}(\phi) = \frac{2 k_0}{1 + \sin \phi} \cdot \frac{\pi}{180},
+
+    where :math:`\phi` is latitude. When cartopy is available this
+    function reuses :class:`StereoProjection.get_scale_factor` and
+    applies the radian conversion; otherwise it falls back to the
+    analytic expression above.
+
+    This function is used internally to adjust edge lengths based on
+    stereographic distortion.
+
+    See Also
+    --------
+    _stereo_distortion : Scale factor without unit conversion.
     """
 
     try:

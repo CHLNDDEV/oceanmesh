@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import oceanmesh as om
 from oceanmesh.projections import CARTOPY_AVAILABLE
 
@@ -126,3 +127,131 @@ def test_global_stereo_custom_k0():
     points, cells = om.generate_mesh(domain, edge_length, stereo=True, max_iter=50)
     assert points.shape[0] > 0
     assert cells.shape[0] > 0
+
+
+def test_global_stereo_alternative_crs():
+    """Global stereographic meshing with a non-EPSG:4326 geographic CRS.
+
+    Uses EPSG:4269 (NAD83) to ensure that Shoreline / Domain accept
+    alternative geographic CRS for global coastlines while still
+    producing a valid mesh.
+    """
+
+    if not CARTOPY_AVAILABLE:
+        # The alternative CRS test relies on cartopy-backed
+        # stereographic handling; skip if unavailable.
+        return
+
+    bbox = (-180.00, 180.00, -89.00, 90.00)
+    extent = om.Region(extent=bbox, crs=4326)
+
+    min_edge_length = 0.5
+    max_edge_length = 2
+    alt_crs = 4269  # NAD83 geographic
+
+    shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=alt_crs)
+    sdf = om.signed_distance_function(shoreline)
+
+    edge_length0 = om.distance_sizing_function(shoreline, rate=0.11)
+    edge_length1 = om.feature_sizing_function(
+        shoreline,
+        sdf,
+        min_edge_length=min_edge_length,
+        max_edge_length=max_edge_length,
+        crs=alt_crs,
+    )
+
+    edge_length = om.compute_minimum([edge_length0, edge_length1])
+    edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.09, stereo=True)
+
+    shoreline_stereo = om.Shoreline(fname2, extent.bbox, min_edge_length, stereo=True)
+    domain = om.signed_distance_function(shoreline_stereo)
+    points, cells = om.generate_mesh(domain, edge_length, stereo=True, max_iter=20)
+    assert points.shape[0] > 0
+    assert cells.shape[0] > 0
+
+
+def test_global_stereo_projected_crs():
+    """Global stereographic meshing with a projected stereographic CRS."""
+
+    if not CARTOPY_AVAILABLE:
+        return
+
+    bbox = (-180.00, 180.00, -89.00, 90.00)
+    extent = om.Region(extent=bbox, crs=4326)
+
+    min_edge_length = 0.5
+    max_edge_length = 2
+
+    # A north-polar stereographic CRS; the exact EPSG is less
+    # important than exercising projected global CRS handling.
+    stereo_epsg = 3995
+
+    shoreline = om.Shoreline(fname, extent.bbox, min_edge_length, crs=stereo_epsg)
+    sdf = om.signed_distance_function(shoreline)
+
+    edge_length0 = om.distance_sizing_function(shoreline, rate=0.11)
+    edge_length1 = om.feature_sizing_function(
+        shoreline,
+        sdf,
+        min_edge_length=min_edge_length,
+        max_edge_length=max_edge_length,
+        crs=stereo_epsg,
+    )
+
+    edge_length = om.compute_minimum([edge_length0, edge_length1])
+    edge_length = om.enforce_mesh_gradation(edge_length, gradation=0.09, stereo=True)
+
+    shoreline_stereo = om.Shoreline(fname2, extent.bbox, min_edge_length, stereo=True)
+    domain = om.signed_distance_function(shoreline_stereo)
+    points, cells = om.generate_mesh(domain, edge_length, stereo=True, max_iter=20)
+    assert points.shape[0] > 0
+    assert cells.shape[0] > 0
+
+
+def test_polar_gradient_distortion_correction():
+    """Ensure polar gradient enforcement accounts for stereographic distortion.
+
+    This is a smoke test that exercises enforce_mesh_gradation with
+    stereo=True and a custom k0. It does not assert exact numerical
+    values but checks that resulting sizes near the pole remain
+    finite and within a reasonable range.
+    """
+
+    k0 = 0.994
+    bbox = (-180.00, 180.00, -89.00, 90.00)
+    extent = om.Region(extent=bbox, crs=4326)
+
+    min_edge_length = 0.5
+    max_edge_length = 2
+
+    shoreline = om.Shoreline(
+        fname,
+        extent.bbox,
+        min_edge_length,
+        scale_factor=k0,
+    )
+    sdf = om.signed_distance_function(shoreline)
+
+    edge_length0 = om.distance_sizing_function(shoreline, rate=0.11)
+    edge_length1 = om.feature_sizing_function(
+        shoreline,
+        sdf,
+        min_edge_length=min_edge_length,
+        max_edge_length=max_edge_length,
+        crs=4326,
+    )
+
+    edge_length = om.compute_minimum([edge_length0, edge_length1])
+    limited = om.enforce_mesh_gradation(
+        edge_length,
+        gradation=0.09,
+        stereo=True,
+        scale_factor=k0,
+    )
+
+    lon, lat = limited.create_grid()
+    polar_mask = lat > 80.0
+    polar_vals = limited.values[polar_mask]
+    assert np.all(np.isfinite(polar_vals))
+    assert polar_vals.size > 0

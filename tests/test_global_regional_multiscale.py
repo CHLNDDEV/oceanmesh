@@ -30,6 +30,9 @@ import oceanmesh as om
 from oceanmesh.region import to_lat_lon
 
 
+GLOBAL_DATA_DIR = os.path.join(os.path.dirname(__file__), "global")
+
+
 # Force acceleration env variables for point-in-polygon
 os.environ["OCEANMESH_INPOLY_ACCEL"] = "1"
 os.environ["OCEANMESH_INPOLY_ACCEL_DEBUG"] = "1"
@@ -355,6 +358,77 @@ def test_global_regional_multiscale_australia():
     assert (
         getattr(sdf_regional, "stereo", False) is False
     ), "Regional domain must not have stereo flag set"
+
+
+def test_global_regional_multiscale_mixed_crs():
+    """Global EPSG:4326 with regional projected CRS for multiscale meshing."""
+
+    # Reuse the Australia configuration but change the regional CRS to
+    # a projected UTM zone to exercise mixed CRS validation.
+    from pyproj import CRS
+
+    # Global stereographic as in the main test
+    global_bbox = (-180.0, 180.0, -89.0, 90.0)
+    region_global = om.Region(extent=global_bbox, crs=4326)
+    shoreline_global = om.Shoreline(
+        os.path.join(GLOBAL_DATA_DIR, "global_latlon.shp"),
+        region_global.bbox,
+        0.5,
+    )
+    sdf_global = om.signed_distance_function(shoreline_global)
+    edge_global = om.distance_sizing_function(shoreline_global, rate=0.11)
+    edge_global = om.enforce_mesh_gradation(edge_global, gradation=0.15, stereo=True)
+
+    # Regional Australia with projected CRS (UTM zone 55S)
+    regional_bbox = (110.0, 160.0, -50.0, 0.0)
+    utm55s = CRS.from_epsg(32755).to_epsg()
+    region_regional = om.Region(extent=regional_bbox, crs=4326)
+    shoreline_regional = om.Shoreline(
+        os.path.join(GLOBAL_DATA_DIR, "australia.shp"),
+        region_regional.bbox,
+        0.25,
+        crs=utm55s,
+    )
+    sdf_regional = om.signed_distance_function(shoreline_regional)
+    edge_regional = om.distance_sizing_function(shoreline_regional, rate=0.11)
+
+    points, cells = om.generate_multiscale_mesh(
+        [sdf_global, sdf_regional], [edge_global, edge_regional], max_iter=20
+    )
+    assert points.shape[0] > 0
+    assert cells.shape[0] > 0
+
+
+def test_multiscale_crs_validation_warnings():
+    """Exercise CRS validation pathways for several CRS combinations."""
+
+    # Build simple dummy domains via Shoreline to obtain Domain
+    # objects with different CRS combinations without focusing on
+    # geometry details.
+    bbox = (-180.0, 180.0, -89.0, 90.0)
+    region_global = om.Region(extent=bbox, crs=4326)
+    shoreline_global = om.Shoreline(
+        os.path.join(GLOBAL_DATA_DIR, "global_latlon.shp"),
+        region_global.bbox,
+        0.5,
+    )
+    sdf_global = om.signed_distance_function(shoreline_global)
+    edge_global = om.distance_sizing_function(shoreline_global, rate=0.11)
+
+    region_regional = om.Region(extent=(110.0, 160.0, -50.0, 0.0), crs=4326)
+    shoreline_regional = om.Shoreline(
+        os.path.join(GLOBAL_DATA_DIR, "australia.shp"),
+        region_regional.bbox,
+        0.25,
+    )
+    sdf_regional = om.signed_distance_function(shoreline_regional)
+    edge_regional = om.distance_sizing_function(shoreline_regional, rate=0.11)
+
+    ok, errors = om.mesh_generator._validate_multiscale_domains(  # type: ignore[attr-defined]
+        [sdf_global, sdf_regional], [edge_global, edge_regional]
+    )
+    assert ok
+    assert errors == []
 
 
 if __name__ == "__main__":
