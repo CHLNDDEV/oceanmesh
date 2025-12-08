@@ -461,26 +461,23 @@ formulas (less accurate but functional).
 
 **Scale Factor (k0) Configuration**
 
-The stereographic projection uses a **scale factor** :math:`k_0` that
+The stereographic projection uses a **scale factor** `k0` that
 controls distortion at different latitudes. The local scale factor at
-latitude :math:`\phi` is
+latitude `φ` is
 
-.. math::
+`k(φ) = 2 * k0 / (1 + sin φ)`.
 
-    k(\phi) = \frac{2 k_0}{1 + \sin \phi}.
+Common `k0` values:
 
-Common :math:`k_0` values:
-
-- :math:`k_0 = 1.0` (default): standard stereographic with true scale
+- `k0 = 1.0` (default): standard stereographic with true scale
   at the pole.
-- :math:`k_0 = 0.994`: used in EPSG:3413 (Arctic) and EPSG:3031
+- `k0 = 0.994`: used in EPSG:3413 (Arctic) and EPSG:3031
   (Antarctic) to minimise distortion at standard parallels (~70°N/S).
 
-The scale factor affects mesh sizing: smaller :math:`k_0` reduces
-element sizes near the poles, larger :math:`k_0` increases them.
+The scale factor affects mesh sizing: smaller `k0` reduces
+element sizes near the poles, larger `k0` increases them.
 
-References
-~~~~~~~~~~
+#### References
 
 - [GitHub PR #87](https://github.com/CHLNDDEV/oceanmesh/pull/87):
   discussion of scale-factor improvements.
@@ -599,9 +596,6 @@ performance-critical operations:
   take advantage of Shapely prepared geometries or Matplotlib path
   operations when those libraries are available, falling back to a
   portable pure-Python ray-casting algorithm otherwise.
-- **Delaunay triangulation** is provided by a pure-Python
-  Bowyer–Watson implementation with an optional Cython-accelerated
-  kernel, enabled automatically when built.
 
 No special extras or build flags are required to enable these
 optimizations; the fastest available backend is selected at runtime
