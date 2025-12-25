@@ -384,7 +384,7 @@ def test_global_regional_multiscale_mixed_crs():
     utm55s = CRS.from_epsg(32755).to_epsg()
     region_regional = om.Region(extent=regional_bbox, crs=4326)
     shoreline_regional = om.Shoreline(
-        os.path.join(GLOBAL_DATA_DIR, "australia.shp"),
+        os.path.join(GLOBAL_DATA_DIR, "global_latlon.shp"),
         region_regional.bbox,
         0.25,
         crs=utm55s,
@@ -417,7 +417,7 @@ def test_multiscale_crs_validation_warnings():
 
     region_regional = om.Region(extent=(110.0, 160.0, -50.0, 0.0), crs=4326)
     shoreline_regional = om.Shoreline(
-        os.path.join(GLOBAL_DATA_DIR, "australia.shp"),
+        os.path.join(GLOBAL_DATA_DIR, "global_latlon.shp"),
         region_regional.bbox,
         0.25,
     )

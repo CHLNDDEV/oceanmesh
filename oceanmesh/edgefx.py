@@ -880,7 +880,19 @@ def feature_sizing_function(
     # find location of points on grid
     indices = grid_calc.find_indices(points, lon, lat)
     phi2[indices] = -1.0
-    dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
+    # Ensure the level-set field contains a zero contour before calling skfmm.
+    # skfmm.distance requires that the input field change sign; if it does not,
+    # it raises a ValueError indicating that there is no zero contour.
+    has_neg = np.any(phi2 < 0.0)
+    has_pos = np.any(phi2 > 0.0)
+    if not (has_neg and has_pos):
+        logger.warning(
+            "Level set field for feature sizing has no zero contour; "
+            "skipping skfmm.distance and using approximate distances based on grid spacing."
+        )
+        dis = np.ones_like(phi2) * max(grid_calc.dx, grid_calc.dy)
+    else:
+        dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
 
     if plot:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))

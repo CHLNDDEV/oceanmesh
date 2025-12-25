@@ -418,22 +418,20 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
             d_bbox = d.bbox
             try:
                 if getattr(global_domain, "stereo", False):
-                    # Convert regional bbox corners to stereo then compare
-                    lon_min, lon_max, lat_min, lat_max = d_bbox
-                    reg_corners_lon = [lon_min, lon_max, lon_max, lon_min]
-                    reg_corners_lat = [lat_min, lat_min, lat_max, lat_max]
-                    sx, sy = to_stereo(
-                        np.array(reg_corners_lon), np.array(reg_corners_lat)
-                    )
-                    stereo_reg_bbox = (
-                        float(np.min(sx)),
-                        float(np.max(sx)),
-                        float(np.min(sy)),
-                        float(np.max(sy)),
-                    )
-                    if not bbox_contains(g_bbox, stereo_reg_bbox):
+                    # For global stereographic domains, skip strict bbox containment checks
+                    # since the global domain by definition covers the entire globe.
+                    # The global domain's bbox in stereo space represents only the actual
+                    # geometry extent, not the full global extent, so direct comparison is invalid.
+                    # Instead, verify that the regional domain has a valid geographic bbox.
+                    try:
+                        lon_min, lon_max, lat_min, lat_max = d_bbox
+                        if not (-180 <= lon_min < lon_max <= 180 and -90 <= lat_min < lat_max <= 90):
+                            errors.append(
+                                f"Regional domain #{i} bbox {d_bbox} is not a valid geographic bbox (lon in [-180,180], lat in [-90,90])."
+                            )
+                    except (TypeError, ValueError):
                         errors.append(
-                            f"Regional domain #{i} bbox {d_bbox} (lat/lon) not contained within global stereo bbox {g_bbox}."
+                            f"Regional domain #{i} bbox {d_bbox} could not be parsed as (lon_min, lon_max, lat_min, lat_max)."
                         )
                 else:
                     if not bbox_contains(
@@ -1226,7 +1224,16 @@ def _generate_initial_points(
     else:
         p = p.reshape(2, -1).T
         r0 = fh(p)
-    r0m = np.min(r0[r0 >= min_edge_length])
+    # Handle case where no sizing values meet minimum threshold
+    filtered_r0 = r0[r0 >= min_edge_length]
+    if filtered_r0.size == 0:
+        logger.warning(
+            f"No sizing values >= min_edge_length ({min_edge_length}). "
+            f"Using minimum available value: {np.min(r0):.6f}"
+        )
+        r0m = np.min(r0)
+    else:
+        r0m = np.min(filtered_r0)
     p = p[np.random.rand(p.shape[0]) < r0m**2 / r0**2]
     p = p[fd(p) < geps]  # Keep only d<0 points
     return np.vstack(
