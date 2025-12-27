@@ -407,19 +407,77 @@ Areas of finer refinement can be incorporated seamlessly by using `generate_mult
 <!--pytest-codeblocks:skip-->
 
 ```python
-import numpy as np
-import matplotlib.tri as tri
+import logging, sys
+
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+import numpy as np
+
 import oceanmesh as om
 
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=4326)
-extent2 = om.Region(extent=np.array([[-73.95, 40.60], [-73.72, 40.65], [-73.95, 40.60]]), crs=4326)
-s1 = om.Shoreline(fname, extent1.bbox, 0.01)
-s2 = om.Shoreline(fname, extent2.bbox, 4.6e-4)
-sdf1, sdf2 = om.signed_distance_function(s1), om.signed_distance_function(s2)
-el1, el2 = om.distance_sizing_function(s1, max_edge_length=0.05), om.distance_sizing_function(s2)
+EPSG = 4326  # EPSG:4326 or WGS84
+
+# Coarse outer region
+extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length1 = 0.01
+
+# Finer local refinement region defined by a polygon (lon, lat)
+bbox2 = np.array(
+  [
+    [-74.0186, 40.5688],  # left-lower
+    [-73.9366, 40.5362],  # bottom
+    [-73.7269, 40.5626],  # right-lower
+    [-73.7231, 40.6459],  # right-upper
+    [-73.8242, 40.6758],  # top
+    [-73.9481, 40.6028],  # left-upper
+  ],
+  dtype=float,
+)
+extent2 = om.Region(extent=bbox2, crs=EPSG)
+min_edge_length2 = 4.6e-4
+
+s1 = om.Shoreline(fname, extent1.bbox, min_edge_length1)
+sdf1 = om.signed_distance_function(s1)
+el1 = om.distance_sizing_function(s1, max_edge_length=0.05)
+
+s2 = om.Shoreline(fname, extent2.bbox, min_edge_length2)
+sdf2 = om.signed_distance_function(s2)
+el2 = om.distance_sizing_function(s2)
+
 points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2])
+
+# Optional: basic mesh cleanup
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
+points, cells = om.laplacian2(points, cells)
+
+# Optional: quick plot of multiscale mesh and refinement polygon
+triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
+gs = gridspec.GridSpec(2, 2)
+gs.update(wspace=0.5)
+plt.figure()
+
+ax = plt.subplot(gs[0, 0])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+
+ax = plt.subplot(gs[0, 1])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.set_xlim(np.amin(bbox2[:, 0]), np.amax(bbox2[:, 0]))
+ax.set_ylim(np.amin(bbox2[:, 1]), np.amax(bbox2[:, 1]))
+
+ax = plt.subplot(gs[1, :])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+plt.show()
 ```
 
 ![Multiscale](docs/images/multiscale_trimmed.png)
