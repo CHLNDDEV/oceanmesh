@@ -407,19 +407,77 @@ Areas of finer refinement can be incorporated seamlessly by using `generate_mult
 <!--pytest-codeblocks:skip-->
 
 ```python
-import numpy as np
-import matplotlib.tri as tri
+import logging, sys
+
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
+import numpy as np
+
 import oceanmesh as om
 
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
 fname = "gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp"
-extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=4326)
-extent2 = om.Region(extent=np.array([[-73.95, 40.60], [-73.72, 40.65], [-73.95, 40.60]]), crs=4326)
-s1 = om.Shoreline(fname, extent1.bbox, 0.01)
-s2 = om.Shoreline(fname, extent2.bbox, 4.6e-4)
-sdf1, sdf2 = om.signed_distance_function(s1), om.signed_distance_function(s2)
-el1, el2 = om.distance_sizing_function(s1, max_edge_length=0.05), om.distance_sizing_function(s2)
+EPSG = 4326  # EPSG:4326 or WGS84
+
+# Coarse outer region
+extent1 = om.Region(extent=(-75.00, -70.001, 40.0001, 41.9000), crs=EPSG)
+min_edge_length1 = 0.01
+
+# Finer local refinement region defined by a polygon (lon, lat)
+bbox2 = np.array(
+  [
+    [-74.0186, 40.5688],  # left-lower
+    [-73.9366, 40.5362],  # bottom
+    [-73.7269, 40.5626],  # right-lower
+    [-73.7231, 40.6459],  # right-upper
+    [-73.8242, 40.6758],  # top
+    [-73.9481, 40.6028],  # left-upper
+  ],
+  dtype=float,
+)
+extent2 = om.Region(extent=bbox2, crs=EPSG)
+min_edge_length2 = 4.6e-4
+
+s1 = om.Shoreline(fname, extent1.bbox, min_edge_length1)
+sdf1 = om.signed_distance_function(s1)
+el1 = om.distance_sizing_function(s1, max_edge_length=0.05)
+
+s2 = om.Shoreline(fname, extent2.bbox, min_edge_length2)
+sdf2 = om.signed_distance_function(s2)
+el2 = om.distance_sizing_function(s2)
+
 points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2])
+
+# Optional: basic mesh cleanup
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
+points, cells = om.laplacian2(points, cells)
+
+# Optional: quick plot of multiscale mesh and refinement polygon
+triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
+gs = gridspec.GridSpec(2, 2)
+gs.update(wspace=0.5)
+plt.figure()
+
+ax = plt.subplot(gs[0, 0])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+
+ax = plt.subplot(gs[0, 1])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
+ax.set_xlim(np.amin(bbox2[:, 0]), np.amax(bbox2[:, 0]))
+ax.set_ylim(np.amin(bbox2[:, 1]), np.amax(bbox2[:, 1]))
+
+ax = plt.subplot(gs[1, :])
+ax.set_aspect("equal")
+ax.triplot(triang, "-", lw=1)
+plt.show()
 ```
 
 ![Multiscale](docs/images/multiscale_trimmed.png)
@@ -427,6 +485,64 @@ points, cells = om.generate_multiscale_mesh([sdf1, sdf2], [el1, el2])
 ### 6.2 Global and Multiscale Meshing
 
 Global meshes are defined in WGS84 but meshed in a stereographic projection. Regional refinement can be added as additional domains.
+
+#### Understanding Stereographic Projections for Global Meshes
+
+Global ocean meshes require special handling due to the distortion
+inherent in projecting a sphere onto a 2D plane. OceanMesh uses a
+**north-polar stereographic projection** for global meshing, which:
+
+- Preserves angles (conformal projection)
+- Minimises distortion near the poles
+- Allows efficient 2D mesh generation algorithms to work on projected
+  coordinates
+
+**Cartopy Integration (Optional Dependency)**
+
+For accurate stereographic projections, OceanMesh can use
+[cartopy](https://scitools.org.uk/cartopy/docs/latest/)'s
+``NorthPolarStereo`` coordinate reference system. Install cartopy for
+global meshing via the ``global`` extra:
+
+```bash
+pip install oceanmesh[global]
+```
+
+or manually:
+
+```bash
+pip install cartopy
+```
+
+If cartopy is not installed, OceanMesh falls back to legacy analytic
+formulas (less accurate but functional).
+
+**Scale Factor (k0) Configuration**
+
+The stereographic projection uses a **scale factor** `k0` that
+controls distortion at different latitudes. The local scale factor at
+latitude `φ` is
+
+`k(φ) = 2 * k0 / (1 + sin φ)`.
+
+Common `k0` values:
+
+- `k0 = 1.0` (default): standard stereographic with true scale
+  at the pole.
+- `k0 = 0.994`: used in EPSG:3413 (Arctic) and EPSG:3031
+  (Antarctic) to minimise distortion at standard parallels (~70°N/S).
+
+The scale factor affects mesh sizing: smaller `k0` reduces
+element sizes near the poles, larger `k0` increases them.
+
+#### References
+
+- [GitHub PR #87](https://github.com/CHLNDDEV/oceanmesh/pull/87):
+  discussion of scale-factor improvements.
+- [Seamsh stereographic example](https://git.immc.ucl.ac.be/jlambrechts/seamsh/-/blob/ca380b59fe4d2ea57ffbf08a7b0c70bdf7df1afb/examples/6-stereographics.py#L55):
+  similar implementation in seamsh.
+- Snyder, J.P. (1987). *Map Projections - A Working Manual*. USGS
+  Professional Paper 1395.
 
 <!--pytest-codeblocks:skip-->
 
@@ -442,7 +558,17 @@ fname_global_latlon = "tests/global/global_latlon.shp"
 fname_global_stereo = "tests/global/global_stereo.shp"
 
 global_region = om.Region(extent=(-180.0, 180.0, -89.0, 90.0), crs=4326)
-shoreline_global_latlon = om.Shoreline(fname_global_latlon, global_region, 1.0)
+
+# Use k0 = 0.994 for reduced polar distortion (similar to
+# EPSG:3413/3031 in polar stereographic grids).
+k0 = 0.994
+
+shoreline_global_latlon = om.Shoreline(
+  fname_global_latlon,
+  global_region,
+  1.0,
+  scale_factor=k0,
+)
 sdf_global_latlon = om.signed_distance_function(shoreline_global_latlon)
 edge_global = om.enforce_mesh_gradation(
     om.compute_minimum([
@@ -451,6 +577,7 @@ edge_global = om.enforce_mesh_gradation(
     ]),
     gradation=0.15,
     stereo=True,
+    scale_factor=k0,
 )
 
 aus_region = om.Region(extent=(110.0, 160.0, -45.0, -10.0), crs=4326)
@@ -464,7 +591,13 @@ edge_regional = om.enforce_mesh_gradation(
     gradation=0.12,
 )
 
-shoreline_global_stereo = om.Shoreline(fname_global_stereo, global_region, 1.0, stereo=True)
+shoreline_global_stereo = om.Shoreline(
+  fname_global_stereo,
+  global_region,
+  1.0,
+  stereo=True,
+  scale_factor=k0,
+)
 sdf_global_stereo = om.signed_distance_function(shoreline_global_stereo)
 
 points, cells = om.generate_multiscale_mesh(
@@ -485,13 +618,26 @@ points, cells = om.generate_multiscale_mesh(
 # Global mesh generation only (stereographic meshing)
 import oceanmesh as om
 from oceanmesh.region import to_lat_lon
+
 fname = "tests/global/global_latlon.shp"
 fname2 = "tests/global/global_stereo.shp"
 region = om.Region(extent=(-180.00, 180.00, -89.00, 90.00), crs=4326)
-shore = om.Shoreline(fname, region.bbox, 0.5)
+
+# Use k0 = 0.994 to mirror common polar stereographic practice.
+k0 = 0.994
+
+shore = om.Shoreline(fname, region.bbox, 0.5, scale_factor=k0)
 edge = om.distance_sizing_function(shore, rate=0.11)
-domain = om.signed_distance_function(om.Shoreline(fname2, region.bbox, 0.5, stereo=True))
+edge = om.enforce_mesh_gradation(edge, gradation=0.15, stereo=True, scale_factor=k0)
+
+domain = om.signed_distance_function(
+  om.Shoreline(fname2, region.bbox, 0.5, stereo=True, scale_factor=k0)
+)
 points, cells = om.generate_mesh(domain, edge, stereo=True, max_iter=100)
+
+# Points are in stereographic coordinates; convert back to lon/lat for
+# post-processing or export.
+lon, lat = to_lat_lon(points[:, 0], points[:, 1])
 ```
 
 [Back to top](#table-of-contents)
@@ -508,9 +654,6 @@ performance-critical operations:
   take advantage of Shapely prepared geometries or Matplotlib path
   operations when those libraries are available, falling back to a
   portable pure-Python ray-casting algorithm otherwise.
-- **Delaunay triangulation** is provided by a pure-Python
-  Bowyer–Watson implementation with an optional Cython-accelerated
-  kernel, enabled automatically when built.
 
 No special extras or build flags are required to enable these
 optimizations; the fastest available backend is selected at runtime

@@ -126,6 +126,11 @@ from . import _version
 
 __version__ = _version.get_versions()["version"]
 
-from . import _version
+try:  # Optional global-stereo helpers (import may fail generically)
+    from .projections import CARTOPY_AVAILABLE
 
-__version__ = _version.get_versions()["version"]
+    __all__.extend(["StereoProjection", "CARTOPY_AVAILABLE"])
+except ImportError:
+    # Projections module not importable; expose CARTOPY_AVAILABLE flag as False
+    CARTOPY_AVAILABLE = False
+    __all__.append("CARTOPY_AVAILABLE")

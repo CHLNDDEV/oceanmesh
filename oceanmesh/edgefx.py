@@ -88,7 +88,9 @@ def enforce_mesh_size_bounds_elevation(grid, dem, bounds):
     return grid
 
 
-def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
+def enforce_mesh_gradation(
+    grid, gradation=0.15, crs="EPSG:4326", stereo=False, scale_factor=1.0
+):
     """Enforce a mesh size gradation bound `gradation` on a :class:`grid`
 
     Parameters
@@ -124,28 +126,91 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
     tmp = gradient_limit([*sz], elen, gradation, 10000, cell_size)
     tmp = np.reshape(tmp, (sz[0], sz[1]), "F")
     if stereo:
-        logger.info("Global mesh: fixing gradient on the north pole...")
-        # max distortion at the pole: 2 / 180 * PI / (1 - cos(lat))**2
-        dx_stereo = grid.dx * 1 / 180 * np.pi / 2
-        # in stereo projection, all north hemisphere is contained in the unit sphere
-        # we want to fix the gradient close to the north pole,
-        # so we extract all the coordinates between -1 and 1 in stereographic projection
+        from .projections import CARTOPY_AVAILABLE
+        from .region import _get_stereo_projection
+
+        backend = "cartopy" if CARTOPY_AVAILABLE else "hardcoded"
+        logger.info(
+            "Global mesh: fixing gradient on the north pole (backend=%s, k0=%s, distortion_correction=%s)...",
+            backend,
+            scale_factor,
+            "enabled" if CARTOPY_AVAILABLE else "disabled",
+        )
+
+        proj = _get_stereo_projection(scale_factor=scale_factor)
+
+        # Choose a reasonable physical radius (in metres) around the
+        # north pole within which to regularise the gradient. Here we
+        # use ~2000 km.
+        r_max = 2_000_000.0
+
+        # Resolution in stereographic metres, based on underlying lon/lat step.
+        dx_deg = grid.dx
+        dx_stereo = dx_deg * np.pi / 180.0 * 6_371_000.0
 
         us, vs = np.meshgrid(
-            np.arange(-1, 1, dx_stereo), np.arange(-1, 1, dx_stereo), indexing="ij"
+            np.arange(-r_max, r_max, dx_stereo),
+            np.arange(-r_max, r_max, dx_stereo),
+            indexing="ij",
         )
-        ulon, vlat = to_lat_lon(us.ravel(), vs.ravel())
-        utmp = grid.eval((ulon, vlat))
+
+        if proj is not None:
+            ulon, vlat = proj.to_lat_lon(us.ravel(), vs.ravel())
+            # Spatially-varying stereographic scale factor k(phi) on
+            # the intermediate polar grid.
+            k_polar = proj.get_scale_factor(vlat)
+        else:
+            # Fall back to module-level transform if projection could
+            # not be constructed. Normalise metre-based coordinates by
+            # Earth radius so that to_lat_lon operates on the
+            # non-dimensional unit-sphere coordinates expected by the
+            # legacy stereographic formulas used when CARTOPY_AVAILABLE
+            # is False. This keeps the polar patch consistent with
+            # to_stereo/to_lat_lon.
+            R_earth = 6_371_000.0
+            us_unit = us / R_earth
+            vs_unit = vs / R_earth
+            ulon, vlat = to_lat_lon(us_unit.ravel(), vs_unit.ravel())
+            k_polar = None
+
+        # Sample from the already gradient-limited field in geographic
+        # space rather than the original sizing function.
+        tmp_grid = Grid(
+            bbox=grid.bbox,
+            dx=grid.dx,
+            values=tmp,
+            hmin=grid.hmin,
+            extrapolate=grid.extrapolate,
+            crs=crs,
+        )
+        tmp_grid.build_interpolant()
+        utmp = tmp_grid.eval((ulon, vlat))
         utmp = np.reshape(utmp, us.shape)
-        szs = utmp.shape
+
+        # Distortion-aware gradient limiting: operate on mesh sizes
+        # scaled by the local stereographic factor so the limiter
+        # acts in approximately physical space.
+        if k_polar is not None:
+            k_polar_grid = np.reshape(k_polar, utmp.shape)
+            utmp_work = utmp * k_polar_grid
+        else:
+            utmp_work = utmp
+
+        szs = utmp_work.shape
         szs = (szs[0], szs[1], 1)
-        #  we choose an excessively large number for the gradiation = 10
-        # this is merely to fix the north pole gradient
-        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp.flatten("F"))
+        vtmp = gradient_limit(
+            [*szs], dx_stereo, gradation, 10000, utmp_work.flatten("F")
+        )
         vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
-        # construct stereo interpolating function
+
+        # Inverse correction: return to geographic sizing by dividing
+        # out the stereographic distortion.
+        if k_polar is not None:
+            vtmp /= k_polar_grid
+
+        # construct stereo interpolating function in projection metres
         grid_stereo = Grid(
-            bbox=(-1, 1, -1, 1),
+            bbox=(-r_max, r_max, -r_max, r_max),
             dx=dx_stereo,
             values=vtmp,
             hmin=grid.hmin,
@@ -155,7 +220,19 @@ def enforce_mesh_gradation(grid, gradation=0.15, crs="EPSG:4326", stereo=False):
         grid_stereo.build_interpolant()
         # reinject back into the original grid and redo the gradient computation
         xg, yg = grid.create_grid()
-        tmp[yg > 0] = grid_stereo.eval(to_stereo(xg[yg > 0], yg[yg > 0]))
+        north_mask = yg > 0
+        if proj is not None:
+            xs, ys = proj.to_stereo(xg[north_mask], yg[north_mask])
+        else:
+            xs, ys = to_stereo(xg[north_mask], yg[north_mask])
+        # Only overwrite within the intended polar patch (radius r_max)
+        rs = np.sqrt(xs**2 + ys**2)
+        inside = rs <= r_max
+        if np.any(inside):
+            tmp_north = tmp[north_mask]
+            vals_inside = grid_stereo.eval((xs[inside], ys[inside]))
+            tmp_north[inside] = vals_inside
+            tmp[north_mask] = tmp_north
         logger.info(
             "Global mesh: reinject back stereographic gradient and recomputing gradient..."
         )
@@ -824,7 +901,19 @@ def feature_sizing_function(
     # find location of points on grid
     indices = grid_calc.find_indices(points, lon, lat)
     phi2[indices] = -1.0
-    dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
+    # Ensure the level-set field contains a zero contour before calling skfmm.
+    # skfmm.distance requires that the input field change sign; if it does not,
+    # it raises a ValueError indicating that there is no zero contour.
+    has_neg = np.any(phi2 < 0.0)
+    has_pos = np.any(phi2 > 0.0)
+    if not (has_neg and has_pos):
+        logger.warning(
+            "Level set field for feature sizing has no zero contour; "
+            "skipping skfmm.distance and using approximate distances based on grid spacing."
+        )
+        dis = np.ones_like(phi2) * max(grid_calc.dx, grid_calc.dy)
+    else:
+        dis = np.abs(skfmm.distance(phi2, [grid_calc.dx, grid_calc.dy]))
 
     if plot:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 4))

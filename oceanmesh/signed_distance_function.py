@@ -116,13 +116,22 @@ def _plot(geo, filename=None, samples=100000):
 
 
 class Domain:
-    def __init__(self, bbox, func, covering=None, crs=None, stereo=False):
+    def __init__(
+        self,
+        bbox,
+        func,
+        covering=None,
+        crs=None,
+        stereo=False,
+        scale_factor=1.0,
+    ):
         self.bbox = bbox
         self.domain = func
         self.covering = covering
         # Optional projection metadata for validation/rich workflows
         self.crs = crs
         self.stereo = bool(stereo)
+        self.scale_factor = float(scale_factor)
 
     def eval(self, x):
         return self.domain(x)
@@ -150,7 +159,11 @@ class Union(Domain):
         crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
         crs = crs_vals[0] if len(crs_vals) > 0 else None
         stereo = any(getattr(d, "stereo", False) for d in domains)
-        super().__init__(bbox, domains, crs=crs, stereo=stereo)
+        scale_factor_vals = [getattr(d, "scale_factor", 1.0) for d in domains]
+        scale_factor = max(scale_factor_vals) if scale_factor_vals else 1.0
+        super().__init__(
+            bbox, domains, crs=crs, stereo=stereo, scale_factor=scale_factor
+        )
 
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
@@ -163,7 +176,11 @@ class Intersection(Domain):
         crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
         crs = crs_vals[0] if len(crs_vals) > 0 else None
         stereo = any(getattr(d, "stereo", False) for d in domains)
-        super().__init__(bbox, domains, crs=crs, stereo=stereo)
+        scale_factor_vals = [getattr(d, "scale_factor", 1.0) for d in domains]
+        scale_factor = max(scale_factor_vals) if scale_factor_vals else 1.0
+        super().__init__(
+            bbox, domains, crs=crs, stereo=stereo, scale_factor=scale_factor
+        )
 
     def eval(self, x):
         d = [d.eval(x) for d in self.domain]
@@ -176,7 +193,11 @@ class Difference(Domain):
         crs_vals = [d.crs for d in domains if getattr(d, "crs", None) is not None]
         crs = crs_vals[0] if len(crs_vals) > 0 else None
         stereo = any(getattr(d, "stereo", False) for d in domains)
-        super().__init__(bbox, domains, crs=crs, stereo=stereo)
+        scale_factor_vals = [getattr(d, "scale_factor", 1.0) for d in domains]
+        scale_factor = max(scale_factor_vals) if scale_factor_vals else 1.0
+        super().__init__(
+            bbox, domains, crs=crs, stereo=stereo, scale_factor=scale_factor
+        )
 
     def eval(self, x):
         return np.maximum.reduce(
@@ -269,10 +290,19 @@ def signed_distance_function(shoreline, invert=False):
         dist = ((-1) ** (in_boubox)) * d
         return dist
 
-    # Attach CRS and stereo metadata from the shoreline for downstream validation
+    # Attach CRS, stereo, and stereographic scale factor metadata from
+    # the shoreline for downstream validation and projection logic.
     crs = getattr(shoreline, "crs", None)
     stereo = getattr(shoreline, "stereo", False)
-    return Domain(shoreline.bbox, func, covering=func_covering, crs=crs, stereo=stereo)
+    scale_factor = getattr(shoreline, "scale_factor", 1.0)
+    return Domain(
+        shoreline.bbox,
+        func,
+        covering=func_covering,
+        crs=crs,
+        stereo=stereo,
+        scale_factor=scale_factor,
+    )
 
 
 def _create_boubox(bbox):
@@ -318,6 +348,7 @@ def multiscale_signed_distance_function(signed_distance_functions):
                 s.covering,
                 crs=getattr(s, "crs", None),
                 stereo=getattr(s, "stereo", False),
+                scale_factor=getattr(s, "scale_factor", 1.0),
             )
             for s in signed_distance_functions[i + 1 :]
         ]
