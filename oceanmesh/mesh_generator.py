@@ -425,7 +425,10 @@ def _validate_multiscale_domains(domains, edge_lengths):  # noqa: C901
                     # Instead, verify that the regional domain has a valid geographic bbox.
                     try:
                         lon_min, lon_max, lat_min, lat_max = d_bbox
-                        if not (-180 <= lon_min < lon_max <= 180 and -90 <= lat_min < lat_max <= 90):
+                        if not (
+                            -180 <= lon_min < lon_max <= 180
+                            and -90 <= lat_min < lat_max <= 90
+                        ):
                             errors.append(
                                 f"Regional domain #{i} bbox {d_bbox} is not a valid geographic bbox (lon in [-180,180], lat in [-90,90])."
                             )

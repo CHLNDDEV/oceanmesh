@@ -173,7 +173,18 @@ def enforce_mesh_gradation(
             ulon, vlat = to_lat_lon(us_unit.ravel(), vs_unit.ravel())
             k_polar = None
 
-        utmp = grid.eval((ulon, vlat))
+        # Sample from the already gradient-limited field in geographic
+        # space rather than the original sizing function.
+        tmp_grid = Grid(
+            bbox=grid.bbox,
+            dx=grid.dx,
+            values=tmp,
+            hmin=grid.hmin,
+            extrapolate=grid.extrapolate,
+            crs=crs,
+        )
+        tmp_grid.build_interpolant()
+        utmp = tmp_grid.eval((ulon, vlat))
         utmp = np.reshape(utmp, us.shape)
 
         # Distortion-aware gradient limiting: operate on mesh sizes
@@ -187,7 +198,9 @@ def enforce_mesh_gradation(
 
         szs = utmp_work.shape
         szs = (szs[0], szs[1], 1)
-        vtmp = gradient_limit([*szs], dx_stereo, 10, 10000, utmp_work.flatten("F"))
+        vtmp = gradient_limit(
+            [*szs], dx_stereo, gradation, 10000, utmp_work.flatten("F")
+        )
         vtmp = np.reshape(vtmp, (szs[0], szs[1]), "F")
 
         # Inverse correction: return to geographic sizing by dividing
@@ -207,11 +220,19 @@ def enforce_mesh_gradation(
         grid_stereo.build_interpolant()
         # reinject back into the original grid and redo the gradient computation
         xg, yg = grid.create_grid()
+        north_mask = yg > 0
         if proj is not None:
-            xs, ys = proj.to_stereo(xg[yg > 0], yg[yg > 0])
+            xs, ys = proj.to_stereo(xg[north_mask], yg[north_mask])
         else:
-            xs, ys = to_stereo(xg[yg > 0], yg[yg > 0])
-        tmp[yg > 0] = grid_stereo.eval((xs, ys))
+            xs, ys = to_stereo(xg[north_mask], yg[north_mask])
+        # Only overwrite within the intended polar patch (radius r_max)
+        rs = np.sqrt(xs**2 + ys**2)
+        inside = rs <= r_max
+        if np.any(inside):
+            tmp_north = tmp[north_mask]
+            vals_inside = grid_stereo.eval((xs[inside], ys[inside]))
+            tmp_north[inside] = vals_inside
+            tmp[north_mask] = tmp_north
         logger.info(
             "Global mesh: reinject back stereographic gradient and recomputing gradient..."
         )
