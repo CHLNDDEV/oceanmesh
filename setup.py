@@ -61,6 +61,7 @@ def _get_prefix_paths(prefix: str):
 
     return (include_dir if have_include else None), (lib_dir if have_lib else None)
 
+
 if _HAVE_PYBIND11:
     if os.name == "nt":
         # Prefer an explicit prefix when building wheels (e.g., via micromamba/conda).

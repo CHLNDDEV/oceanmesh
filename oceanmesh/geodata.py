@@ -29,6 +29,350 @@ logger = logging.getLogger(__name__)
 __all__ = ["Shoreline", "DEM", "get_polygon_coordinates", "create_circle_coords"]
 
 
+def _bbox_overlaps_bounds(bbox_vals, bounds):
+    xmin, xmax, ymin, ymax = bbox_vals
+    ixmin = max(xmin, bounds.left)
+    ixmax = min(xmax, bounds.right)
+    iymin = max(ymin, bounds.bottom)
+    iymax = min(ymax, bounds.top)
+    return (ixmin < ixmax) and (iymin < iymax)
+
+
+def _transform_bbox_to_src(bbox_vals, src_crs, dst_crs):
+    if src_crs is None or dst_crs is None or src_crs == dst_crs:
+        return bbox_vals
+
+    from pyproj import Transformer
+
+    xmin, xmax, ymin, ymax = bbox_vals
+    transformer = Transformer.from_crs(dst_crs, src_crs, always_xy=True)
+    xs, ys = transformer.transform([xmin, xmax], [ymin, ymax])
+    return (min(xs), max(xs), min(ys), max(ys))
+
+
+def _prepare_region_bbox_and_crs(bbox, crs):
+    region = None
+    region_crs = None
+    region_bbox = None
+
+    if bbox is not None:
+        assert isinstance(bbox, Region), "bbox must be a Region class object"
+        region = bbox
+        region_crs = region.crs
+        region_bbox = region.total_bounds
+        if crs != "EPSG:4326":
+            logger.warning(
+                "DEM: Both a Region object and an explicit 'crs' were provided; the Region's CRS will take precedence (crs=%s).",
+                region_crs,
+            )
+        crs = CRS.from_user_input(region_crs).to_string()
+        bbox = region_bbox
+
+    return bbox, crs, region, region_crs, region_bbox
+
+
+def _pick_netcdf_open_target(dem_path, bbox_vals, crs_str):
+    """Choose a stable rasterio open target for NetCDF inputs.
+
+    GDAL NetCDF subdataset ordering differs across builds/wheels. Prefer a
+    subdataset whose bounds overlap the requested bbox, otherwise choose the
+    largest-area subdataset.
+    """
+
+    if dem_path.suffix.lower() not in {".nc", ".nc4"}:
+        return dem_path
+
+    try:
+        with rasterio.open(dem_path) as container:
+            subdatasets = list(getattr(container, "subdatasets", []) or [])
+    except Exception:
+        return dem_path
+
+    if not subdatasets:
+        return dem_path
+
+    desired_bbox = None
+    desired_crs = None
+    if bbox_vals is not None:
+        desired_bbox = tuple(map(float, bbox_vals))
+        desired_crs = CRS.from_user_input(crs_str)
+
+    best = None
+    best_area = -1.0
+
+    for sd in subdatasets:
+        try:
+            with rasterio.open(sd) as src:
+                if src.width <= 1 or src.height <= 1:
+                    continue
+                b = src.bounds
+                if not np.isfinite([b.left, b.right, b.bottom, b.top]).all():
+                    continue
+
+                area = float((b.right - b.left) * (b.top - b.bottom))
+
+                if desired_bbox is not None and desired_crs is not None:
+                    bbox_in_sd = desired_bbox
+                    if src.crs is not None and src.crs != desired_crs:
+                        try:
+                            bbox_in_sd = _transform_bbox_to_src(
+                                desired_bbox, src.crs, desired_crs
+                            )
+                        except Exception:
+                            bbox_in_sd = None
+
+                    if bbox_in_sd is not None and _bbox_overlaps_bounds(
+                        bbox_in_sd, b
+                    ):
+                        if area > best_area:
+                            best = sd
+                            best_area = area
+                        continue
+
+                if area > best_area:
+                    best = sd
+                    best_area = area
+        except Exception:
+            continue
+
+    return best or dem_path
+
+
+def _xr_open_dataset(path):
+    try:
+        import xarray as xr
+    except Exception:
+        return None
+
+    try:
+        return xr.open_dataset(path)
+    except Exception:
+        return None
+
+
+def _xr_pick_first_raster_data_array(ds):
+    for name, var in ds.data_vars.items():
+        if getattr(var, "ndim", 0) >= 2:
+            return ds[name]
+    return None
+
+
+def _xr_reduce_to_2d(da):
+    while getattr(da, "ndim", 0) > 2:
+        da = da.isel({da.dims[0]: 0})
+    return da
+
+
+def _xr_pick_coord_name(ds, da, candidates):
+    for candidate in candidates:
+        if candidate in da.coords:
+            return candidate
+        if candidate in ds.coords:
+            return candidate
+    return None
+
+
+def _xr_find_overlap_index_range(axis, lo, hi):
+    axis = np.asarray(axis)
+    if axis.size == 0:
+        return None
+
+    if axis[0] <= axis[-1]:
+        idx = np.where((axis >= lo) & (axis <= hi))[0]
+    else:
+        idx = np.where((axis <= hi) & (axis >= lo))[0]
+
+    if idx.size == 0:
+        return None
+    return int(idx.min()), int(idx.max())
+
+
+def _xr_median_spacing(axis):
+    axis = np.asarray(axis, dtype=float)
+    if axis.size <= 1:
+        return np.nan
+    return float(np.nanmedian(np.abs(np.diff(axis))))
+
+
+def _xr_subset_to_outputs(sub, xname, yname):
+    arr = np.asarray(sub.values, dtype=np.float64)
+    if tuple(sub.dims) == (xname, yname):
+        arr = np.transpose(arr, (1, 0))
+
+    topobathy_xy = np.transpose(arr, (1, 0))
+
+    x_sub = np.asarray(sub.coords[xname].values, dtype=float)
+    y_sub = np.asarray(sub.coords[yname].values, dtype=float)
+    dx = _xr_median_spacing(x_sub)
+    dy = _xr_median_spacing(y_sub)
+    if not (np.isfinite(dx) and np.isfinite(dy) and dx > 0 and dy > 0):
+        return None
+
+    bbox_out = (
+        float(np.nanmin(x_sub)),
+        float(np.nanmax(x_sub)),
+        float(np.nanmin(y_sub)),
+        float(np.nanmax(y_sub)),
+    )
+    return bbox_out, dx, dy, topobathy_xy
+
+
+def _try_subset_netcdf_with_xarray(dem_path, bbox_vals, crs_str):
+    """Fallback subsetting for NetCDF when rasterio bounds are unreliable.
+
+    Returns (bbox, dx, dy, topobathy_xy) where topobathy_xy is shaped (nx, ny)
+    like the rasterio code path before the final np.fliplr() in DEM.
+    """
+
+    if dem_path.suffix.lower() not in {".nc", ".nc4"}:
+        return None
+
+    ds = _xr_open_dataset(dem_path)
+    if ds is None:
+        return None
+
+    da = _xr_pick_first_raster_data_array(ds)
+    if da is None:
+        return None
+    da = _xr_reduce_to_2d(da)
+
+    coord_candidates_x = ["x", "lon", "longitude", "Long", "LONGITUDE"]
+    coord_candidates_y = ["y", "lat", "latitude", "Lat", "LATITUDE"]
+
+    xname = _xr_pick_coord_name(ds, da, coord_candidates_x)
+    yname = _xr_pick_coord_name(ds, da, coord_candidates_y)
+    if xname is None or yname is None:
+        return None
+
+    x = np.asarray(da.coords[xname].values)
+    y = np.asarray(da.coords[yname].values)
+    if x.ndim != 1 or y.ndim != 1:
+        return None
+
+    xmin, xmax, ymin, ymax = map(float, bbox_vals)
+
+    x_min, x_max = float(np.nanmin(x)), float(np.nanmax(x))
+    y_min, y_max = float(np.nanmin(y)), float(np.nanmax(y))
+    if not (max(xmin, x_min) < min(xmax, x_max) and max(ymin, y_min) < min(ymax, y_max)):
+        return None
+
+    xrng = _xr_find_overlap_index_range(x, xmin, xmax)
+    yrng = _xr_find_overlap_index_range(y, ymin, ymax)
+    if xrng is None or yrng is None:
+        return None
+
+    x0, x1 = xrng
+    y0, y1 = yrng
+    sub = da.isel({xname: slice(x0, x1 + 1), yname: slice(y0, y1 + 1)})
+    return _xr_subset_to_outputs(sub, xname, yname)
+
+
+def _read_dem_array_and_meta(dem_path, bbox, crs, region_bbox, region_crs):
+    open_target = _pick_netcdf_open_target(dem_path, bbox, crs)
+
+    with rasterio.open(open_target) as src:
+        nodata_value = src.nodata
+        meta = src.meta
+
+        src_crs = src.crs
+        desired_crs = CRS.from_user_input(crs)
+
+        # Entire DEM is read in
+        if bbox is None:
+            bbox_ds = src.bounds  # left, bottom, right, top
+            bbox_out = (bbox_ds.left, bbox_ds.right, bbox_ds.bottom, bbox_ds.top)
+            topobathy = src.read(1)
+            topobathy_xy = np.transpose(topobathy, (1, 0))
+        else:
+            if region_bbox is None:
+                region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
+
+            region_crs_for_transform = (
+                region_crs if region_crs is not None else desired_crs
+            )
+            region_bbox_src = _transform_bbox_to_src(
+                region_bbox, src_crs, region_crs_for_transform
+            )
+
+            ds_bounds = src.bounds  # (left, bottom, right, top)
+            ds_bbox_conv = (
+                ds_bounds.left,
+                ds_bounds.right,
+                ds_bounds.bottom,
+                ds_bounds.top,
+            )
+
+            xmin = max(region_bbox_src[0], ds_bbox_conv[0])
+            xmax = min(region_bbox_src[1], ds_bbox_conv[1])
+            ymin = max(region_bbox_src[2], ds_bbox_conv[2])
+            ymax = min(region_bbox_src[3], ds_bbox_conv[3])
+
+            if not (xmin < xmax and ymin < ymax):
+                if (src_crs is None) or src.transform == Affine.identity:
+                    logger.warning(
+                        "DEM appears un-georeferenced; applying synthetic georeference using provided bbox extents %s.",
+                        region_bbox,
+                    )
+                    topobathy = src.read(1)
+                    ny, nx = topobathy.shape  # rasterio returns (rows, cols)
+                    dx_syn = (region_bbox[1] - region_bbox[0]) / (nx - 1)
+                    dy_syn = (region_bbox[3] - region_bbox[2]) / (ny - 1)
+                    meta["transform"] = Affine(
+                        dx_syn, 0, region_bbox[0], 0, -dy_syn, region_bbox[3]
+                    )
+                    bbox_out = region_bbox
+                    topobathy_xy = np.transpose(topobathy, (1, 0))
+                else:
+                    if dem_path.suffix.lower() in {".nc", ".nc4"}:
+                        fb = _try_subset_netcdf_with_xarray(
+                            dem_path, region_bbox_src, crs
+                        )
+                        if fb is not None:
+                            bbox_out, dx_fb, dy_fb, topobathy_xy = fb
+                            meta["transform"] = Affine(
+                                dx_fb, 0, bbox_out[0], 0, -dy_fb, bbox_out[3]
+                            )
+                        else:
+                            raise ValueError(
+                                "Transformed DEM clipping bbox does not overlap raster bounds. "
+                                f"Region bbox (in raster CRS)={region_bbox_src}, raster bounds={ds_bbox_conv}."
+                            )
+                    else:
+                        raise ValueError(
+                            "Transformed DEM clipping bbox does not overlap raster bounds. "
+                            f"Region bbox (in raster CRS)={region_bbox_src}, raster bounds={ds_bbox_conv}."
+                        )
+            else:
+                bounds_for_window = (xmin, ymin, xmax, ymax)
+                try:
+                    window = from_bounds(*bounds_for_window, transform=src.transform)
+                except Exception as e:
+                    raise RuntimeError(
+                        "Failed to create window for DEM subset. "
+                        f"Bounds={bounds_for_window}, transform={src.transform}."
+                    ) from e
+                topobathy = src.read(1, window=window, masked=True)
+                topobathy_xy = np.transpose(topobathy, (1, 0))
+                bbox_out = (xmin, xmax, ymin, ymax)
+
+        # Warn if user requested output CRS different from raster CRS (no reprojection performed here)
+        if (
+            (src_crs is not None)
+            and (desired_crs is not None)
+            and (src_crs != desired_crs)
+            and not ((src_crs is None) or src.transform == Affine.identity)
+        ):
+            logger.warning(
+                "DEM opened in its native CRS %s but requested CRS %s differs. "
+                "Values are NOT reprojected; proceeding in native CRS.",
+                src_crs,
+                desired_crs,
+            )
+            crs = src_crs.to_string()
+
+    return bbox_out, crs, meta, nodata_value, topobathy_xy
+
+
 def _infer_crs_from_coordinates(bbox):
     """
     Heuristically infer whether a bbox looks like geographic (WGS84) or projected.
@@ -733,7 +1077,7 @@ class Shoreline(Region):
 
         logger.debug("Entering: _read")
 
-        msg = f"Reading in ESRI Shapefile {self.shp}"
+        msg = f"Reading in vector file: {self.shp}"
         logger.info(msg)
 
         # Load once to get native CRS, then transform if necessary
@@ -878,145 +1222,24 @@ class DEM(Grid):
         if isinstance(dem, str):
             dem = Path(dem)
 
-        region = None
-        region_crs = None
-        _region_bbox = None
-        if bbox is not None:
-            assert isinstance(bbox, Region), "bbox must be a Region class object"
-            region = bbox  # Preserve original Region object
-            region_crs = region.crs
-            _region_bbox = region.total_bounds
-            if crs != "EPSG:4326":
-                logger.warning(
-                    "DEM: Both a Region object and an explicit 'crs' were provided; the Region's CRS will take precedence (crs=%s).",
-                    region_crs,
-                )
-            crs = CRS.from_user_input(region_crs).to_string()
-            bbox = _region_bbox  # Replace bbox with plain tuple bounds
+        bbox, crs, _region, region_crs, region_bbox = _prepare_region_bbox_and_crs(
+            bbox, crs
+        )
 
         if dem.exists():
-            msg = f"Reading in {dem}"
-            logger.info(msg)
-            # Open the raster file using rasterio
-            with rasterio.open(dem) as src:
-                nodata_value = src.nodata
-                self.meta = src.meta
+            logger.info(f"Reading in {dem}")
 
-                src_crs = src.crs
-                desired_crs = CRS.from_user_input(crs)
+            bbox, crs, meta, nodata_value, topobathy = _read_dem_array_and_meta(
+                dem,
+                bbox=bbox,
+                crs=crs,
+                region_bbox=region_bbox,
+                region_crs=region_crs,
+            )
+            self.meta = meta
 
-                # Helper: transform (xmin,xmax,ymin,ymax) bbox to src_crs if needed
-                def _transform_bbox_to_src(_bbox_vals, _src_crs, _dst_crs):
-                    if _src_crs is None or _dst_crs is None or _src_crs == _dst_crs:
-                        return _bbox_vals
-                    from pyproj import Transformer
-
-                    xmin, xmax, ymin, ymax = _bbox_vals
-                    transformer = Transformer.from_crs(
-                        _dst_crs, _src_crs, always_xy=True
-                    )
-                    # transform the two diagonal corners then rebuild axis-aligned bbox
-                    xs, ys = transformer.transform([xmin, xmax], [ymin, ymax])
-                    xmin_t, xmax_t = min(xs), max(xs)
-                    ymin_t, ymax_t = min(ys), max(ys)
-                    return (xmin_t, xmax_t, ymin_t, ymax_t)
-
-                # Entire DEM is read in
-                if bbox is None:
-                    bbox_ds = src.bounds  # left, bottom, right, top
-                    bbox = (bbox_ds.left, bbox_ds.right, bbox_ds.bottom, bbox_ds.top)
-                    topobathy = src.read(1)
-                    # Align orientation with windowed-read branch: make array index order (x, y)
-                    # Rasterio returns (rows, cols) = (ny, nx). Transpose to (nx, ny) then flip
-                    # along y-axis later for bottom-left origin grids.
-                    topobathy = np.transpose(topobathy, (1, 0))
-                else:
-                    # Region bbox currently (xmin,xmax,ymin,ymax) already in tuple form
-                    if _region_bbox is None:
-                        _region_bbox = (bbox[0], bbox[1], bbox[2], bbox[3])
-                    # Use previously captured region_crs if available, else fall back to desired_crs
-                    _region_crs_for_transform = (
-                        region_crs if region_crs is not None else desired_crs
-                    )
-                    # Transform to raster CRS if needed
-                    _region_bbox_src = _transform_bbox_to_src(
-                        _region_bbox, src_crs, _region_crs_for_transform
-                    )
-                    # Intersect with raster bounds to avoid WindowError
-                    ds_bounds = src.bounds  # (left, bottom, right, top)
-                    # Convert ds_bounds to (xmin,xmax,ymin,ymax)
-                    ds_bbox_conv = (
-                        ds_bounds.left,
-                        ds_bounds.right,
-                        ds_bounds.bottom,
-                        ds_bounds.top,
-                    )
-                    xmin = max(_region_bbox_src[0], ds_bbox_conv[0])
-                    xmax = min(_region_bbox_src[1], ds_bbox_conv[1])
-                    ymin = max(_region_bbox_src[2], ds_bbox_conv[2])
-                    ymax = min(_region_bbox_src[3], ds_bbox_conv[3])
-                    if not (xmin < xmax and ymin < ymax):
-                        # If raster is NOT georeferenced (identity transform / missing CRS), fallback: read full raster & stretch to requested bbox
-                        if (src_crs is None) or src.transform == Affine.identity:
-                            logger.warning(
-                                "DEM appears un-georeferenced; applying synthetic georeference using provided bbox extents %s.",
-                                _region_bbox,
-                            )
-                            topobathy = src.read(1)
-                            # derive dx, dy from desired bbox & raster shape
-                            _ny, _nx = topobathy.shape  # rasterio returns (rows, cols)
-                            dx_syn = (_region_bbox[1] - _region_bbox[0]) / (_nx - 1)
-                            dy_syn = (_region_bbox[3] - _region_bbox[2]) / (_ny - 1)
-                            # build synthetic affine (note y origin is top in raster, so use ymax and negative dy)
-                            self.meta["transform"] = Affine(
-                                dx_syn, 0, _region_bbox[0], 0, -dy_syn, _region_bbox[3]
-                            )
-                            bbox = _region_bbox  # adopt requested bbox
-                            # skip window clipping logic
-                            # transpose to match later expectations
-                            topobathy = np.transpose(topobathy, (1, 0))
-                        else:
-                            raise ValueError(
-                                "Transformed DEM clipping bbox does not overlap raster bounds. "
-                                f"Region bbox (in raster CRS)={_region_bbox_src}, raster bounds={ds_bbox_conv}."
-                            )
-                    else:
-                        # Prepare bounds in rasterio (left,bottom,right,top)
-                        _bounds_for_window = (xmin, ymin, xmax, ymax)
-                        try:
-                            window = from_bounds(
-                                *_bounds_for_window, transform=src.transform
-                            )
-                        except Exception as e:
-                            raise RuntimeError(
-                                "Failed to create window for DEM subset. "
-                                f"Bounds={_bounds_for_window}, transform={src.transform}."
-                            ) from e
-                        topobathy = src.read(1, window=window, masked=True)
-                        topobathy = np.transpose(topobathy, (1, 0))
-                        # Update bbox to (xmin,xmax,ymin,ymax) in raster CRS for Grid
-                        bbox = (xmin, xmax, ymin, ymax)
-
-                # Warn if user requested output CRS different from raster CRS (no reprojection performed here)
-                if (
-                    (src_crs is not None)
-                    and (desired_crs is not None)
-                    and (src_crs != desired_crs)
-                    and not ((src_crs is None) or src.transform == Affine.identity)
-                ):
-                    logger.warning(
-                        "DEM opened in its native CRS %s but requested CRS %s differs. "
-                        "Values are NOT reprojected; proceeding in native CRS.",
-                        src_crs,
-                        desired_crs,
-                    )
-                    # overwrite desired_crs to keep internal consistency
-                    crs = src_crs.to_string()
-            # Ensure its a floating point array
             topobathy = topobathy.astype(np.float64)
-            topobathy[topobathy == nodata_value] = (
-                np.nan
-            )  # set the no-data value to nan
+            topobathy[topobathy == nodata_value] = np.nan
         elif not dem.exists():
             raise FileNotFoundError(f"File {dem} could not be located.")
 

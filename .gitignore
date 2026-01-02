@@ -17,4 +17,4 @@ build/
 tests/*.txt
 *.zip
 tests/gshhg-shp-2.3.7/
-
+.gitignore
