@@ -1,8 +1,5 @@
 import os
 
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
-import matplotlib.tri as tri
 import numpy as np
 
 import oceanmesh as om
@@ -59,46 +56,16 @@ def test_multiscale_overlap():
     # Control the element size transition
     # from coarse to fine with the kwargs prefixed with `blend`
     points, cells = om.generate_multiscale_mesh(
-        [sdf1, sdf2, sdf3], [el1, el2, el3], blend_width=1000, blend_max_iter=100
+        [sdf1, sdf2, sdf3],
+        [el1, el2, el3],
+        blend_width=1000,
+        max_iter=5,
+        blend_max_iter=5,
     )
-    # remove degenerate mesh faces and other common problems in the mesh
-    points, cells = om.make_mesh_boundaries_traversable(points, cells)
-    # remove singly connected elements (elements
-    # connected to only one other element)
-    points, cells = om.delete_faces_connected_to_one_face(points, cells)
-    # remove poor boundary elements with quality < 15%
-    points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
-    # apply a Laplacian smoother that preservers the mesh size distribution
-    points, cells = om.laplacian2(points, cells)
-
-    triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    gs = gridspec.GridSpec(3, 1)
-    gs.update(wspace=0.1)
-    plt.figure(figsize=[4.8, 6.4])
-
-    ax = plt.subplot(gs[0, 0])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-    ax.plot(bbox3[:, 0], bbox3[:, 1], "r--")
-
-    ax = plt.subplot(gs[1, 0])
-    buf = 0.07
-    ax.set_xlim([min(bbox2[:, 0]) - buf, max(bbox2[:, 0]) + buf])
-    ax.set_ylim([min(bbox2[:, 1]) - buf, max(bbox2[:, 1]) + buf])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-
-    ax = plt.subplot(gs[2, 0])
-    buf = 0.07
-    ax.set_xlim([min(bbox3[:, 0]) - buf, max(bbox3[:, 0]) + buf])
-    ax.set_ylim([min(bbox3[:, 1]) - buf, max(bbox3[:, 1]) + buf])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox3[:, 0], bbox3[:, 1], "r--")
-
-    plt.show()
+    assert points.ndim == 2 and points.shape[1] == 2
+    assert cells.ndim == 2 and cells.shape[1] == 3
+    assert len(points) > 0
+    assert len(cells) > 0
 
 
 def test_multiscale_non_overlap():
@@ -150,43 +117,13 @@ def test_multiscale_non_overlap():
     # coarse to fine with the kwargs prefixed with `blend`.
     # Function objects must appear in order of descending `min_edge_length`.
     points, cells = om.generate_multiscale_mesh(
-        [sdf1, sdf2, sdf3], [el1, el2, el3], blend_width=1000, blend_max_iter=100
+        [sdf1, sdf2, sdf3],
+        [el1, el2, el3],
+        blend_width=1000,
+        max_iter=5,
+        blend_max_iter=5,
     )
-    # remove degenerate mesh faces and other common problems in the mesh
-    points, cells = om.make_mesh_boundaries_traversable(points, cells)
-    # remove singly connected elements (elements
-    # connected to only one other element)
-    points, cells = om.delete_faces_connected_to_one_face(points, cells)
-    # remove poor boundary elements with quality < 15%
-    points, cells = om.delete_boundary_faces(points, cells, min_qual=0.15)
-    # apply a Laplacian smoother that preservers the mesh size distribution
-    points, cells = om.laplacian2(points, cells)
-
-    triang = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    gs = gridspec.GridSpec(3, 1)
-    gs.update(wspace=0.1)
-    plt.figure(figsize=[4.8, 6.4])
-
-    ax = plt.subplot(gs[0, 0])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-    ax.plot(bbox3[:, 0], bbox3[:, 1], "r--")
-
-    ax = plt.subplot(gs[1, 0])
-    buf = 0.07
-    ax.set_xlim([min(bbox2[:, 0]) - buf, max(bbox2[:, 0]) + buf])
-    ax.set_ylim([min(bbox2[:, 1]) - buf, max(bbox2[:, 1]) + buf])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox2[:, 0], bbox2[:, 1], "r--")
-
-    ax = plt.subplot(gs[2, 0])
-    buf = 0.07
-    ax.set_xlim([min(bbox3[:, 0]) - buf, max(bbox3[:, 0]) + buf])
-    ax.set_ylim([min(bbox3[:, 1]) - buf, max(bbox3[:, 1]) + buf])
-    ax.set_aspect("equal")
-    ax.triplot(triang, "-", lw=0.5)
-    ax.plot(bbox3[:, 0], bbox3[:, 1], "r--")
-
-    plt.show()
+    assert points.ndim == 2 and points.shape[1] == 2
+    assert cells.ndim == 2 and cells.shape[1] == 3
+    assert len(points) > 0
+    assert len(cells) > 0

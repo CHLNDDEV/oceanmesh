@@ -11,3 +11,17 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 target-version = ['py310']
+
+[tool.cibuildwheel]
+# Build wheels for CPython 3.10–3.12 (can expand once deps support newer Pythons)
+build = "cp310-* cp311-* cp312-*"
+skip = "pp* *-musllinux_*"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+
+[tool.cibuildwheel.macos]
+archs = ["arm64", "x86_64"]
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
