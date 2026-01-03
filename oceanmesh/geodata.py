@@ -121,9 +121,7 @@ def _pick_netcdf_open_target(dem_path, bbox_vals, crs_str):
                         except Exception:
                             bbox_in_sd = None
 
-                    if bbox_in_sd is not None and _bbox_overlaps_bounds(
-                        bbox_in_sd, b
-                    ):
+                    if bbox_in_sd is not None and _bbox_overlaps_bounds(bbox_in_sd, b):
                         if area > best_area:
                             best = sd
                             best_area = area
@@ -253,7 +251,9 @@ def _try_subset_netcdf_with_xarray(dem_path, bbox_vals, crs_str):
 
     x_min, x_max = float(np.nanmin(x)), float(np.nanmax(x))
     y_min, y_max = float(np.nanmin(y)), float(np.nanmax(y))
-    if not (max(xmin, x_min) < min(xmax, x_max) and max(ymin, y_min) < min(ymax, y_max)):
+    if not (
+        max(xmin, x_min) < min(xmax, x_max) and max(ymin, y_min) < min(ymax, y_max)
+    ):
         return None
 
     xrng = _xr_find_overlap_index_range(x, xmin, xmax)
