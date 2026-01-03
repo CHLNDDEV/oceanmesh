@@ -10,6 +10,46 @@ on:
       - "test-v*"
 
 jobs:
+  tox_tests:
+    name: Tox tests (ubuntu, py${{ matrix.py }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - py: "310"
+            python-version: "3.10"
+            toxenv: "py310"
+          - py: "311"
+            python-version: "3.11"
+            toxenv: "py311"
+          - py: "312"
+            python-version: "3.12"
+            toxenv: "py312"
+          - py: "313"
+            python-version: "3.13"
+            toxenv: "py313"
+
+    steps:
+      - uses: actions/checkout@v4
+        env:
+          OCEANMESH_REQUIRE_INPOLY_ACCEL: "1"
+          OCEANMESH_INPOLY_ACCEL_DEBUG: "1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install tox
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install tox
+
+      - name: Run tests
+        run: |
+          tox -e ${{ matrix.toxenv }} -- -q
+
   build_wheels:
     name: Build wheels (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
