@@ -16,6 +16,8 @@ jobs:
     env:
       OCEANMESH_REQUIRE_INPOLY_ACCEL: "1"
       OCEANMESH_INPOLY_ACCEL_DEBUG: "1"
+      OCEANMESH_INPOLY_ACCEL: "1"
+      OCEANMESH_INPOLY_METHOD: ""
     strategy:
       fail-fast: false
       matrix:
