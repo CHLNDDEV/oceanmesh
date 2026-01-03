@@ -81,17 +81,20 @@ jobs:
         env:
           # Use a local prefix so setup.py can find include/lib without relying on system installs.
           # cibuildwheel will run these on the build machine (and inside manylinux containers on Linux).
-          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:2025.04.19-1
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:2025.04.19-1
           CIBW_ENVIRONMENT: "OCEANMESH_PREFIX=/opt/om"
           CIBW_ENVIRONMENT_MACOS: "OCEANMESH_PREFIX=$HOME/om"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel -v show {wheel} && auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_ENVIRONMENT_LINUX: "OCEANMESH_PREFIX=/opt/om CPATH=/opt/om/include:/opt/omhdr/include LIBRARY_PATH=/opt/om/lib LD_LIBRARY_PATH=/opt/om/lib CMAKE_PREFIX_PATH=/opt/om"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
           CIBW_BEFORE_ALL_LINUX: |
             set -eux
             curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest -o micromamba.tar.bz2
             tar -xjf micromamba.tar.bz2 bin/micromamba
             mv bin/micromamba /usr/local/bin/micromamba
-            micromamba create -y -p /opt/om -c conda-forge \
-              cgal boost-cpp gmp mpfr eigen
+            bash tools/build_deps_linux.sh /opt/om
+            # Keep micromamba for headers-only deps (CGAL/Boost/Eigen). Do NOT use conda-provided GMP/MPFR on Linux.
+            micromamba create -y -p /opt/omhdr -c conda-forge \
+              cgal boost-cpp eigen
           CIBW_BEFORE_ALL_MACOS: |
             set -eux
             micromamba create -y -p "$HOME/om" -c conda-forge \
@@ -104,6 +107,19 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: "python -m pip install delvewheel && delvewheel repair -w {dest_dir} {wheel}"
         run: |
           python -m cibuildwheel --output-dir dist
+
+      - name: Verify Linux wheel is manylinux-compatible
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        env:
+          MAX_GLIBC: "2.28"
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install auditwheel==6.*
+          sudo apt-get update
+          sudo apt-get install -y patchelf
+          python tools/verify_manylinux_wheels.py dist --max-glibc "${MAX_GLIBC}"
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
