@@ -82,6 +82,7 @@ jobs:
           # Use a local prefix so setup.py can find include/lib without relying on system installs.
           # cibuildwheel will run these on the build machine (and inside manylinux containers on Linux).
           CIBW_ENVIRONMENT: "OCEANMESH_PREFIX=/opt/om"
+          CIBW_ENVIRONMENT_MACOS: "OCEANMESH_PREFIX=$HOME/om"
           CIBW_BEFORE_ALL_LINUX: |
             set -eux
             curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest -o micromamba.tar.bz2
@@ -91,7 +92,7 @@ jobs:
               cgal boost-cpp gmp mpfr eigen
           CIBW_BEFORE_ALL_MACOS: |
             set -eux
-            micromamba create -y -p /opt/om -c conda-forge \
+            micromamba create -y -p "$HOME/om" -c conda-forge \
               cgal boost-cpp gmp mpfr eigen
           CIBW_BEFORE_ALL_WINDOWS: |
             micromamba create -y -p C:\\om -c conda-forge cgal boost-cpp gmp mpfr eigen
