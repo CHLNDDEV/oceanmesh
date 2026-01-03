@@ -13,6 +13,9 @@ jobs:
   tox_tests:
     name: Tox tests (ubuntu, py${{ matrix.py }})
     runs-on: ubuntu-latest
+    env:
+      OCEANMESH_REQUIRE_INPOLY_ACCEL: "1"
+      OCEANMESH_INPOLY_ACCEL_DEBUG: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -32,9 +35,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        env:
-          OCEANMESH_REQUIRE_INPOLY_ACCEL: "1"
-          OCEANMESH_INPOLY_ACCEL_DEBUG: "1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests
         run: |
-          tox -e ${{ matrix.toxenv }} -- -q
+          tox -e "${{ matrix.toxenv }}" -- -q
 
   build_wheels:
     name: Build wheels (${{ matrix.os }})
