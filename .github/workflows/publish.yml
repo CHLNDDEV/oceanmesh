@@ -55,7 +55,18 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          curl -Ls https://micro.mamba.pm/api/micromamba/$(uname)/$(uname -m)/latest | tar -xvj bin/micromamba
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            if [ "$(uname -m)" = "arm64" ]; then
+              MAMBA_PLATFORM="osx-arm64"
+            else
+              MAMBA_PLATFORM="osx-64"
+            fi
+          else
+            MAMBA_PLATFORM="linux-64"
+          fi
+
+          curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" -o micromamba.tar.bz2
+          tar -xjf micromamba.tar.bz2 bin/micromamba
           sudo mv bin/micromamba /usr/local/bin/micromamba
 
       - name: Install micromamba (Windows)
@@ -73,7 +84,8 @@ jobs:
           CIBW_ENVIRONMENT: "OCEANMESH_PREFIX=/opt/om"
           CIBW_BEFORE_ALL_LINUX: |
             set -eux
-            curl -Ls https://micro.mamba.pm/api/micromamba/Linux/x86_64/latest | tar -xvj bin/micromamba
+            curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest -o micromamba.tar.bz2
+            tar -xjf micromamba.tar.bz2 bin/micromamba
             mv bin/micromamba /usr/local/bin/micromamba
             micromamba create -y -p /opt/om -c conda-forge \
               cgal boost-cpp gmp mpfr eigen
