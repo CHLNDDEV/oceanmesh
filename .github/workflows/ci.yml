@@ -55,9 +55,34 @@ jobs:
             openmpi-bin \
             libhdf5-dev
 
-      - name: Install tox
+      - name: Install Python build dependencies
         run: |
           python -m pip install --upgrade pip
+          python -m pip install Cython numpy
+
+      - name: Verify Cython inpoly kernel is available
+        env:
+          OCEANMESH_INPOLY_ACCEL: "1"
+        run: |
+          python -m pip install -e .
+          python - << 'PY'
+          import os, importlib
+          from oceanmesh.geometry import point_in_polygon as pip
+
+          os.environ.pop("OCEANMESH_INPOLY_METHOD", None)
+          os.environ["OCEANMESH_INPOLY_ACCEL"] = "1"
+          pip = importlib.reload(pip)
+
+          if not getattr(pip, "_COMPILED_KERNEL_AVAILABLE", False):
+              raise SystemExit("Cython inpoly2 kernel not available in CI environment")
+
+          print("_COMPILED_KERNEL_AVAILABLE =", pip._COMPILED_KERNEL_AVAILABLE)
+          from oceanmesh.geometry.point_in_polygon_ import inpoly2_fast
+          print("inpoly2_fast:", inpoly2_fast)
+          PY
+
+      - name: Install tox
+        run: |
           python -m pip install tox
 
       - name: Run tests
