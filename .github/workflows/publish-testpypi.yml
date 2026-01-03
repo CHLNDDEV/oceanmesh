@@ -61,6 +61,7 @@ jobs:
         env:
           # Use a local prefix so setup.py can find include/lib without relying on system installs.
           # cibuildwheel will run these on the build machine (and inside manylinux containers on Linux).
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:2025.04.19-1
           CIBW_ENVIRONMENT: "OCEANMESH_PREFIX=/opt/om"
           CIBW_ENVIRONMENT_MACOS: "OCEANMESH_PREFIX=$HOME/om"
           CIBW_BEFORE_ALL_LINUX: |
