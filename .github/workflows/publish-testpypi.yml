@@ -1,0 +1,202 @@
+name: publish-testpypi
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "test-v*"
+
+jobs:
+  build_wheels:
+    name: Build wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==2.*
+
+      # Build dependencies (CGAL headers + GMP/MPFR libs) into a local prefix via micromamba.
+      # The wheel build will link against these, and repair tools will bundle the runtime libs.
+      - name: Install micromamba (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            if [ "$(uname -m)" = "arm64" ]; then
+              MAMBA_PLATFORM="osx-arm64"
+            else
+              MAMBA_PLATFORM="osx-64"
+            fi
+          else
+            MAMBA_PLATFORM="linux-64"
+          fi
+
+          curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" -o micromamba.tar.bz2
+          tar -xjf micromamba.tar.bz2 bin/micromamba
+          sudo mv bin/micromamba /usr/local/bin/micromamba
+
+      - name: Install micromamba (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://micro.mamba.pm/api/micromamba/win-64/latest" -OutFile micromamba.tar.bz2
+          tar -xjf micromamba.tar.bz2
+          echo "${PWD}\\Library\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build wheels
+        env:
+          # Use a local prefix so setup.py can find include/lib without relying on system installs.
+          # cibuildwheel will run these on the build machine (and inside manylinux containers on Linux).
+          CIBW_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_34_x86_64:2025.04.19-1
+          CIBW_ENVIRONMENT: "OCEANMESH_PREFIX=/opt/om"
+          CIBW_ENVIRONMENT_MACOS: "OCEANMESH_PREFIX=$HOME/om"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel -v show {wheel} && auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_BEFORE_ALL_LINUX: |
+            set -eux
+            curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest -o micromamba.tar.bz2
+            tar -xjf micromamba.tar.bz2 bin/micromamba
+            mv bin/micromamba /usr/local/bin/micromamba
+            micromamba create -y -p /opt/om -c conda-forge \
+              cgal boost-cpp gmp mpfr eigen
+          CIBW_BEFORE_ALL_MACOS: |
+            set -eux
+            micromamba create -y -p "$HOME/om" -c conda-forge \
+              cgal boost-cpp gmp mpfr eigen
+          CIBW_BEFORE_ALL_WINDOWS: |
+            micromamba create -y -p C:\\om -c conda-forge cgal boost-cpp gmp mpfr eigen
+          CIBW_ENVIRONMENT_WINDOWS: "OCEANMESH_PREFIX=C:\\om"
+          # Repair wheels to bundle shared libs.
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "python -m pip install delocate && delocate-wheel -w {dest_dir} -v {wheel}"
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: "python -m pip install delvewheel && delvewheel repair -w {dest_dir} {wheel}"
+        run: |
+          python -m cibuildwheel --output-dir dist
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*.whl
+
+  smoke_test:
+    name: Smoke test install (${{ matrix.os }})
+    needs: [build_wheels]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist
+
+      - name: Install wheel into fresh venv and import
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m venv .venv
+          if [ -f .venv/bin/activate ]; then
+            source .venv/bin/activate
+          else
+            source .venv/Scripts/activate
+          fi
+
+          python -m pip install --upgrade pip packaging
+
+          python - <<'PY'
+          import glob
+          import os
+          import sys
+          import subprocess
+
+          from packaging import tags
+          from packaging.utils import parse_wheel_filename
+
+          wheels = sorted(glob.glob(os.path.join("dist", "*.whl")))
+          if not wheels:
+            raise SystemExit("No wheels found in dist/")
+
+          supported = set(tags.sys_tags())
+
+          def is_compatible(wheel_path: str) -> bool:
+            _, _, _, wheel_tags = parse_wheel_filename(os.path.basename(wheel_path))
+            return any(t in supported for t in wheel_tags)
+
+          selected = next((w for w in wheels if is_compatible(w)), None)
+          if not selected:
+            raise SystemExit(f"No compatible wheel found. Found wheels: {wheels}")
+
+          print(f"Selected wheel: {selected}")
+          subprocess.check_call([sys.executable, "-m", "pip", "install", selected])
+          PY
+
+          python -c "import oceanmesh; print(oceanmesh.__version__)"
+          python -c "import oceanmesh; oceanmesh.Region((0, 1, 0, 1), 'EPSG:4326'); print('ok')"
+
+  build_sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build --sdist
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish_testpypi:
+    name: Publish to TestPyPI
+    needs: [build_wheels, build_sdist, smoke_test]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten dist directory
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p upload
+          find dist -type f \( -name "*.whl" -o -name "*.tar.gz" \) -maxdepth 3 -print -exec cp {} upload/ \;
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: upload
+          skip-existing: true

@@ -2,11 +2,28 @@ import os
 import sys
 import configparser
 
-import numpy as np
-from pybind11.setup_helpers import Pybind11Extension, build_ext as pybind_build_ext
+try:
+    import numpy as np
+
+    _HAVE_NUMPY = True
+except ModuleNotFoundError:  # pragma: no cover
+    np = None
+    _HAVE_NUMPY = False
 from setuptools import Extension, setup  # , find_packages
 
 import versioneer
+
+try:
+    from pybind11.setup_helpers import (  # pyright: ignore[reportMissingImports]
+        Pybind11Extension,
+        build_ext as pybind_build_ext,
+    )
+
+    _HAVE_PYBIND11 = True
+except ModuleNotFoundError:  # pragma: no cover
+    Pybind11Extension = None
+    pybind_build_ext = None
+    _HAVE_PYBIND11 = False
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -28,43 +45,92 @@ files = [
     "oceanmesh/cpp/fast_geometry.cpp",
 ]
 
-if os.name == "nt":
-    home = os.environ["USERPROFILE"].replace("\\", "/")
-    vcpkg = f"{home}/OceanMesh/vcpkg/installed/x64-windows"
-    ext_modules = [
-        Pybind11Extension(
-            loc,
-            [fi],
-            include_dirs=[f"{vcpkg}/include"],
-            extra_link_args=[f"/LIBPATH:{vcpkg}/lib"],
-            libraries=["gmp", "mpfr"],
-        )
-        for fi, loc in zip(files, is_called)
-    ]
-else:
-    # no CGAL libraries necessary from CGAL 5.0 onwards
-    # Ensure linker can find conda-provided lib paths on macOS/Linux
-    conda_prefix = os.environ.get("CONDA_PREFIX", sys.prefix)
-    conda_lib = os.path.join(conda_prefix, "lib")
-    have_libdir = os.path.isdir(conda_lib)
 
-    extra_link_args = []
-    library_dirs = []
-    if have_libdir:
-        library_dirs = [conda_lib]
-        # Help the linker locate shared libs at build and at runtime
-        extra_link_args = [f"-L{conda_lib}", f"-Wl,-rpath,{conda_lib}"]
+ext_modules = []
 
-    ext_modules = [
-        Pybind11Extension(
-            loc,
-            [fi],
-            libraries=["gmp", "mpfr"],
-            library_dirs=library_dirs,
-            extra_link_args=extra_link_args,
-        )
-        for fi, loc in zip(files, is_called)
-    ]
+
+def _get_prefix_paths(prefix: str):
+    if not prefix:
+        return None, None
+
+    include_dir = os.path.join(prefix, "include")
+    lib_dir = os.path.join(prefix, "lib")
+
+    have_include = os.path.isdir(include_dir)
+    have_lib = os.path.isdir(lib_dir)
+
+    return (include_dir if have_include else None), (lib_dir if have_lib else None)
+
+
+if _HAVE_PYBIND11:
+    if os.name == "nt":
+        # Prefer an explicit prefix when building wheels (e.g., via micromamba/conda).
+        # This avoids hard-coding a developer-specific vcpkg location.
+        prefix = os.environ.get("OCEANMESH_PREFIX") or os.environ.get("CONDA_PREFIX")
+        include_dir, lib_dir = _get_prefix_paths(prefix)
+
+        if include_dir and lib_dir:
+            ext_modules = [
+                Pybind11Extension(
+                    loc,
+                    [fi],
+                    include_dirs=[include_dir],
+                    library_dirs=[lib_dir],
+                    extra_link_args=[f"/LIBPATH:{lib_dir}"],
+                    libraries=["gmp", "mpfr"],
+                )
+                for fi, loc in zip(files, is_called)
+            ]
+        else:
+            home = os.environ.get("USERPROFILE", "").replace("\\", "/")
+            vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get(
+                "VCPKG_INSTALLATION_ROOT"
+            )
+            if vcpkg_root:
+                vcpkg_root = vcpkg_root.replace("\\", "/")
+                vcpkg = f"{vcpkg_root}/installed/x64-windows"
+            else:
+                vcpkg = f"{home}/OceanMesh/vcpkg/installed/x64-windows"
+
+            ext_modules = [
+                Pybind11Extension(
+                    loc,
+                    [fi],
+                    include_dirs=[f"{vcpkg}/include"],
+                    extra_link_args=[f"/LIBPATH:{vcpkg}/lib"],
+                    libraries=["gmp", "mpfr"],
+                )
+                for fi, loc in zip(files, is_called)
+            ]
+    else:
+        # no CGAL libraries necessary from CGAL 5.0 onwards
+        # Ensure compiler/linker can find dependency headers and libs when building
+        # wheels (CI) without requiring system-wide installs.
+        prefix = os.environ.get("OCEANMESH_PREFIX") or os.environ.get("CONDA_PREFIX")
+        include_dir, lib_dir = _get_prefix_paths(prefix)
+
+        include_dirs = []
+        library_dirs = []
+        extra_link_args = []
+
+        if include_dir:
+            include_dirs.append(include_dir)
+
+        if lib_dir:
+            library_dirs.append(lib_dir)
+            extra_link_args.extend([f"-L{lib_dir}", f"-Wl,-rpath,{lib_dir}"])
+
+        ext_modules = [
+            Pybind11Extension(
+                loc,
+                [fi],
+                include_dirs=include_dirs,
+                libraries=["gmp", "mpfr"],
+                library_dirs=library_dirs,
+                extra_link_args=extra_link_args,
+            )
+            for fi, loc in zip(files, is_called)
+        ]
 
 
 def maybe_add_cython_extensions():
@@ -75,6 +141,9 @@ def maybe_add_cython_extensions():
     an sdist) to decide whether to add the extension. If neither is present
     the build proceeds without the accelerated kernel.
     """
+
+    if not _HAVE_NUMPY:
+        return []
 
     from pathlib import Path
 
@@ -107,7 +176,21 @@ def maybe_add_cython_extensions():
 
 
 cmdclass = versioneer.get_cmdclass()
-cmdclass.update({"build_ext": pybind_build_ext})
+
+if _HAVE_PYBIND11:
+    cmdclass.update({"build_ext": pybind_build_ext})
+else:
+    from setuptools.command.build_ext import build_ext as _setuptools_build_ext
+
+    class build_ext(_setuptools_build_ext):
+        def run(self):
+            raise ModuleNotFoundError(
+                "pybind11 is required to build oceanmesh C++ extensions. "
+                "Install it (e.g. `python -m pip install pybind11`) or build via PEP 517 "
+                "so build dependencies are installed automatically."
+            )
+
+    cmdclass.update({"build_ext": build_ext})
 
 
 def get_requirements():

@@ -1,0 +1,144 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  guard_tag_on_default_branch:
+    name: "Guard: tag commit on default branch"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag commit is reachable from default branch
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euxo pipefail
+          echo "Default branch: ${DEFAULT_BRANCH}"
+          git fetch origin "${DEFAULT_BRANCH}" --tags
+          git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${DEFAULT_BRANCH}"
+
+  build_wheels:
+    name: Build wheels (${{ matrix.os }})
+    needs: [guard_tag_on_default_branch]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==2.*
+
+      # Build dependencies (CGAL headers + GMP/MPFR libs) into a local prefix via micromamba.
+      # The wheel build will link against these, and repair tools will bundle the runtime libs.
+      - name: Install micromamba (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            if [ "$(uname -m)" = "arm64" ]; then
+              MAMBA_PLATFORM="osx-arm64"
+            else
+              MAMBA_PLATFORM="osx-64"
+            fi
+          else
+            MAMBA_PLATFORM="linux-64"
+          fi
+
+          curl -Ls "https://micro.mamba.pm/api/micromamba/${MAMBA_PLATFORM}/latest" -o micromamba.tar.bz2
+          tar -xjf micromamba.tar.bz2 bin/micromamba
+          sudo mv bin/micromamba /usr/local/bin/micromamba
+
+      - name: Install micromamba (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://micro.mamba.pm/api/micromamba/win-64/latest" -OutFile micromamba.tar.bz2
+          tar -xjf micromamba.tar.bz2
+          echo "${PWD}\\Library\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build wheels
+        env:
+          # Use a local prefix so setup.py can find include/lib without relying on system installs.
+          # cibuildwheel will run these on the build machine (and inside manylinux containers on Linux).
+          CIBW_ENVIRONMENT_MACOS: "OCEANMESH_PREFIX=$HOME/om"
+          CIBW_BEFORE_ALL_MACOS: |
+            set -eux
+            micromamba create -y -p "$HOME/om" -c conda-forge \
+              cgal boost-cpp gmp mpfr eigen
+          # Repair wheels to bundle shared libs.
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "python -m pip install delocate && delocate-wheel -w {dest_dir} -v {wheel}"
+        run: |
+          python -m cibuildwheel --output-dir dist
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*.whl
+
+  build_sdist:
+    name: Build sdist
+    needs: [guard_tag_on_default_branch]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build --sdist
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  publish_pypi:
+    name: Publish to PyPI
+    needs: [guard_tag_on_default_branch, build_wheels, build_sdist]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten dist directory
+        shell: bash
+        run: |
+          set -eux
+          mkdir -p upload
+          find dist -type f \( -name "*.whl" -o -name "*.tar.gz" \) -maxdepth 3 -print -exec cp {} upload/ \;
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload
+          skip-existing: true
