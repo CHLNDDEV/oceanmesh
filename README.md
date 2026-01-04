@@ -121,6 +121,8 @@ After that, install or update OceanMesh with pip (recommended for most users):
 pip install -U oceanmesh
 ```
 
+Prebuilt wheels are available for Apple Silicon (M1+) via `pip`.
+
 On some clusters/HPC in order to install CGAL, you may need to load/install [gmp](https://gmplib.org/) and [mpfr](https://www.mpfr.org/). For example:
 
 ```bash
@@ -496,7 +498,93 @@ plt.show()
 
 ### 6.2 Global and Multiscale Meshing
 
-Global meshes are defined in WGS84 but meshed in a stereographic projection. Regional refinement can be added as additional domains.
+Global meshes are defined in EPSG:4326 but meshed in a stereographic projection. Regional refinement can be added as additional domains.
+
+#### Global mesh generation (two-step: EPSG:4326 sizing → stereographic meshing)
+
+Global mesh generation is done in two steps:
+
+1. Define the shoreline and sizing functions in EPSG:4326.
+2. Generate the mesh in a stereographic projection using a stereographic coastline.
+
+The repository includes example global shoreline shapefiles under `tests/global/`:
+
+- `tests/global/global_latlon.shp`: shoreline in EPSG:4326 (lon/lat)
+- `tests/global/global_stereo.shp`: shoreline already transformed for stereographic meshing
+
+Note: `global_stereo.shp` can be produced using `global_tag()` in pyPoseidon:
+https://github.com/ec-jrc/pyPoseidon/blob/9cfd3bbf5598c810004def83b1f43dc5149addd0/pyposeidon/boundary.py#L452
+
+<!--pytest-codeblocks:skip-->
+
+```python
+import numpy as np
+import oceanmesh as om
+from oceanmesh.region import to_lat_lon
+import matplotlib.pyplot as plt
+
+
+def crosses_dateline(lon1, lon2):
+  return abs(lon1 - lon2) > 180
+
+
+def filter_triangles(points_lonlat, cells):
+  """Drop triangles that cross the dateline to avoid plot artifacts."""
+  filtered = []
+  for cell in cells:
+    p1, p2, p3 = (
+      points_lonlat[cell[0]],
+      points_lonlat[cell[1]],
+      points_lonlat[cell[2]],
+    )
+    if not (
+      crosses_dateline(p1[0], p2[0])
+      or crosses_dateline(p2[0], p3[0])
+      or crosses_dateline(p3[0], p1[0])
+    ):
+      filtered.append(cell)
+  return filtered
+
+
+# WGS84 shoreline and stereographic shoreline
+fname_wgs84 = "tests/global/global_latlon.shp"
+fname_stereo = "tests/global/global_stereo.shp"
+
+extent = om.Region(extent=(-180.0, 180.0, -89.0, 90.0), crs=4326)
+
+# 1) Define sizing functions in WGS84
+min_edge_length = 0.5
+shoreline = om.Shoreline(fname_wgs84, extent.bbox, min_edge_length)
+edge_length = om.distance_sizing_function(shoreline, rate=0.11)
+
+# 2) Mesh in stereographic projection using a stereographic shoreline
+shoreline_stereo = om.Shoreline(fname_stereo, extent.bbox, min_edge_length, stereo=True)
+domain = om.signed_distance_function(shoreline_stereo)
+
+points, cells = om.generate_mesh(domain, edge_length, stereo=True, max_iter=100)
+
+# Clean up and smooth
+points, cells = om.make_mesh_boundaries_traversable(points, cells)
+points, cells = om.delete_faces_connected_to_one_face(points, cells)
+points, cells = om.laplacian2(points, cells, max_iter=100)
+
+# Convert back to lon/lat for plotting
+lon, lat = to_lat_lon(points[:, 0], points[:, 1])
+tri_cells = filter_triangles(np.array([lon, lat]).T, cells)
+
+fig, ax, pc = edge_length.plot(
+  holding=True,
+  plot_colorbar=True,
+  cbarlabel="Resolution in °",
+  cmap="magma",
+)
+ax.triplot(lon, lat, tri_cells, color="w", linewidth=0.25)
+plt.tight_layout()
+plt.show()
+```
+
+![Global](docs/images/global_mesh_v1.png)
+
 
 <!--pytest-codeblocks:skip-->
 
@@ -547,22 +635,9 @@ points, cells = om.generate_multiscale_mesh(
 ```
 
 ![Global Regional Multiscale](docs/images/test_global_regional_multiscale.png)
-*The image shows the global mesh with a refined Australia region.*
+*The image shows the global mesh with a refined Australia region.
 
-<!--pytest-codeblocks:skip-->
-
-```python
-# Global mesh generation only (stereographic meshing)
-import oceanmesh as om
-from oceanmesh.region import to_lat_lon
-fname = "tests/global/global_latlon.shp"
-fname2 = "tests/global/global_stereo.shp"
-region = om.Region(extent=(-180.00, 180.00, -89.00, 90.00), crs=4326)
-shore = om.Shoreline(fname, region.bbox, 0.5)
-edge = om.distance_sizing_function(shore, rate=0.11)
-domain = om.signed_distance_function(om.Shoreline(fname2, region.bbox, 0.5, stereo=True))
-points, cells = om.generate_mesh(domain, edge, stereo=True, max_iter=100)
-```
+See the tests in the `tests/` folder for more inspiration; work is ongoing on this package.
 
 [Back to top](#table-of-contents)
 
