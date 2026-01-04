@@ -23,7 +23,9 @@ jobs:
         run: |
           set -euxo pipefail
           echo "Default branch: ${DEFAULT_BRANCH}"
-          git fetch origin "${DEFAULT_BRANCH}" --tags
+          # Do NOT fetch tags; fetching tags can fail on tag-triggered workflows
+          # because the runner already has the triggering tag checked out.
+          git fetch --no-tags origin "${DEFAULT_BRANCH}"
           git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${DEFAULT_BRANCH}"
 
   build_wheels:

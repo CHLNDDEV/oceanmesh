@@ -2,7 +2,7 @@
 
 :ocean: :cyclone:
 
-[![Tests](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml/badge.svg)](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml)
+[![Tests](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/testing.yml/badge.svg)](https://github.com/CHLNDDEV/oceanmesh/actions/workflows/ci.yml)
 
 [![CodeCov](https://codecov.io/gh/CHLNDDEV/oceanmesh/branch/master/graph/badge.svg)](https://codecov.io/gh/CHLNDDEV/oceanmesh)
 
